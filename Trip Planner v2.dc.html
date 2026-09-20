@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="omelette-owns-print" content="true">
+<link rel="stylesheet" href="_ds/nocturne-a15a1733-bc9c-441e-a8c1-6f7c4c14cee0/styles.css">
+<script src="_ds/nocturne-a15a1733-bc9c-441e-a8c1-6f7c4c14cee0/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="./image-slot.js"></script>
+<style>
+body{margin:0;background:#101220;font-family:"Inter",system-ui,sans-serif}
+a{color:#9184d9}a:hover{color:#b5abfc}
+*::-webkit-scrollbar{width:0;height:0}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes drawRoute{from{stroke-dashoffset:900}to{stroke-dashoffset:0}}
+@keyframes riseIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes countUp{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.tap{transition:transform .12s ease,background-color .16s ease,border-color .16s ease}
+.tap:active{transform:scale(.97)}
+@keyframes reticle{to{transform:rotate(360deg)}}
+@keyframes sweep{0%{transform:translateY(-16%);opacity:0}12%{opacity:.5}88%{opacity:.5}100%{transform:translateY(116%);opacity:0}}
+@keyframes blip{0%,100%{opacity:.25}50%{opacity:1}}
+@keyframes ticker{0%{opacity:0;transform:translateY(6px)}8%,92%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-6px)}}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.1em;text-transform:uppercase}
+.trip-pin.is-sel .tp-dot{position:relative}
+.trip-pin.is-sel .tp-ret{position:absolute;left:50%;top:0;width:44px;height:44px;margin:-16px 0 0 -22px;border-radius:9999px;border:1px dashed rgba(181,171,252,.75);border-right-color:transparent;border-bottom-color:transparent;animation:reticle 6s linear infinite;pointer-events:none}
+.trip-pin .tp-ret{display:none}
+.trip-pin.is-sel .tp-ret{display:block}
+@keyframes pulseRing{0%{box-shadow:0 0 0 0 rgba(145,132,217,.5)}70%{box-shadow:0 0 0 16px rgba(145,132,217,0)}100%{box-shadow:0 0 0 0 rgba(145,132,217,0)}}
+.maplibregl-map{background:#141627;font-family:"Inter",system-ui,sans-serif}
+.maplibregl-canvas{filter:invert(1) grayscale(1) brightness(.82) contrast(.95)}
+.maplibregl-ctrl-attrib,.maplibregl-ctrl-bottom-right,.maplibregl-ctrl-bottom-left{display:none}
+.trip-pin{background:none;border:none}
+.trip-pin span{display:block}
+.trip-pin .tp-dot{width:11px;height:11px;border-radius:9999px;background:#6d5fc0;border:2px solid #161826;margin:0 auto}
+.trip-pin.is-sel .tp-dot{width:15px;height:15px;background:#b5abfc;border-color:#e9e9ed;animation:pulseRing 2.8s ease-out infinite}
+.trip-pin .tp-name{margin-top:5px;font-size:11px;font-weight:500;color:#c9cbd8;white-space:nowrap;text-shadow:0 1px 4px rgba(16,18,32,.9)}
+.trip-pin.is-sel .tp-name{font-size:12.5px;color:#e9e9ed}
+.trip-pin .tp-sub{font-size:9.5px;color:#9397ab;white-space:nowrap;text-shadow:0 1px 4px rgba(16,18,32,.9)}
+#trip-print{display:none}
+@media print{
+  @page{size:letter;margin:16mm 14mm}
+  html,body{background:#fff !important}
+  body>*{display:none !important}
+  #trip-print{display:block !important;position:static;color:#161826;font-family:"Inter",system-ui,sans-serif}
+  #trip-print .pc{break-inside:avoid;page-break-inside:avoid}
+}
+</style>
+</helmet>
+
+<div id="trip-print">
+<div style="border-bottom:1px solid #161826;padding-bottom:10px;margin-bottom:18px">
+<div style="font-size:9pt;letter-spacing:.14em;text-transform:uppercase;color:#5a5f73">Itinerary · 2 travelers</div>
+<div style="font-size:22pt;font-weight:500;margin-top:4px">Korea + Japan</div>
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-top:6px">
+<div style="font-size:10.5pt;color:#3c4157">{{ tripRange }} · {{ tripLength }}</div>
+<div style="font-size:10.5pt">Booked selections {{ totalLabel }} · activities {{ activitiesLabel }}</div>
+</div>
+</div>
+<sc-for list="{{ printCities }}" as="pc" hint-placeholder-count="4">
+<div class="pc" style="margin-bottom:20px">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;border-bottom:1px solid #c9ccd8;padding-bottom:5px">
+<div style="font-size:14pt;font-weight:500">{{ pc.name }}</div>
+<div style="font-size:9.5pt;color:#3c4157">{{ pc.dates }} · {{ pc.nights }} · {{ pc.subtotal }}</div>
+</div>
+<div style="font-size:9.5pt;color:#3c4157;margin-top:6px;line-height:1.5">
+<div>Hotel — {{ pc.hotel }}</div>
+<div>{{ pc.transit }}</div>
+<div>Food — {{ pc.food }}</div>
+</div>
+<sc-for list="{{ pc.days }}" as="pd" hint-placeholder-count="3">
+<div style="margin-top:10px">
+<div style="display:flex;justify-content:space-between;font-size:8.5pt;letter-spacing:.12em;text-transform:uppercase;color:#5a5f73">
+<div>Day {{ pd.nn }} · {{ pd.date }}</div>
+<div>{{ pd.total }}</div>
+</div>
+<sc-for list="{{ pd.items }}" as="pi" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:44pt 1fr auto;gap:0 10pt;font-size:10pt;padding:3px 0;border-bottom:1px dotted #d9dbe4">
+<div style="color:#5a5f73">{{ pi.time }}</div>
+<div>{{ pi.title }}</div>
+<div style="color:#3c4157">{{ pi.cost }}</div>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px;background:radial-gradient(120% 80% at 50% 0%, #1c1f33 0%, #101220 60%)">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+
+<div style="height:100%;position:relative;overflow:hidden;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)">
+
+<div ref="{{ mapRef }}" style="position:absolute;inset:0;isolation:isolate;z-index:0;background:linear-gradient(165deg,#1d2034 0%,#141627 55%,#101220 100%)"></div>
+<div style="position:absolute;inset:0;z-index:2;pointer-events:none;background:var(--color-bg);opacity:.42;mix-blend-mode:color"></div>
+<div style="position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(55% 40% at 58% 44%,rgba(145,132,217,.10),transparent 72%)"></div>
+<div style="position:absolute;left:0;right:0;top:0;height:26%;z-index:3;pointer-events:none;background:linear-gradient(180deg,transparent,rgba(145,132,217,.10) 78%,rgba(181,171,252,.5));animation:sweep 7.5s cubic-bezier(.4,0,.6,1) infinite"></div>
+<div style="position:absolute;inset:320px 12px 268px;z-index:7;pointer-events:none">
+<div style="position:absolute;left:0;top:0;width:20px;height:20px;border-left:1px solid var(--color-accent-500);border-top:1px solid var(--color-accent-500);opacity:.85"></div>
+<div style="position:absolute;right:0;top:0;width:20px;height:20px;border-right:1px solid var(--color-accent-500);border-top:1px solid var(--color-accent-500);opacity:.85"></div>
+<div style="position:absolute;left:0;bottom:0;width:20px;height:20px;border-left:1px solid var(--color-accent-500);border-bottom:1px solid var(--color-accent-500);opacity:.85"></div>
+<div style="position:absolute;right:0;bottom:0;width:20px;height:20px;border-right:1px solid var(--color-accent-500);border-bottom:1px solid var(--color-accent-500);opacity:.85"></div>
+</div>
+<div style="position:absolute;left:12px;bottom:{{ creditBottom }};z-index:4;font-size:8.5px;color:var(--color-neutral-600);letter-spacing:.02em">© OpenStreetMap contributors</div>
+
+<div style="position:absolute;top:0;left:0;right:0;z-index:6;pointer-events:none;padding:54px 16px 14px;background:linear-gradient(180deg,rgba(16,18,32,.94) 0%,rgba(16,18,32,.72) 62%,transparent 100%)">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+<div>
+<div class="mono" style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--color-accent-300)">
+<span style="width:5px;height:5px;border-radius:9999px;background:var(--color-accent-300);animation:blip 2.2s ease-in-out infinite"></span>
+Itinerary live · 2 travelers
+</div>
+<div style="font-size:20px;font-weight:500;line-height:1.15;margin-top:5px">Korea + Japan</div>
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-400);margin-top:5px;white-space:nowrap">{{ tripRange }} / {{ tripLength }} / T−{{ countdown }}d</div>
+</div>
+</div>
+<div style="margin-top:12px;padding:11px 13px;border-radius:var(--radius-md);background:rgba(35,37,50,.92);border:1px solid var(--color-neutral-800);box-shadow:var(--shadow-sm)">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500)">Total budget</div>
+<div class="mono" style="font-size:9px;color:var(--color-neutral-500)">{{ vsPlanned }}</div>
+</div>
+<div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
+<div key="{{ totalLabel }}" style="font-size:25px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.01em;animation:countUp .28s ease both">{{ totalLabel }}</div>
+<div style="font-size:11px;color:var(--color-neutral-500)">{{ totalNote }}</div>
+</div>
+<div style="height:5px;border-radius:9999px;background:var(--color-neutral-900);display:flex;overflow:hidden;margin-top:9px">
+<sc-for list="{{ segments }}" as="g" hint-placeholder-count="3">
+<div style="width:{{ g.pct }};background:{{ g.fill }}"></div>
+</sc-for>
+</div>
+<div style="display:flex;gap:13px;margin-top:7px">
+<sc-for list="{{ segments }}" as="g" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--color-neutral-500)"><span style="width:7px;height:7px;border-radius:2px;background:{{ g.fill }}"></span>{{ g.label }} {{ g.amount }}</div>
+</sc-for>
+</div>
+</div>
+</div>
+
+<div style="position:absolute;left:0;right:0;bottom:0;z-index:8;height:{{ sheetHeight }};display:flex;flex-direction:column;background:rgba(27,30,46,.97);backdrop-filter:blur(16px);border-top:1px solid var(--color-neutral-700);border-radius:var(--radius-lg) var(--radius-lg) 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.5);transition:{{ sheetTransition }}">
+
+<div onPointerDown="{{ dragStart }}" onClick="{{ toggleSheet }}" style="cursor:grab;touch-action:none;padding:11px 16px 10px;flex:none;position:relative">
+<div style="position:absolute;left:16px;right:16px;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--color-accent-700) 22%,var(--color-accent-500) 50%,var(--color-accent-700) 78%,transparent)"></div>
+<div style="width:40px;height:5px;border-radius:9999px;background:{{ handleBg }};margin:0 auto 11px;transition:background-color .2s ease"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+<div style="font-size:14px;font-weight:500">{{ sheetTitle }}</div>
+<div class="mono" style="font-size:9px;color:var(--color-neutral-500)">{{ sheetHint }}</div>
+</div>
+<div key="{{ ticker }}" class="mono" style="font-size:9px;color:var(--color-accent-300);margin-top:6px;animation:ticker 4s ease both">{{ ticker }}</div>
+</div>
+
+<div style="flex:1;overflow-y:auto;padding:2px 0 92px">
+
+<sc-if value="{{ isMap }}" hint-placeholder-val="{{ true }}">
+<div style="padding:0 12px;display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ cities }}" as="c" hint-placeholder-count="4">
+<div>
+<button onClick="{{ c.select }}" class="tap" style="width:100%;appearance:none;cursor:pointer;text-align:left;font-family:var(--font-body);color:inherit;min-height:56px;padding:14px 14px;animation:riseIn .34s ease both;animation-delay:{{ c.delay }};border-radius:var(--radius-md);border:1px solid {{ c.border }};background:{{ c.bg }};display:flex;align-items:center;gap:12px">
+<div style="font-size:16px;font-weight:500;flex:1;min-width:0">{{ c.name }}</div>
+<div class="mono" style="font-size:9px;color:var(--color-neutral-500);flex:none">{{ c.dates }}</div>
+<div style="font-size:12px;font-variant-numeric:tabular-nums;color:var(--color-neutral-300);flex:none">{{ c.cost }}</div>
+<i class="{{ c.chev }}" style="font-size:13px;color:var(--color-neutral-600);flex:none"></i>
+</button>
+<div style="display:flex;gap:4px;justify-content:flex-end;padding:2px 4px 0">
+<button onClick="{{ c.up }}" class="tap" style="appearance:none;cursor:pointer;width:44px;height:44px;border-radius:var(--radius-sm);border:1px solid var(--color-neutral-800);background:transparent;color:var(--color-neutral-500);display:flex;align-items:center;justify-content:center"><i class="ph ph-arrow-up" style="font-size:12px"></i></button>
+<button onClick="{{ c.down }}" class="tap" style="appearance:none;cursor:pointer;width:44px;height:44px;border-radius:var(--radius-sm);border:1px solid var(--color-neutral-800);background:transparent;color:var(--color-neutral-500);display:flex;align-items:center;justify-content:center"><i class="ph ph-arrow-down" style="font-size:12px"></i></button>
+<button onClick="{{ c.remove }}" class="tap" style="appearance:none;cursor:pointer;width:44px;height:44px;border-radius:var(--radius-sm);border:1px solid var(--color-neutral-800);background:transparent;color:var(--color-neutral-600);display:flex;align-items:center;justify-content:center"><i class="ph ph-trash" style="font-size:12px"></i></button>
+</div>
+<sc-if value="{{ c.open }}" hint-placeholder-val="{{ false }}">
+<div style="padding:4px 4px 10px;animation:fadeIn .18s ease">
+
+<div style="margin:6px 5px 0;padding:11px 12px;border-radius:var(--radius-md);background:var(--color-bg);border:1px solid var(--color-neutral-800)">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500)">Nights</div>
+<div style="display:flex;align-items:center;gap:9px">
+<button onClick="{{ c.less }}" class="tap" style="appearance:none;cursor:pointer;width:44px;height:44px;border-radius:var(--radius-sm);border:1px solid var(--color-neutral-700);background:transparent;color:var(--color-neutral-300);font-family:var(--font-body);font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center">−</button>
+<div style="min-width:18px;text-align:center;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">{{ c.nights }}</div>
+<button onClick="{{ c.more }}" class="tap" style="appearance:none;cursor:pointer;width:44px;height:44px;border-radius:var(--radius-sm);border:1px solid var(--color-accent-600);background:transparent;color:var(--color-accent-200);font-family:var(--font-body);font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center">+</button>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 7px">
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500)">Hotel · pick one of three</div>
+<div class="mono" style="font-size:9px;color:var(--color-neutral-500)">{{ c.hotelSum }}</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ c.hotels }}" as="h" hint-placeholder-count="3">
+<div style="border-radius:var(--radius-sm);border:1px solid {{ h.border }};background:{{ h.bg }};overflow:hidden">
+<div style="display:flex;align-items:center;gap:6px;padding:7px 8px">
+<button onClick="{{ h.select }}" class="tap" style="appearance:none;cursor:pointer;background:none;border:none;flex:none;width:44px;height:44px;padding:0;display:flex;align-items:center;justify-content:center">
+<span style="width:15px;height:15px;border-radius:9999px;border:1px solid {{ h.dotBorder }};background:{{ h.dotBg }}"></span>
+</button>
+<button onClick="{{ h.select }}" class="tap" style="appearance:none;cursor:pointer;background:none;border:none;flex:none;width:44px;height:44px;padding:0;position:relative;border-radius:var(--radius-sm);overflow:hidden;background:var(--color-neutral-900)"><image-slot id="{{ h.slot }}" shape="rounded" radius="6" placeholder="{{ h.ph }}"></image-slot></button>
+<input value="{{ h.name }}" onChange="{{ h.setName }}" placeholder="Hotel name" style="flex:1;min-width:0;height:44px;appearance:none;background:transparent;border:none;padding:0 4px;font-family:var(--font-body);font-size:13px;font-weight:500;color:var(--color-text);outline:none">
+<a href="{{ h.href }}" target="_blank" rel="noopener" class="mono tap" style="flex:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--color-accent-300);text-decoration:none">↗</a>
+</div>
+<sc-if value="{{ h.open }}" hint-placeholder-val="{{ true }}">
+<div style="padding:0 10px 10px;display:flex;flex-direction:column;gap:6px">
+<input value="{{ h.url }}" onChange="{{ h.setUrl }}" placeholder="Booking link" style="appearance:none;background:var(--color-surface);border:1px solid var(--color-neutral-800);border-radius:var(--radius-sm);padding:9px 10px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-accent-200);outline:none">
+<input value="{{ h.addr }}" onChange="{{ h.setAddr }}" placeholder="Address" style="appearance:none;background:var(--color-surface);border:1px solid var(--color-neutral-800);border-radius:var(--radius-sm);padding:9px 10px;font-family:var(--font-body);font-size:12px;color:var(--color-neutral-300);outline:none">
+<div style="display:flex;align-items:center;gap:8px">
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500);flex:none">$ / night</div>
+<input value="{{ h.cost }}" onChange="{{ h.setCost }}" type="number" style="width:92px;appearance:none;background:var(--color-surface);border:1px solid var(--color-neutral-800);border-radius:var(--radius-sm);padding:9px 10px;font-family:var(--font-body);font-size:13px;font-variant-numeric:tabular-nums;color:var(--color-text);outline:none">
+<div style="margin-left:auto;font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--color-neutral-400)">{{ h.sum }}</div>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 7px">
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500)">{{ c.transitLabel }}</div>
+<a href="{{ c.trainHref }}" target="_blank" rel="noopener" class="mono tap" style="display:flex;align-items:center;min-height:44px;padding:0 10px;margin:-10px -10px -10px 0;font-size:9px;color:var(--color-accent-300);text-decoration:none">Open link ↗</a>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<input value="{{ c.trainName }}" onChange="{{ c.setTrainName }}" placeholder="Service, e.g. Nozomi 224 reserved" style="appearance:none;background:var(--color-surface);border:1px solid var(--color-neutral-800);border-radius:var(--radius-sm);padding:10px 11px;font-family:var(--font-body);font-size:13px;color:var(--color-text);outline:none">
+<input value="{{ c.trainUrl }}" onChange="{{ c.setTrainUrl }}" placeholder="Booking link" style="appearance:none;background:var(--color-surface);border:1px solid var(--color-neutral-800);border-radius:var(--radius-sm);padding:10px 11px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--color-accent-200);outline:none">
+<div style="display:flex;align-items:center;gap:8px">
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500);flex:none">$ / person</div>
+<input value="{{ c.trainCost }}" onChange="{{ c.setTrainCost }}" type="number" style="width:96px;appearance:none;background:var(--color-surface);border:1px solid var(--color-neutral-800);border-radius:var(--radius-sm);padding:10px 11px;font-family:var(--font-body);font-size:13px;font-variant-numeric:tabular-nums;color:var(--color-text);outline:none">
+<div style="margin-left:auto;font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--color-neutral-400)">{{ c.trainSum }}</div>
+</div>
+</div>
+
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500);margin:14px 0 7px">Eating here</div>
+<div style="display:flex;gap:7px">
+<sc-for list="{{ c.eats }}" as="e" hint-placeholder-count="2">
+<button onClick="{{ e.zoom }}" class="tap" style="flex:1;min-width:0;appearance:none;cursor:pointer;text-align:left;padding:0;font-family:var(--font-body);color:inherit;border-radius:var(--radius-sm);border:1px solid var(--color-neutral-800);overflow:hidden;background:var(--color-surface)">
+<span style="display:block;height:64px;position:relative;background:var(--color-neutral-900)"><image-slot id="{{ e.slot }}" shape="rect" placeholder="{{ e.ph }}"></image-slot></span>
+<span style="display:block;padding:7px 8px 8px">
+<span style="display:flex;align-items:baseline;justify-content:space-between;gap:6px">
+<span style="font-size:11.5px;font-weight:500;min-width:0">{{ e.name }}</span>
+<span style="font-size:10.5px;color:var(--color-accent-300);flex:none">{{ e.band }}</span>
+</span>
+<span style="display:block;font-size:10px;color:var(--color-neutral-500);margin-top:3px;line-height:1.3">{{ e.note }}</span>
+<span class="mono" style="display:flex;align-items:center;gap:5px;font-size:9px;color:var(--color-accent-300);margin-top:6px"><i class="ph ph-person-simple-walk" style="font-size:11px"></i>{{ e.walk }}</span>
+</span>
+</button>
+</sc-for>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:16px 0 8px">
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500)">Food, per day</div>
+<div style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--color-accent-200)">{{ c.foodPerLabel }}</div>
+</div>
+<input value="{{ c.foodPer }}" onChange="{{ c.setFood }}" type="range" min="10" max="200" step="5" style="width:100%;height:32px;accent-color:#9184d9;background:transparent;cursor:pointer">
+<div style="display:flex;justify-content:space-between;margin-top:2px">
+<div class="mono" style="font-size:9px;color:var(--color-neutral-600)">$10</div>
+<div class="mono" style="font-size:9px;color:var(--color-neutral-500)">{{ c.foodSum }} over {{ c.nights }} days</div>
+<div class="mono" style="font-size:9px;color:var(--color-neutral-600)">$200</div>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:13px;padding-top:11px;border-top:1px solid var(--color-divider)">
+<div style="font-size:11px;color:var(--color-neutral-400)">{{ c.name }} subtotal</div>
+<div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--color-accent-200)">{{ c.cost }}</div>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;gap:7px;padding:12px 9px 4px;font-size:11px;color:var(--color-accent-300)">
+<i class="ph ph-train-simple" style="font-size:13px"></i>{{ c.transit }}
+</div>
+<sc-for list="{{ c.days }}" as="d" hint-placeholder-count="3">
+<div style="padding:9px 9px 3px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500)">Day {{ d.nn }} · {{ d.date }}</div>
+<div style="font-size:11px;font-variant-numeric:tabular-nums;color:var(--color-neutral-500)">{{ d.total }}</div>
+</div>
+<sc-for list="{{ d.items }}" as="it" hint-placeholder-count="3">
+<button onClick="{{ it.toggle }}" class="tap" style="width:100%;min-height:48px;appearance:none;cursor:pointer;text-align:left;background:none;border:none;padding:9px 0 7px;font-family:var(--font-body);color:inherit;display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:0 10px;align-items:center">
+<span style="font-size:11px;font-variant-numeric:tabular-nums;color:var(--color-neutral-600);text-align:right">{{ it.time }}</span>
+<span style="font-size:13px;line-height:1.35;text-decoration:{{ it.strike }};color:{{ it.color }};min-width:0">{{ it.title }}</span>
+<span style="font-size:11px;font-variant-numeric:tabular-nums;color:var(--color-neutral-500)">{{ it.cost }}</span>
+</button>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+
+<sc-if value="{{ adding }}" hint-placeholder-val="{{ false }}">
+<div style="padding:12px;border-radius:var(--radius-md);border:1px dashed var(--color-accent-700);background:var(--color-bg);animation:riseIn .22s ease both">
+<div style="display:flex;gap:7px">
+<input value="{{ newCity }}" onChange="{{ onNewCity }}" onKeyDown="{{ onNewCityKey }}" placeholder="City name" style="flex:1;min-width:0;appearance:none;background:var(--color-surface);border:1px solid var(--color-neutral-800);border-radius:var(--radius-sm);padding:11px;font-family:var(--font-body);font-size:13px;color:var(--color-text);outline:none">
+<button onClick="{{ commitCity }}" class="tap" style="appearance:none;cursor:pointer;flex:none;min-height:44px;padding:0 15px;border-radius:var(--radius-sm);border:1px solid var(--color-accent-500);background:transparent;color:var(--color-accent-200);font-family:var(--font-body);font-size:12.5px;font-weight:500">Add</button>
+</div>
+<div class="mono" style="font-size:9px;color:var(--color-neutral-600);margin:10px 0 7px">Suggested stops</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<sc-for list="{{ suggestions }}" as="sg" hint-placeholder-count="6">
+<button onClick="{{ sg.add }}" class="tap" style="appearance:none;cursor:pointer;min-height:36px;padding:0 12px;border-radius:9999px;border:1px solid var(--color-neutral-700);background:transparent;color:var(--color-neutral-300);font-family:var(--font-body);font-size:11.5px">{{ sg.name }}</button>
+</sc-for>
+</div>
+<button onClick="{{ cancelAdd }}" class="tap" style="width:100%;margin-top:10px;appearance:none;cursor:pointer;min-height:40px;border-radius:var(--radius-sm);border:1px solid var(--color-neutral-800);background:transparent;color:var(--color-neutral-500);font-family:var(--font-body);font-size:12px">Cancel</button>
+</div>
+</sc-if>
+<sc-if value="{{ notAdding }}" hint-placeholder-val="{{ true }}">
+<button onClick="{{ openAdd }}" class="tap" style="width:100%;appearance:none;cursor:pointer;min-height:48px;border-radius:var(--radius-md);border:1px dashed var(--color-neutral-700);background:transparent;color:var(--color-accent-200);font-family:var(--font-body);font-size:12.5px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:7px">
+<i class="ph ph-plus" style="font-size:14px"></i>Add a city
+</button>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDays }}" hint-placeholder-val="{{ false }}">
+<div style="padding:0 0 8px">
+<div style="position:sticky;top:0;z-index:4;display:flex;gap:6px;overflow-x:auto;padding:6px 14px 10px;background:rgba(27,30,46,.97);border-bottom:1px solid var(--color-divider)">
+<sc-for list="{{ days }}" as="d" hint-placeholder-count="14">
+<button onClick="{{ d.select }}" class="tap" style="flex:none;width:44px;height:48px;appearance:none;cursor:pointer;border-radius:var(--radius-sm);border:1px solid {{ d.chipBorder }};background:{{ d.chipBg }};color:{{ d.chipColor }};font-family:var(--font-body);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+<span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">{{ d.n }}</span>
+<span style="font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;opacity:.75">{{ d.dow }}</span>
+</button>
+</sc-for>
+</div>
+<div style="padding:14px 16px 0">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<div style="font-size:17px;font-weight:500">{{ sel.city }}</div>
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500)">Day {{ sel.nn }} / {{ sel.date }}</div>
+</div>
+<div style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:11px;color:var(--color-neutral-500)">
+<i class="ph ph-cloud-sun" style="font-size:13px"></i>{{ sel.weather }}
+</div>
+<div style="margin-top:14px;display:flex;flex-direction:column">
+<sc-for list="{{ sel.items }}" as="it" hint-placeholder-count="4">
+<button onClick="{{ it.toggle }}" class="tap" style="appearance:none;text-align:left;cursor:pointer;background:none;border:none;padding:0;font-family:var(--font-body);color:inherit;display:grid;grid-template-columns:46px 18px minmax(0,1fr);gap:0 10px;align-items:start;min-height:48px;animation:riseIn .3s ease both;animation-delay:{{ it.delay }}">
+<div class="mono" style="font-size:10px;font-variant-numeric:tabular-nums;color:var(--color-neutral-500);padding:11px 0 0;text-align:right;letter-spacing:.04em">{{ it.time }}</div>
+<div style="display:flex;flex-direction:column;align-items:center;padding-top:13px;height:100%">
+<span style="width:9px;height:9px;border-radius:9999px;flex:none;background:{{ it.dotBg }};border:1px solid {{ it.dotBorder }}"></span>
+<span style="flex:1;width:1px;background:var(--color-neutral-800);min-height:16px"></span>
+</div>
+<div style="padding:8px 0 10px;min-width:0">
+<div style="display:flex;align-items:baseline;gap:8px;justify-content:space-between">
+<div style="font-size:13.5px;font-weight:500;line-height:1.3;text-decoration:{{ it.strike }};color:{{ it.color }};min-width:0">{{ it.title }}</div>
+<div style="font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--color-neutral-400);flex:none">{{ it.cost }}</div>
+</div>
+<div style="font-size:11px;color:var(--color-neutral-500);margin-top:3px;line-height:1.35">{{ it.sub }}</div>
+</div>
+</button>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+<div style="padding:8px 16px 8px">
+<div style="padding:12px 13px;border-radius:var(--radius-md);background:var(--color-bg);border:1px solid var(--color-neutral-800)">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<div style="font-size:13px;font-weight:500">{{ checkedCount }} of {{ checkTotal }} done</div>
+<div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--color-accent-200)">{{ checkPct }}</div>
+</div>
+<div style="height:5px;border-radius:9999px;background:var(--color-neutral-900);overflow:hidden;margin-top:9px">
+<div style="height:100%;width:{{ checkPctWidth }};background:var(--color-accent-400)"></div>
+</div>
+</div>
+
+<sc-for list="{{ checkGroups }}" as="g" hint-placeholder-count="4">
+<div style="margin-top:16px">
+<div class="mono" style="font-size:9.5px;color:var(--color-neutral-500);margin-bottom:7px">{{ g.title }}</div>
+<div style="display:flex;flex-direction:column;gap:1px;border-radius:var(--radius-md);overflow:hidden;background:var(--color-surface)">
+<sc-for list="{{ g.items }}" as="p" hint-placeholder-count="5">
+<button onClick="{{ p.toggle }}" class="tap" style="appearance:none;cursor:pointer;text-align:left;font-family:var(--font-body);background:none;border:none;border-bottom:1px solid var(--color-divider);min-height:50px;padding:13px;display:flex;align-items:center;gap:11px;color:inherit">
+<span style="width:17px;height:17px;border-radius:5px;flex:none;border:1px solid {{ p.boxBorder }};background:{{ p.boxBg }};display:flex;align-items:center;justify-content:center;color:var(--color-bg);font-size:11px"><i class="{{ p.check }}"></i></span>
+<span style="font-size:13px;text-decoration:{{ p.strike }};color:{{ p.color }}">{{ p.label }}</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-for>
+
+<button onClick="{{ requestPdf }}" class="tap" style="width:100%;margin-top:20px;appearance:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:14px;border-radius:var(--radius-sm);border:1px solid var(--color-accent-500);background:transparent;color:var(--color-accent-200);font-family:var(--font-body);font-size:13px;font-weight:500" style-hover="background:rgba(145,132,217,.14)">
+<i class="ph ph-printer" style="font-size:16px"></i>Request itinerary PDF
+</button>
+<div style="font-size:10.5px;color:var(--color-neutral-600);text-align:center;margin-top:7px">Prints every day, hotel and cost as one sheet</div>
+</div>
+</sc-if>
+
+</div>
+</div>
+
+<div style="position:absolute;left:50%;transform:translateX(-50%);bottom:26px;z-index:12;display:flex;gap:3px;padding:3px;border-radius:9999px;background:rgba(16,18,32,.9);backdrop-filter:blur(14px);border:1px solid var(--color-neutral-700);box-shadow:0 8px 24px rgba(0,0,0,.45)">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="2">
+<button onClick="{{ t.select }}" class="tap" style="appearance:none;cursor:pointer;display:flex;align-items:center;gap:6px;min-height:44px;padding:8px 18px;border-radius:9999px;border:1px solid {{ t.border }};background:{{ t.bg }};color:{{ t.color }};font-family:var(--font-body);font-size:12.5px;font-weight:500">
+<i class="{{ t.icon }}" style="font-size:15px"></i>{{ t.label }}
+</button>
+</sc-for>
+</div>
+
+</div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;500&quot;,&quot;height&quot;:&quot;980&quot;},&quot;localCurrency&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Content&quot;}}">
+const RATE = { Seoul: 1360, Osaka: 152, Kyoto: 152, Tokyo: 152 };
+const CUR = { Seoul: '\u20a9', Osaka: '\u00a5', Kyoto: '\u00a5', Tokyo: '\u00a5' };
+
+const DAYS = [
+  { city: 'Seoul', transit: 'AUS \u2192 DFW \u2192 ICN · 18h 10m', items: [
+    ['06:20', 'Land at Incheon', 'KE 32 · immigration, SIM pickup', 0],
+    ['09:00', 'AREX to Myeongdong', 'Express, 43 min', 9],
+    ['13:00', 'Check in \u2014 Nine Tree Premier', 'Myeongdong · 4 nights', 592],
+    ['19:00', 'Gwangjang Market dinner', 'Bindaetteok, mayak gimbap', 24]] },
+  { city: 'Seoul', items: [
+    ['09:30', 'Gyeongbokgung', 'Free in hanbok · guard change 10:00', 12],
+    ['13:00', 'Bukchon Hanok Village', 'Quiet lanes, marked route', 0],
+    ['16:00', 'Ikseon-dong coffee', 'No reservation needed', 9],
+    ['20:00', 'Hongdae night walk', 'Buskers after 21:00', 14]] },
+  { city: 'Seoul', items: [
+    ['10:00', 'Seoul Forest', 'Cherry stand on the north path', 0],
+    ['14:00', 'Seongsu coffee crawl', 'Three roasters, walkable', 14],
+    ['19:30', 'Korean BBQ \u2014 Geumdwaeji', 'Queue by 19:00', 52]] },
+  { city: 'Seoul', items: [
+    ['09:00', 'DMZ half-day tour', 'Passport required · hotel pickup', 88],
+    ['18:00', 'Namsan sunset', 'Cable car up, walk down', 11],
+    ['21:00', 'Repack for Osaka', 'Laundry done', 0]] },
+  { city: 'Osaka', transit: 'GMP \u2192 KIX · Peach MM 216 · 1h 45m', items: [
+    ['08:40', 'Flight to Osaka', 'Peach MM 216', 264],
+    ['12:30', 'Check in \u2014 Namba', 'Hotel Il Cuore · 3 nights', 288],
+    ['15:00', 'Kuromon Market', 'Uni, scallops, standing only', 18],
+    ['19:00', 'Dotonbori', 'Takoyaki, neon, river walk', 21]] },
+  { city: 'Osaka', items: [
+    ['09:00', 'Osaka Castle', 'Nishinomaru garden for blossoms', 6],
+    ['13:00', 'Shinsekai kushikatsu', 'No double dipping', 16],
+    ['16:00', 'Umeda Sky Building', 'Floating garden', 14],
+    ['20:00', 'Standing bar, Tenma', 'Cash only', 22]] },
+  { city: 'Osaka', items: [
+    ['10:00', 'Nara day trip', 'Kintetsu express, 40 min', 11],
+    ['13:00', 'Todai-ji + deer park', 'Crackers outside the gate', 6],
+    ['19:00', 'Okonomiyaki \u2014 Chibo', 'Counter seat', 20]] },
+  { city: 'Kyoto', transit: 'Osaka \u2192 Kyoto · JR Special Rapid · 29 min', items: [
+    ['09:10', 'Train to Kyoto', 'JR from Osaka Station', 8],
+    ['11:00', 'Check in \u2014 ryokan, Gion', 'Yoshi-ima · 3 nights, tatami', 630],
+    ['15:00', 'Fushimi Inari', 'Go late, walk past the crowds', 0],
+    ['19:00', 'Pontocho dinner', 'Riverside, reserved', 46]] },
+  { city: 'Kyoto', items: [
+    ['07:30', 'Arashiyama bamboo', 'Before 08:00 or not at all', 0],
+    ['11:00', 'Tenryu-ji garden', 'Sogenchi pond', 4],
+    ['14:00', 'Nishiki Market', 'Lunch in pieces', 15],
+    ['17:00', 'Kiyomizu-dera', 'Stay for the lanterns', 4]] },
+  { city: 'Kyoto', items: [
+    ['09:00', "Philosopher's Path", 'Peak bloom window', 0],
+    ['12:00', 'Ginkaku-ji', 'Moss garden', 5],
+    ['15:00', 'Tea ceremony', 'Booked · 45 min', 42],
+    ['19:00', 'Izakaya, Kiyamachi', 'Order by pointing', 30]] },
+  { city: 'Tokyo', transit: 'Kyoto \u2192 Tokyo · Nozomi 224 · 2h 15m', items: [
+    ['10:20', 'Nozomi to Tokyo', 'Reserved · E seats for Fuji', 184],
+    ['13:30', 'Check in \u2014 Shibuya', 'Trunk House · 3 nights', 504],
+    ['16:00', 'Meiji Jingu', 'Torii walk, then Omotesando', 0],
+    ['20:00', 'Yakitori, Nonbei Yokocho', 'Six seats, smoke, perfect', 28]] },
+  { city: 'Tokyo', items: [
+    ['08:00', 'Tsukiji Outer Market', 'Tamagoyaki first', 22],
+    ['11:00', 'teamLab Borderless', 'Timed entry 11:00', 34],
+    ['15:00', 'Shimokitazawa', 'Vintage, records, no plan', 18],
+    ['19:30', 'Sushi counter, Ebisu', 'Omakase · the one splurge', 190]] },
+  { city: 'Tokyo', items: [
+    ['09:00', 'Ueno Park hanami', 'Blanket, konbini haul', 12],
+    ['12:00', 'Akihabara', 'Camera parts, arcade floor 4', 0],
+    ['16:00', 'Souvenirs \u2014 Tokyu Hands', 'Knives, stationery', 60],
+    ['19:00', 'Last ramen \u2014 Nakiryu', 'Tantanmen, 40 min queue', 14]] },
+  { city: 'Tokyo', transit: 'Tokyo \u2192 NRT \u2192 AUS · 19h 40m', items: [
+    ['07:00', 'Narita Express', 'From Shibuya, 78 min', 18],
+    ['11:05', 'NRT \u2192 DFW \u2192 AUS', 'AA 168 · arrive 20:40', 0]] }
+];
+
+const WEATHER = {
+  Seoul: '12\u00b0 / 4\u00b0 · partly cloudy · blossom starting',
+  Osaka: '16\u00b0 / 8\u00b0 · clear · near peak bloom',
+  Kyoto: '17\u00b0 / 7\u00b0 · light rain Wed · peak bloom',
+  Tokyo: '18\u00b0 / 9\u00b0 · clear · petals falling'
+};
+
+// Real coordinates — OpenStreetMap tiles are drawn against these.
+const PLACE = {
+  Seoul: [37.5665, 126.9780],
+  Osaka: [34.6937, 135.5023],
+  Kyoto: [35.0116, 135.7681],
+  Tokyo: [35.6762, 139.6503]
+};
+const AUSTIN = [30.2672, -97.7431];
+// Stops you can add to the route. Coordinates keep the map honest.
+const ADDABLE = {
+  Busan: [35.1796, 129.0756], Jeju: [33.4996, 126.5312], Gyeongju: [35.8562, 129.2247],
+  Fukuoka: [33.5904, 130.4017], Hiroshima: [34.3853, 132.4553], Nara: [34.6851, 135.8048],
+  Kanazawa: [36.5613, 136.6562], Hakone: [35.2324, 139.1069], Nikko: [36.7198, 139.6982],
+  Sapporo: [43.0618, 141.3545], Takayama: [36.1461, 137.2522], Naoshima: [34.4597, 133.9950]
+};
+Object.keys(ADDABLE).forEach(k => { PLACE[k] = ADDABLE[k]; });
+// Osaka and Kyoto are 40 km apart — push their labels apart at trip zoom.
+// Offsets apply to the LABEL only — never to the element carrying the dot.
+const LABEL_OFFSET = { Seoul: [0, 0], Osaka: [-26, 2], Kyoto: [24, -34], Tokyo: [0, 0] };
+
+// Selectable options — the Total budget box is the sum of what's picked here.
+const HOTELS = {
+  Seoul: [
+    { ll: [37.5636,126.9835], name: 'Nine Tree Premier', note: 'Myeongdong · 4★, central', per: 148 },
+    { ll: [37.5626,126.9861], name: 'Hotel 28 Myeongdong', note: 'Boutique · quieter block', per: 112 },
+    { ll: [37.5563,126.9236], name: 'Hongdae guesthouse', note: 'Private twin, shared bath', per: 58 }],
+  Osaka: [
+    { ll: [34.6640,135.5020], name: 'Hotel Il Cuore', note: 'Namba · above the subway', per: 96 },
+    { ll: [34.6698,135.5027], name: 'Cross Hotel Osaka', note: 'Dotonbori view rooms', per: 164 },
+    { ll: [34.7025,135.4959], name: 'Capsule, Umeda', note: 'Two pods · station side', per: 44 }],
+  Kyoto: [
+    { ll: [35.0040,135.7760], name: 'Yoshi-ima ryokan', note: 'Gion · tatami, breakfast', per: 210 },
+    { ll: [34.9955,135.7580], name: 'Hotel Kanra', note: 'Machiya-style, Karasuma', per: 168 },
+    { ll: [34.9950,135.7480], name: 'Machiya guesthouse', note: 'Whole house, 20 min walk', per: 88 }],
+  Tokyo: [
+    { ll: [35.6995,139.7380], name: 'Trunk House, Shibuya', note: 'One-room house, Kagurazaka', per: 168 },
+    { ll: [35.7110,139.7960], name: 'Hotel Gracery Asakusa', note: 'River side · quiet nights', per: 124 },
+    { ll: [35.6950,139.7020], name: 'Nine Hours Shinjuku', note: 'Two pods · last night only', per: 52 }]
+};
+
+const TRANSIT = {
+  Seoul: { label: 'Getting there', opts: [
+    { name: 'AA + KE via DFW', note: '18h 10m · 2 stops', per: 1180 },
+    { name: 'UA via SFO + NRT', note: '21h · cheapest fare', per: 1040 },
+    { name: 'ANA via NRT', note: '17h 40m · best timing', per: 1320 }] },
+  Osaka: { label: 'Seoul → Osaka', opts: [
+    { name: 'Peach GMP → KIX', note: '1h 45m · 20kg bag', per: 132 },
+    { name: 'Korean Air ICN → KIX', note: '1h 40m · full service', per: 198 },
+    { name: 'Ferry from Busan', note: 'Overnight · 19h', per: 96 }] },
+  Kyoto: { label: 'Osaka → Kyoto', opts: [
+    { name: 'JR Special Rapid', note: '29 min · unreserved', per: 4 },
+    { name: 'Kintetsu limited express', note: '45 min · reserved seat', per: 11 }] },
+  Tokyo: { label: 'Kyoto → Tokyo', opts: [
+    { name: 'Nozomi, reserved', note: '2h 15m · E seats for Fuji', per: 92 },
+    { name: 'Hikari, unreserved', note: '2h 40m · JR Pass valid', per: 76 },
+    { name: 'Night bus', note: '7h 30m · arrive 06:00', per: 32 }] }
+};
+
+const EATS = {
+  Seoul: [
+    { ll: [37.5701,126.9997], name: 'Gwangjang Market', note: 'Bindaetteok · cash, standing', band: '$' },
+    { ll: [37.5595,127.0089], name: 'Geumdwaeji Sikdang', note: 'Pork neck BBQ · queue by 19:00', band: '$$' }],
+  Osaka: [
+    { ll: [34.6685,135.5010], name: 'Chibo, Dotonbori', note: 'Okonomiyaki · counter seat', band: '$$' },
+    { ll: [34.6520,135.5060], name: 'Daruma kushikatsu', note: 'Shinsekai · no double dipping', band: '$' }],
+  Kyoto: [
+    { ll: [35.0055,135.7710], name: 'Pontocho riverside', note: 'Kaiseki · reserved 19:00', band: '$$$' },
+    { ll: [35.0050,135.7645], name: 'Nishiki Market', note: 'Lunch in pieces, walking', band: '$' }],
+  Tokyo: [
+    { ll: [35.6595,139.7010], name: 'Nonbei Yokocho yakitori', note: 'Six seats, smoke, perfect', band: '$$' },
+    { ll: [35.6465,139.7100], name: 'Sushi counter, Ebisu', note: 'Omakase · the one splurge', band: '$$$' }]
+};
+
+const CHECKLIST = [
+  ['Before you fly', ['Korea K-ETA approved', 'Japan Visit Web registration', 'Passports valid past Oct 2027', 'Travel insurance bought', 'Card travel notice filed']],
+  ['Book + confirm', ['Nozomi seats reserved', 'teamLab timed entry', 'Ryokan deposit paid', 'Tea ceremony confirmed', 'Airport transfer booked']],
+  ['Pack', ['Type-A adapters × 2', '20,000 mAh battery', 'Rain shell', 'Two pairs walkable shoes', 'Packing cubes × 4']],
+  ['On arrival', ['SIM or eSIM active', 'Suica + T-money loaded', 'Offline maps downloaded', 'Cash withdrawn (¥ and ₩)', 'Hotel addresses saved in Korean/Japanese']]
+];
+
+const FOODS = [
+  { label: 'Street', per: 26 },
+  { label: 'Mixed', per: 48 },
+  { label: 'Splurge', per: 95 }
+];
+
+const PARTY = 2;
+const PLANNED = 9800;
+const START = new Date(2027, 2, 21);
+
+function fmtUsd(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
+
+// Haversine, then a 4.8 km/h walking pace with a 1.25 street-grid factor.
+function kmBetween(a, b) {
+  if (!a || !b) return null;
+  const R = 6371, rad = d => d * Math.PI / 180;
+  const dLat = rad(b[0] - a[0]), dLon = rad(b[1] - a[1]);
+  const h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function walkLabel(from, to) {
+  const km = kmBetween(from, to);
+  if (km === null) return 'Set hotel address';
+  const street = km * 1.25;
+  const mins = Math.round(street / 4.8 * 60);
+  const dist = street < 1 ? Math.round(street * 1000) + ' m' : street.toFixed(1) + ' km';
+  return mins <= 35 ? dist + ' · ' + mins + ' min walk' : dist + ' · transit';
+}
+function fmtLocal(n, city) {
+  const r = RATE[city]; if (!r) return '';
+  const v = n * r, rounded = r > 500 ? Math.round(v / 100) * 100 : Math.round(v / 10) * 10;
+  return CUR[city] + rounded.toLocaleString('en-US');
+}
+
+class Component extends DCLogic {
+  state = { tab: 'map', city: 'Seoul', day: 1, expanded: false, done: {}, cfg: {}, checked: {},
+            snap: 0, dragH: null, dragging: false };
+
+  componentDidMount() {
+    this.initMap();
+    this.tickTimer = setInterval(() => this.setState({ tick: (this.state.tick || 0) + 1 }), 4000);
+  }
+
+  componentDidUpdate() {
+    const s = this.state;
+    const key = s.tab + '|' + s.city + '|' + s.expanded + '|' + s.snap;
+    if (key !== this._camKey) { this._camKey = key; this.frameCamera(); }
+    this.syncMap();
+  }
+
+  // Snap points: peek, half, full. Dragging the handle moves between them.
+  snapPx(i) {
+    const h = this.mapEl ? this.mapEl.clientHeight : 874;
+    return [238, Math.round(h * 0.56), Math.round(h * 0.88)][i];
+  }
+
+  dragStart = (e) => {
+    const startY = e.clientY, startH = this.state.dragH || this.snapPx(this.state.snap || 0);
+    this.setState({ dragging: true, dragH: startH });
+    const move = (ev) => {
+      const h = Math.min(this.snapPx(2), Math.max(150, startH - (ev.clientY - startY)));
+      this.setState({ dragH: h });
+    };
+    const up = (ev) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      const h = Math.min(this.snapPx(2), Math.max(150, startH - (ev.clientY - startY)));
+      let best = 0, d = Infinity;
+      [0, 1, 2].forEach(i => { const dd = Math.abs(this.snapPx(i) - h); if (dd < d) { d = dd; best = i; } });
+      const moved = Math.abs(ev.clientY - startY) > 6;
+      this.setState({ dragging: false, dragH: null, snap: best, expanded: moved ? best > 0 : this.state.expanded });
+      this.dragMoved = moved;
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  frameCamera() {
+    const map = this.map;
+    if (!map || !this.tripBounds) return;
+    const s = this.state;
+    const H = this.mapEl ? this.mapEl.clientHeight : 874;
+    const onMap = s.tab === 'map';
+    // The sheet only covers the map on the Map tab; elsewhere it owns the screen.
+    const sheet = onMap ? (s.expanded ? this.snapPx(s.snap || 1) : 238) : 238;
+    // Padding must leave a usable viewport or MapLibre rejects the fit outright.
+    const top = Math.min(190, Math.round(H * 0.18));
+    const bottom = Math.max(40, Math.min(sheet + 24, H - top - 220));
+    // Padding passed to flyTo persists on the transform and would be added to
+    // the next fitBounds — keep it at zero and express offsets explicitly.
+    if (map.setPadding) map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+    if (onMap && s.expanded && PLACE[s.city]) {
+      const c = PLACE[s.city];
+      map.flyTo({ center: [c[1], c[0]], zoom: 8.6, offset: [0, -Math.round((bottom - top) / 2)], duration: 900, essential: true });
+    } else {
+      map.fitBounds(this.tripBounds, { padding: { top: top, bottom: bottom, left: 56, right: 56 }, duration: 800 });
+    }
+  }
+
+  initMap() {
+    if (this.map || !this.mapEl || !window.maplibregl) {
+      if (!window.maplibregl) setTimeout(() => this.initMap(), 120);
+      return;
+    }
+    const gl = window.maplibregl;
+    const order = Object.keys(PLACE);
+    const ll = c => [PLACE[c][1], PLACE[c][0]];
+
+    const bounds = [
+      [Math.min.apply(null, order.map(c => ll(c)[0])), Math.min.apply(null, order.map(c => ll(c)[1]))],
+      [Math.max.apply(null, order.map(c => ll(c)[0])), Math.max.apply(null, order.map(c => ll(c)[1]))]
+    ];
+    const map = new gl.Map({
+      container: this.mapEl,
+      style: 'https://tiles.openfreemap.org/styles/positron',
+      attributionControl: false,
+      center: [133, 35.5], zoom: 4
+    });
+    this.tripBounds = bounds;
+    this.map = map;
+    this.markers = {};
+
+    map.on('load', () => {
+      // Fit against the settled container, clearing the header and the sheet peek.
+      map.resize();
+      map.fitBounds(bounds, { padding: { top: 190, bottom: 260, left: 56, right: 56 }, animate: false });
+
+      // OSM vector tiles carry local-script names; force the English/latin field.
+      map.getStyle().layers.forEach(layer => {
+        if (layer.type !== 'symbol') return;
+        try {
+          if (map.getLayoutProperty(layer.id, 'text-field') !== undefined) {
+            map.setLayoutProperty(layer.id, 'text-field',
+              ['coalesce', ['get', 'name:en'], ['get', 'name:latin'], ['get', 'name_en'], ['get', 'name']]);
+            // The app labels the trip cities itself — drop the basemap's duplicates.
+            const names = ['Seoul', 'Osaka', 'Kyoto', 'Tokyo', '서울', '大阪', '京都', '東京'];
+            const drop = ['!', ['in', ['coalesce', ['get', 'name:en'], ['get', 'name']], ['literal', names]]];
+            const existing = map.getFilter(layer.id);
+            map.setFilter(layer.id, existing ? ['all', existing, drop] : drop);
+            // Local place labels only appear once the camera flies into a city;
+            // at route overview they collide with the app's own pin labels.
+            if (/city|town|village|suburb|quarter|hamlet|neighbourhood|country|state|province|region/i.test(layer.id) ||
+                /city|town|village|suburb/i.test(layer['source-layer'] || '')) {
+              map.setLayerZoomRange(layer.id, 7, 24);
+            }
+          }
+        } catch (e) { /* layer has no text-field or filter */ }
+      });
+
+      const line = (coords, color, width, dash) => {
+        const id = 'route-' + Math.random().toString(36).slice(2, 8);
+        map.addSource(id, { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } } });
+        const paint = { 'line-color': color, 'line-width': width, 'line-opacity': .9 };
+        if (dash) paint['line-dasharray'] = dash;
+        map.addLayer({ id: id, type: 'line', source: id, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: paint });
+      };
+      // Route geometry is rebuilt whenever the city list changes.
+      map.addSource('route-main', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: order.map(ll) } } });
+      map.addLayer({ id: 'route-main', type: 'line', source: 'route-main', layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#9184d9', 'line-width': 2.2, 'line-opacity': .9 } });
+      map.addSource('route-pulse', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: order.map(ll) } } });
+      map.addLayer({ id: 'route-pulse', type: 'line', source: 'route-pulse',
+        layout: { 'line-cap': 'round' },
+        paint: { 'line-color': '#e0daff', 'line-width': 3, 'line-dasharray': [0, 4, 3] } });
+      const frames = [[0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5],
+                      [3, 4, 0], [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2],
+                      [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5]];
+      let fi = 0;
+      this.pulseTimer = setInterval(() => {
+        if (!map.getLayer('route-pulse')) return;
+        map.setPaintProperty('route-pulse', 'line-dasharray', frames[fi++ % frames.length]);
+      }, 110);
+      // Austin legs leave the frame — dashed stubs east and west.
+      line([[118, 36.5], ll('Seoul')], '#6d5fc0', 1.5, [2, 3]);
+      line([ll('Tokyo'), [149, 37.5]], '#6d5fc0', 1.5, [2, 3]);
+    });
+
+    this.gl = gl;
+    this.syncMap();
+  }
+
+  // Markers and route follow the current city list — add, delete, reorder.
+  ensureMarkers() {
+    const map = this.map, gl = this.gl;
+    if (!map || !gl) return;
+    const order = this.cityList().filter(c => PLACE[c]);
+    order.forEach(c => {
+      if (this.markers[c]) return;
+      const el = document.createElement('div');
+      el.className = 'trip-pin';
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => {
+        const idx = this.scheduleStart ? this.scheduleStart[c] : 0;
+        this.setState({ city: c, expanded: true, tab: 'map', day: (idx || 0) + 1 });
+        this.zoomTo(PLACE[c], 13.2);
+      });
+      this.markers[c] = new gl.Marker({ element: el, anchor: 'top', offset: [0, -7] })
+        .setLngLat([PLACE[c][1], PLACE[c][0]]).addTo(map);
+    });
+    Object.keys(this.markers).forEach(c => {
+      if (order.indexOf(c) < 0) { this.markers[c].remove(); delete this.markers[c]; }
+    });
+
+    const coords = order.map(c => [PLACE[c][1], PLACE[c][0]]);
+    const key = coords.join(';');
+    if (key !== this._routeKey) {
+      this._routeKey = key;
+      ['route-main', 'route-pulse'].forEach(id => {
+        const src = map.getSource(id);
+        if (src) src.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } });
+      });
+      if (coords.length > 1) {
+        this.tripBounds = [
+          [Math.min.apply(null, coords.map(p => p[0])), Math.min.apply(null, coords.map(p => p[1]))],
+          [Math.max.apply(null, coords.map(p => p[0])), Math.max.apply(null, coords.map(p => p[1]))]
+        ];
+      }
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.pulseTimer) clearInterval(this.pulseTimer);
+    if (this.tickTimer) clearInterval(this.tickTimer);
+  }
+
+  syncMap() {
+    if (!this.map || !this.markers) return;
+    this.ensureMarkers();
+    Object.keys(this.markers).forEach(c => {
+      const el = this.markers[c].getElement();
+      if (!el) return;
+      const sel = this.state.city === c;
+      const off = LABEL_OFFSET[c] || [0, 0];
+      el.classList.add('trip-pin');
+      el.classList.toggle('is-sel', sel);
+      el.innerHTML = '<span class="tp-ret"></span><span class="tp-dot"></span>' +
+        '<span class="tp-label" style="position:relative;display:block;left:' + off[0] + 'px;top:' + off[1] + 'px">' +
+        '<span class="tp-name">' + c + '</span>' +
+        (sel && this.pinSubs && this.pinSubs[c] ? '<span class="tp-sub">' + this.pinSubs[c] + '</span>' : '') +
+        '</span>';
+      el.style.width = '80px';
+      el.style.textAlign = 'center';
+      el.style.zIndex = sel ? 500 : 400;
+    });
+    // Resize only on a real box change — an unconditional resize() cancels
+    // any queued flyTo/fitBounds animation.
+    const w = this.mapEl ? this.mapEl.clientWidth : 0, h = this.mapEl ? this.mapEl.clientHeight : 0;
+    if (this.map.resize && (w !== this._boxW || h !== this._boxH)) {
+      this._boxW = w; this._boxH = h;
+      this.map.resize();
+    }
+  }
+
+  cfgFor(city, defNights) {
+    const preset = HOTELS[city] || [];
+    const t = (TRANSIT[city] && TRANSIT[city].opts[0]) || { name: '', per: 0 };
+    const blanks = [0, 1, 2].map(i => preset[i]
+      ? { name: preset[i].name, url: '', addr: preset[i].note, cost: preset[i].per, ll: preset[i].ll }
+      : { name: '', url: '', addr: '', cost: 0, ll: PLACE[city] || null });
+    return Object.assign({
+      nights: defNights, hotelSel: 0, hotels: blanks,
+      trainName: t.name, trainUrl: '', trainCost: t.per,
+      foodPer: FOODS[1].per
+    }, this.state.cfg[city] || {});
+  }
+
+  cityList() {
+    if (this.state.order) return this.state.order;
+    const o = [];
+    DAYS.forEach(d => { if (o.indexOf(d.city) < 0) o.push(d.city); });
+    return o;
+  }
+
+  setOrder(next) {
+    this.setState({ order: next, city: next.indexOf(this.state.city) < 0 ? next[0] : this.state.city });
+  }
+
+  moveCity(c, dir) {
+    const o = this.cityList().slice(), i = o.indexOf(c), j = i + dir;
+    if (i < 0 || j < 0 || j >= o.length) return;
+    o.splice(j, 0, o.splice(i, 1)[0]);
+    this.setOrder(o);
+  }
+
+  removeCity(c) {
+    const o = this.cityList().filter(x => x !== c);
+    if (!o.length) return;
+    this.setOrder(o);
+  }
+
+  addCity(name) {
+    const c = (name || '').trim();
+    if (!c) return;
+    const o = this.cityList();
+    if (o.indexOf(c) >= 0) return;
+    this.setState({ order: o.concat([c]), adding: false, newCity: '', city: c, expanded: true });
+  }
+
+  setHotel(city, i, key, val, defNights) {
+    const cur = this.cfgFor(city, defNights);
+    const hotels = cur.hotels.map((h, j) => j === i ? Object.assign({}, h, { [key]: val }) : h);
+    this.setCfg(city, 'hotels', hotels, defNights);
+  }
+
+  // Staged descent: out-and-in arc, then a second step down to block level.
+  zoomTo(ll, finalZoom) {
+    const map = this.map;
+    if (!map || !ll) return;
+    if (map.setPadding) map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+    const H = this.mapEl ? this.mapEl.clientHeight : 874;
+    const sheet = this.state.snap ? this.snapPx(this.state.snap) : 238;
+    const offsetY = -Math.round(Math.min(sheet, H * 0.42) / 2);
+    map.flyTo({ center: [ll[1], ll[0]], zoom: Math.max(11, finalZoom - 3.5), offset: [0, offsetY], duration: 900, curve: 1.6, essential: true });
+    clearTimeout(this._zoomStep);
+    this._zoomStep = setTimeout(() => {
+      map.easeTo({ center: [ll[1], ll[0]], zoom: finalZoom, offset: [0, offsetY], duration: 1100, essential: true });
+    }, 950);
+    this.focusLL = ll;
+    this.setState({ focus: ll.join(',') });
+  }
+
+  setCfg(city, key, val, defNights) {
+    const cur = this.cfgFor(city, defNights);
+    const next = Object.assign({}, this.state.cfg);
+    next[city] = Object.assign({}, cur);
+    next[city][key] = val;
+    this.setState({ cfg: next });
+  }
+
+  renderVals() {
+    const s = this.state, p = this.props;
+    const localOn = p.localCurrency !== false;
+    const money = (n, city) => {
+      if (!n) return '\u2014';
+      const l = localOn ? fmtLocal(n, city) : '';
+      return l ? fmtUsd(n) + '  ' + l : fmtUsd(n);
+    };
+
+    const order = this.cityList();
+    const dateOf = i => new Date(START.getFullYear(), START.getMonth(), START.getDate() + i);
+    const fmtD = dt => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const fmtDow = dt => dt.toLocaleDateString('en-US', { weekday: 'short' });
+
+    const cityDayIdx = {};
+    DAYS.forEach((d, i) => { (cityDayIdx[d.city] = cityDayIdx[d.city] || []).push(i); });
+
+    // The schedule is derived from the nights picked per city, so dates, day
+    // blocks, pins and money all read from the same numbers.
+    const schedule = [], meta = {};
+    order.forEach(c => {
+      const idx = cityDayIdx[c] || [];
+      const cfg = this.cfgFor(c, idx.length || 2);
+      meta[c] = { cfg: cfg, start: schedule.length, count: cfg.nights, idx: idx };
+      for (let j = 0; j < cfg.nights; j++) {
+        schedule.push({ city: c, items: idx[j] !== undefined ? DAYS[idx[j]].items : null });
+      }
+    });
+
+    const mkItems = (gi) => (schedule[gi].items || []).map((it, j) => {
+      const key = gi + ':' + j, off = !!s.done[key];
+      return {
+        time: it[0], title: it[1], sub: it[2], cost: money(it[3], schedule[gi].city),
+        delay: (j * 45) + 'ms',
+        strike: off ? 'line-through' : 'none',
+        color: off ? 'var(--color-neutral-600)' : 'var(--color-text)',
+        dotBg: off ? 'var(--color-accent-500)' : 'var(--color-bg)',
+        dotBorder: off ? 'var(--color-accent-500)' : 'var(--color-neutral-600)',
+        toggle: () => { const dn = Object.assign({}, s.done); dn[key] = !off; this.setState({ done: dn }); }
+      };
+    });
+
+    const dayOf = (i) => {
+      const dt = dateOf(i), e = schedule[i], rows = e.items || [];
+      return {
+        n: String(i + 1), nn: String(i + 1).padStart(2, '0'), dow: fmtDow(dt),
+        date: fmtDow(dt) + ' ' + fmtD(dt), city: e.city, weather: WEATHER[e.city] || '',
+        total: rows.length ? money(rows.reduce((a, it) => a + (it[3] || 0), 0), e.city) : 'Open',
+        items: e.items ? mkItems(i) : [{
+          time: '—', title: 'Nothing planned yet', sub: 'Added night · fill it in later', delay: '0ms',
+          cost: '—', strike: 'none', color: 'var(--color-neutral-500)',
+          dotBg: 'transparent', dotBorder: 'var(--color-neutral-700)', toggle: () => {}
+        }]
+      };
+    };
+
+    const ground = schedule.reduce((a, e) => a + (e.items || []).reduce((b, it) => b + (it[3] || 0), 0), 0);
+
+    // Budget from the selected options, not from the itinerary rows.
+    const picked = {}, spend = { Lodging: 0, Transit: 0, Food: 0 };
+    order.forEach(c => {
+      const cfg = meta[c].cfg;
+      const hotel = (Number((cfg.hotels[cfg.hotelSel] || {}).cost) || 0) * cfg.nights;
+      const transit = (Number(cfg.trainCost) || 0) * PARTY;
+      if (!EATS[c]) EATS[c] = [];
+      const food = (Number(cfg.foodPer) || 0) * cfg.nights;
+      picked[c] = { cfg: cfg, hotel: hotel, transit: transit, food: food, total: hotel + transit + food };
+      spend.Lodging += hotel; spend.Transit += transit; spend.Food += food;
+    });
+    const grand = spend.Lodging + spend.Transit + spend.Food;
+    const segFill = { Lodging: 'var(--color-accent-400)', Transit: 'var(--color-accent-600)', Food: 'var(--color-accent-800)' };
+
+    const cities = order.map(c => {
+      const m = meta[c], idx = m.idx, open = s.city === c && s.expanded;
+      const pk = picked[c], cfg = pk.cfg, def = idx.length;
+      return {
+        name: c, open: open,
+        delay: (order.indexOf(c) * 60) + 'ms',
+        dates: fmtD(dateOf(m.start)) + ' – ' + fmtD(dateOf(m.start + m.count - 1)),
+        cost: fmtUsd(pk.total),
+        nights: String(cfg.nights),
+        less: () => this.setCfg(c, 'nights', Math.max(1, cfg.nights - 1), def),
+        more: () => this.setCfg(c, 'nights', Math.min(9, cfg.nights + 1), def),
+        eats: EATS[c].map((e, i) => ({
+          name: e.name, note: e.note, band: e.band,
+          slot: 'eat-' + c.toLowerCase() + '-' + i,
+          ph: 'Photo of ' + e.name,
+          walk: walkLabel((cfg.hotels[cfg.hotelSel] || {}).ll, e.ll),
+          zoom: () => this.zoomTo(e.ll, 16.5)
+        })),
+        hotels: cfg.hotels.map((h, i) => {
+          const on = cfg.hotelSel === i;
+          return {
+            name: h.name, url: h.url, addr: h.addr, cost: h.cost, open: on,
+            href: h.url || '#',
+            slot: 'hotel-' + c.toLowerCase() + '-' + i,
+            ph: 'Photo — option ' + (i + 1),
+            label: 'Option ' + (i + 1),
+            sum: fmtUsd((Number(h.cost) || 0) * cfg.nights) + ' total',
+            bg: on ? 'rgba(145,132,217,.10)' : 'var(--color-bg)',
+            border: on ? 'var(--color-accent-500)' : 'var(--color-neutral-800)',
+            dotBg: on ? 'var(--color-accent-400)' : 'transparent',
+            dotBorder: on ? 'var(--color-accent-400)' : 'var(--color-neutral-600)',
+            select: () => { this.setCfg(c, 'hotelSel', i, def); if (h.ll) this.zoomTo(h.ll, 16); },
+            setName: (e) => this.setHotel(c, i, 'name', e.target.value, def),
+            setUrl: (e) => this.setHotel(c, i, 'url', e.target.value, def),
+            setAddr: (e) => this.setHotel(c, i, 'addr', e.target.value, def),
+            setCost: (e) => this.setHotel(c, i, 'cost', e.target.value, def)
+          };
+        }),
+        hotelSum: fmtUsd((Number((cfg.hotels[cfg.hotelSel] || {}).cost) || 0) * cfg.nights) + ' total',
+        transitLabel: (TRANSIT[c] && TRANSIT[c].label) || 'Getting to ' + c,
+        first: order.indexOf(c) === 0,
+        last: order.indexOf(c) === order.length - 1,
+        up: (ev) => { ev.stopPropagation(); this.moveCity(c, -1); },
+        down: (ev) => { ev.stopPropagation(); this.moveCity(c, 1); },
+        remove: (ev) => { ev.stopPropagation(); this.removeCity(c); },
+        trainName: cfg.trainName, trainUrl: cfg.trainUrl, trainCost: cfg.trainCost,
+        trainHref: cfg.trainUrl || '#',
+        trainSum: fmtUsd((Number(cfg.trainCost) || 0) * PARTY) + ' for ' + PARTY,
+        setTrainName: (e) => this.setCfg(c, 'trainName', e.target.value, def),
+        setTrainUrl: (e) => this.setCfg(c, 'trainUrl', e.target.value, def),
+        setTrainCost: (e) => this.setCfg(c, 'trainCost', e.target.value, def),
+        foodPer: cfg.foodPer,
+        foodPerLabel: fmtUsd(Number(cfg.foodPer) || 0) + '/day',
+        foodSum: fmtUsd((Number(cfg.foodPer) || 0) * cfg.nights),
+        setFood: (e) => this.setCfg(c, 'foodPer', Number(e.target.value), def),
+        transit: (idx.length && DAYS[idx[0]].transit) || 'Staying put',
+        chev: open ? 'ph ph-caret-up' : 'ph ph-caret-down',
+        bg: open ? 'rgba(145,132,217,.10)' : 'var(--color-surface)',
+        border: open ? 'var(--color-accent-600)' : 'var(--color-neutral-800)',
+        days: Array.apply(null, { length: m.count }).map((z, j) => dayOf(m.start + j)),
+        select: () => {
+          this.setState({ city: c, expanded: !open, tab: 'map', snap: open ? 0 : Math.max(1, s.snap) });
+          if (!open) setTimeout(() => this.zoomTo(PLACE[c], 13.2), 20);
+        }
+      };
+    });
+
+    const pins = order.map(c => {
+      const sel = s.city === c, m = meta[c];
+      return {
+        name: c, sub: m.count + (m.count === 1 ? ' night' : ' nights'), sel: sel
+      };
+    });
+    this.pinSubs = {};
+    this.scheduleStart = {};
+    pins.forEach(p => { this.pinSubs[p.name] = p.sub; });
+    order.forEach(c => { this.scheduleStart[c] = meta[c].start; });
+
+    const days = schedule.map((e, i) => {
+      const dt = dateOf(i), sel = s.day === i + 1;
+      return {
+        n: String(i + 1), dow: fmtDow(dt),
+        chipBg: sel ? 'var(--color-accent-800)' : 'transparent',
+        chipBorder: sel ? 'var(--color-accent-500)' : 'var(--color-neutral-800)',
+        chipColor: sel ? 'var(--color-accent-100)' : 'var(--color-neutral-400)',
+        select: () => this.setState({ day: i + 1, city: e.city })
+      };
+    });
+
+    const isMap = s.tab === 'map';
+    const openCity = cities.filter(c => c.open)[0];
+
+    const checkKeys = [];
+    CHECKLIST.forEach((g, gi) => g[1].forEach((l, li) => checkKeys.push('c' + gi + ':' + li)));
+    const checkedN = checkKeys.filter(k => s.checked[k]).length;
+
+    return {
+      isMap: isMap, isDays: s.tab === 'days',
+      countdown: String(Math.max(0, Math.ceil((START - new Date()) / 86400000))),
+      tripRange: fmtD(dateOf(0)) + ' – ' + fmtD(dateOf(schedule.length - 1)),
+      tripLength: schedule.length + ' days',
+      totalLabel: fmtUsd(grand), activitiesLabel: fmtUsd(ground),
+      totalNote: fmtUsd(grand / PARTY) + ' each · plus ' + fmtUsd(ground) + ' of activities',
+      vsPlanned: (grand + ground) > PLANNED ? fmtUsd(grand + ground - PLANNED) + ' over plan' : fmtUsd(PLANNED - grand - ground) + ' left of ' + fmtUsd(PLANNED),
+      segments: ['Lodging', 'Transit', 'Food'].map(k => ({
+        label: k, amount: fmtUsd(spend[k]), fill: segFill[k],
+        pct: Math.round((spend[k] / (grand || 1)) * 100) + '%'
+      })),
+      mapRef: (el) => { if (el && el !== this.mapEl) { this.mapEl = el; this.initMap(); } },
+      pins: pins, cities: cities, days: days, sel: dayOf(Math.min(Math.max(1, s.day), schedule.length) - 1),
+      isList: s.tab === 'list',
+      requestPdf: () => window.print(),
+      printCities: order.map(c => {
+        const m = meta[c], cfg = m.cfg;
+        return {
+          name: c, dates: fmtD(dateOf(m.start)) + ' – ' + fmtD(dateOf(m.start + m.count - 1)),
+          nights: cfg.nights + (cfg.nights === 1 ? ' night' : ' nights'),
+          hotel: (h => h.name + ' · ' + fmtUsd(Number(h.cost) || 0) + '/night' + (h.addr ? ' · ' + h.addr : ''))(cfg.hotels[cfg.hotelSel] || {}),
+          transit: ((TRANSIT[c] && TRANSIT[c].label) || 'Getting to ' + c) + ': ' + cfg.trainName + ' · ' + fmtUsd((Number(cfg.trainCost) || 0) * PARTY),
+          food: fmtUsd(Number(cfg.foodPer) || 0) + '/day',
+          subtotal: fmtUsd(picked[c].total),
+          days: Array.apply(null, { length: m.count }).map((z, j) => {
+            const d = dayOf(m.start + j);
+            return { nn: d.nn, date: d.date, total: d.total, items: d.items };
+          })
+        };
+      }),
+      checkGroups: CHECKLIST.map((g, gi) => ({
+        title: g[0],
+        items: g[1].map((l, li) => {
+          const key = 'c' + gi + ':' + li, on = !!s.checked[key];
+          return {
+            label: l, check: on ? 'ph-fill ph-check' : '',
+            boxBg: on ? 'var(--color-accent-400)' : 'transparent',
+            boxBorder: on ? 'var(--color-accent-400)' : 'var(--color-neutral-700)',
+            strike: on ? 'line-through' : 'none',
+            color: on ? 'var(--color-neutral-600)' : 'var(--color-text)',
+            toggle: () => { const ck = Object.assign({}, s.checked); ck[key] = !on; this.setState({ checked: ck }); }
+          };
+        })
+      })),
+      checkedCount: String(checkedN), checkTotal: String(checkKeys.length),
+      checkPct: Math.round((checkedN / checkKeys.length) * 100) + '%',
+      checkPctWidth: Math.round((checkedN / checkKeys.length) * 100) + '%',
+      adding: !!s.adding,
+      notAdding: !s.adding,
+      newCity: s.newCity || '',
+      openAdd: () => this.setState({ adding: true, newCity: '' }),
+      cancelAdd: () => this.setState({ adding: false, newCity: '' }),
+      onNewCity: (e) => this.setState({ newCity: e.target.value }),
+      onNewCityKey: (e) => { if (e.key === 'Enter') this.addCity(s.newCity); },
+      commitCity: () => this.addCity(s.newCity),
+      suggestions: Object.keys(ADDABLE).filter(k => order.indexOf(k) < 0).slice(0, 8).map(k => ({
+        name: k, add: () => this.addCity(k)
+      })),
+      ticker: [
+        order.length + ' legs / ' + schedule.length + ' days / ' + PARTY + ' pax',
+        'Lodging ' + fmtUsd(spend.Lodging) + ' / transit ' + fmtUsd(spend.Transit) + ' / food ' + fmtUsd(spend.Food),
+        'FX ₩1,360 · ¥152 per USD',
+        'Peak bloom window · Mar 28 – Apr 4',
+        checkedN + '/' + checkKeys.length + ' checklist cleared'
+      ][(s.tick || 0) % 5],
+      dragStart: this.dragStart,
+      dragging: s.dragging,
+      sheetTransition: s.dragging ? 'none' : 'height .34s cubic-bezier(.22,1.1,.3,1)',
+      handleBg: s.dragging ? 'var(--color-accent-400)' : 'var(--color-neutral-700)',
+      creditBottom: (s.dragH || (isMap ? (s.expanded ? this.snapPx(s.snap || 1) : 238) : this.snapPx(2))) + 12 + 'px',
+      sheetHeight: s.dragH ? s.dragH + 'px'
+        : (isMap ? (s.expanded ? this.snapPx(s.snap || 1) + 'px' : '238px') : this.snapPx(2) + 'px'),
+      sheetTitle: isMap ? order.length + ' cities, ' + schedule.length + ' days'
+        : (s.tab === 'list' ? 'Trip checklist' : 'Day by day'),
+      sheetHint: isMap ? (openCity ? openCity.name + ' open · tap to collapse' : 'Tap a city')
+        : (s.tab === 'list' ? checkedN + ' of ' + checkKeys.length + ' done' : 'Tap an item to tick it off'),
+      toggleSheet: () => {
+        if (this.dragMoved) { this.dragMoved = false; return; }
+        if (!isMap) return;
+        const next = !s.expanded;
+        this.setState({ expanded: next, snap: next ? Math.max(1, s.snap) : 0 });
+      },
+      tabs: [
+        { key: 'map', label: 'Map', icon: 'ph ph-map-trifold' },
+        { key: 'days', label: 'Days', icon: 'ph ph-calendar-blank' },
+        { key: 'list', label: 'Checklist', icon: 'ph ph-list-checks' }
+      ].map(t => ({
+        label: t.label,
+        icon: s.tab === t.key ? t.icon.replace('ph ph-', 'ph-fill ph-') : t.icon,
+        bg: s.tab === t.key ? 'var(--color-accent-800)' : 'transparent',
+        border: s.tab === t.key ? 'var(--color-accent-500)' : 'transparent',
+        color: s.tab === t.key ? 'var(--color-accent-100)' : 'var(--color-neutral-400)',
+        select: () => this.setState({ tab: t.key })
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>
