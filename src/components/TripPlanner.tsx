@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { City, LatLng } from '@/lib/data';
+import { City, LatLng, PLACE_KINDS } from '@/lib/data';
 import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
-import type { MapFocus, MapPin } from './TripMap';
+import type { MapFocus, MapLeg, MapPin } from './TripMap';
+import { useDayRoute, type Stop } from '@/lib/useDayRoute';
 import CityPanel from './CityPanel';
 import DaysTab from './DaysTab';
 import ChecklistTab from './ChecklistTab';
@@ -45,6 +46,9 @@ export default function TripPlanner() {
   const [newCity, setNewCity] = useState('');
   const [locating, setLocating] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [plotAll, setPlotAll] = useState(true);
+  const [fit, setFit] = useState<{ points: LatLng[]; nonce: number } | null>(null);
+  const fitNonce = useRef(0);
   const shell = useRef<HTMLDivElement | null>(null);
   const dragMoved = useRef(false);
   const focusNonce = useRef(0);
@@ -83,33 +87,101 @@ export default function TripPlanner() {
     [cityId, expanded, snap, doc.cities, zoomTo],
   );
 
+  const dayEntry = d.schedule[Math.min(Math.max(1, day), Math.max(1, d.schedule.length)) - 1] ?? null;
+
+  /**
+   * The planned day as an ordered list of located stops. Only stops get routed —
+   * a place that is merely pinned costs nothing.
+   */
+  const stops = useMemo<Stop[]>(() => {
+    if (!dayEntry) return [];
+    const city = dayEntry.city;
+    const out: Stop[] = [];
+    const hotel = selectedHotel(city);
+    if (hotel?.ll) {
+      out.push({ id: 'hotel:' + hotel.id, label: hotel.name || 'Hotel', ll: hotel.ll, mode: 'walk' });
+    }
+    dayEntry.items.forEach((it) => {
+      const place = city.places.find((p) => p.id === it.placeId);
+      if (place?.ll) {
+        out.push({ id: it.id, label: it.title || place.name, ll: place.ll, mode: it.mode });
+      }
+    });
+    return out;
+  }, [dayEntry]);
+
+  const hops = useDayRoute(tab === 'days' ? stops : []);
+
+  const legs = useMemo<MapLeg[]>(() => {
+    if (tab !== 'days') return [];
+    return hops
+      .map((h) => {
+        const leg = h.options[h.to.mode] ?? h.options.walk;
+        if (!leg) return null;
+        return { id: h.toId, mode: leg.mode, geometry: leg.geometry };
+      })
+      .filter((l): l is MapLeg => !!l);
+  }, [hops, tab]);
+
   /** Map pins: every city, plus the selected city's hotel and places. */
   const pins = useMemo<MapPin[]>(() => {
     const out: MapPin[] = [];
+    // Stop numbers come from the day being planned, if any.
+    const stopIndex = new Map<string, number>();
+    if (tab === 'days') {
+      stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
+    }
+
     doc.cities.forEach((c) => {
+      const focused = c.id === cityId;
       if (c.ll) {
         out.push({
           id: c.id,
           name: c.name,
           sub: `${c.nights} ${c.nights === 1 ? 'night' : 'nights'}`,
           ll: c.ll,
-          selected: c.id === cityId,
+          selected: focused,
           kind: 'city',
         });
       }
-      if (c.id !== cityId) return;
       const hotel = selectedHotel(c);
-      if (hotel?.ll && hotel.name) {
-        out.push({ id: hotel.id, name: hotel.name, sub: 'stay', ll: hotel.ll, selected: false, kind: 'hotel' });
+      if (hotel?.ll && hotel.name && (focused || plotAll)) {
+        out.push({
+          id: hotel.id,
+          name: hotel.name,
+          sub: 'stay',
+          ll: hotel.ll,
+          selected: false,
+          kind: 'hotel',
+          icon: 'ph-bed',
+          stopNumber: stopIndex.get(hotel.ll.join(',')),
+        });
       }
+      // Every pinned place is plotted — they are only routed once scheduled.
+      if (!focused && !plotAll) return;
       c.places.forEach((p) => {
-        if (p.ll && p.name) {
-          out.push({ id: p.id, name: p.name, sub: p.band, ll: p.ll, selected: false, kind: 'place' });
-        }
+        if (!p.ll || !p.name) return;
+        out.push({
+          id: p.id,
+          name: p.name,
+          sub: p.band || p.note,
+          ll: p.ll,
+          selected: false,
+          kind: 'place',
+          icon: PLACE_KINDS.find((k) => k.id === p.kind)?.icon ?? 'ph-map-pin',
+          stopNumber: stopIndex.get(p.ll.join(',')),
+        });
       });
     });
     return out;
-  }, [doc.cities, cityId]);
+  }, [doc.cities, cityId, plotAll, stops, tab]);
+
+  const zoomToPoints = useCallback((points: LatLng[]) => {
+    if (!points.length) return;
+    fitNonce.current += 1;
+    setFocus(null);
+    setFit({ points, nonce: fitNonce.current });
+  }, []);
 
   const route = useMemo(
     () => doc.cities.map((c) => c.ll).filter((ll): ll is LatLng => !!ll),
@@ -206,7 +278,15 @@ export default function TripPlanner() {
 
   return (
     <div ref={shell} style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: 'var(--color-bg)' }}>
-      <TripMap pins={pins} route={route} sheetPx={sheetH} focus={focus} onSelect={selectCity} />
+      <TripMap
+        pins={pins}
+        route={route}
+        legs={legs}
+        fit={fit}
+        sheetPx={sheetH}
+        focus={focus}
+        onSelect={selectCity}
+      />
 
       {/* Header */}
       <div
@@ -406,6 +486,23 @@ export default function TripPlanner() {
                 />
               ) : null}
 
+              {d.cities.length > 1 ? (
+                <button
+                  className="tap"
+                  onClick={() => setPlotAll((v) => !v)}
+                  style={{
+                    width: '100%', minHeight: 36, marginBottom: 8, borderRadius: 9999,
+                    border: '1px solid var(--color-neutral-800)', background: 'transparent',
+                    color: plotAll ? 'var(--color-accent-200)' : 'var(--color-neutral-500)',
+                    fontSize: 11.5, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  <i className={plotAll ? 'ph-fill ph-map-pin' : 'ph ph-map-pin'} style={{ fontSize: 12 }} />
+                  {plotAll ? 'Showing every place on the map' : 'Showing only the open city'}
+                </button>
+              ) : null}
+
               {d.cities.length === 0 && !adding ? (
                 <div
                   style={{
@@ -528,6 +625,7 @@ export default function TripPlanner() {
               schedule={d.schedule}
               start={doc.trip.start}
               selected={day}
+              hops={hops}
               onSelectDay={(n) => {
                 setDay(n);
                 const c = d.schedule[n - 1]?.city;
@@ -537,6 +635,9 @@ export default function TripPlanner() {
               onSetItem={store.setDayItem}
               onToggleItem={store.toggleDayItem}
               onRemoveItem={store.removeDayItem}
+              onMoveItem={store.moveDayItem}
+              onZoomDay={() => zoomToPoints(stops.map((s) => s.ll))}
+              onZoomStop={(ll) => zoomTo(ll, 16.5)}
             />
           ) : null}
 

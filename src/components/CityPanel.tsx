@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { City, Hotel, LatLng, MAX_NIGHTS, Place } from '@/lib/data';
+import { City, Hotel, LatLng, MAX_NIGHTS, PLACE_KINDS, Place } from '@/lib/data';
 import { fmtUsd, walkLabel } from '@/lib/format';
 import { CitySpend } from '@/lib/derive';
 import { geocode, hitToLatLng } from '@/lib/geocode';
@@ -175,7 +175,10 @@ export default function CityPanel({
         <TouchMark touch={touch('places')} align="right" />
       </div>
       {city.places.length === 0 ? (
-        <div style={{ ...emptyNote }}>Restaurants, sights, anything worth pinning.</div>
+        <div style={{ ...emptyNote }}>
+          Restaurants, sights, anything worth pinning. They show on the map right
+          away; routes come once you put them in a day.
+        </div>
       ) : (
         <div style={{ display: 'grid', gap: 6 }}>
           {city.places.map((p) => (
@@ -309,6 +312,10 @@ function NumField({
 function useGeocodedAddress(addr: string, onResolved: (ll: LatLng) => void) {
   const [status, setStatus] = useState<'idle' | 'looking' | 'found' | 'missing'>('idle');
   const typed = useRef(addr);
+  // Held in a ref: the caller passes a fresh closure every render, and putting
+  // that in the dependency list would clear the debounce timer before it fires.
+  const cb = useRef(onResolved);
+  cb.current = onResolved;
   useEffect(() => {
     if (addr === typed.current) return;
     typed.current = addr;
@@ -323,7 +330,7 @@ function useGeocodedAddress(addr: string, onResolved: (ll: LatLng) => void) {
       const hit = await geocode(q);
       if (!live) return;
       if (hit) {
-        onResolved(hitToLatLng(hit));
+        cb.current(hitToLatLng(hit));
         setStatus('found');
       } else {
         setStatus('missing');
@@ -333,7 +340,7 @@ function useGeocodedAddress(addr: string, onResolved: (ll: LatLng) => void) {
       live = false;
       clearTimeout(t);
     };
-  }, [addr, onResolved]);
+  }, [addr]);
   return status;
 }
 
@@ -471,6 +478,22 @@ function PlaceCard({
   return (
     <div style={{ ...boxed, padding: '4px 8px 8px', ...(touchStyle(touch) ?? {}) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <select
+          value={place.kind}
+          aria-label="Kind of place"
+          onChange={(e) => onField('kind', e.target.value as Place['kind'])}
+          style={{
+            flex: 'none', width: 58, height: 34, fontSize: 11, padding: '0 4px',
+            borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-neutral-800)',
+            background: 'var(--color-bg)', color: 'var(--color-accent-200)',
+          }}
+        >
+          {PLACE_KINDS.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.label}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
           value={place.name}

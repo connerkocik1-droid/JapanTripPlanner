@@ -91,6 +91,7 @@ export interface TripStore {
   addDayItem: (key: string) => string;
   setDayItem: <K extends keyof DayItem>(key: string, itemId: string, field: K, val: DayItem[K]) => void;
   removeDayItem: (key: string, itemId: string) => void;
+  moveDayItem: (key: string, itemId: string, dir: number) => void;
   toggleDayItem: (key: string, itemId: string) => void;
 
   addCheck: (text: string) => void;
@@ -246,7 +247,10 @@ export function useTripStore(): TripStore {
       edit(`${cityId}/places`, (d) =>
         mapCity(d, cityId, (c) => ({
           ...c,
-          places: [...c.places, { id, name: '', addr: '', note: '', band: '', ll: null }],
+          places: [
+            ...c.places,
+            { id, name: '', addr: '', note: '', band: '', kind: 'eat' as const, ll: null },
+          ],
         })),
       );
       return id;
@@ -281,7 +285,10 @@ export function useTripStore(): TripStore {
         ...d,
         days: {
           ...d.days,
-          [key]: [...(d.days[key] ?? []), { id, time: '', title: '', note: '', cost: 0, done: false }],
+          [key]: [
+            ...(d.days[key] ?? []),
+            { id, time: '', title: '', note: '', cost: 0, done: false, placeId: null, mode: 'walk' as const },
+          ],
         },
       }));
       return id;
@@ -308,6 +315,20 @@ export function useTripStore(): TripStore {
         ...d,
         days: { ...d.days, [key]: (d.days[key] ?? []).filter((it) => it.id !== itemId) },
       }));
+    },
+    [edit],
+  );
+
+  const moveDayItem = useCallback(
+    (key: string, itemId: string, dir: number) => {
+      edit(`day/${key}`, (d) => {
+        const items = (d.days[key] ?? []).slice();
+        const i = items.findIndex((it) => it.id === itemId);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= items.length) return d;
+        items.splice(j, 0, items.splice(i, 1)[0]);
+        return { ...d, days: { ...d.days, [key]: items } };
+      });
     },
     [edit],
   );
@@ -396,14 +417,14 @@ export function useTripStore(): TripStore {
       addCity, removeCity, moveCity, setCity,
       setHotel, addHotelSlot,
       addPlace, setPlace, removePlace,
-      addDayItem, setDayItem, removeDayItem, toggleDayItem,
+      addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck,
       addComment, toggleComment, removeComment, reset,
     }),
     [
       doc, ready, user, signIn, signOut, touch, setTrip,
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
-      addPlace, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, toggleDayItem,
+      addPlace, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck, addComment, toggleComment, removeComment, reset,
     ],
   );

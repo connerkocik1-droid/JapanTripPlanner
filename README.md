@@ -23,6 +23,12 @@ No environment variables are required. Two optional ones tune the geocoder:
 |---|---|---|
 | `NOMINATIM_URL` | `https://nominatim.openstreetmap.org/search` | Swap in a paid geocoder |
 | `GEOCODER_CONTACT` | `japan-trip-planner` | Sent in the `User-Agent`, per Nominatim's usage policy |
+| `OSRM_URL` | `https://routing.openstreetmap.de` | Walking/cycling router |
+| `TRANSIT_URL` | *(unset)* | A MOTIS `/api/v1/plan` endpoint for real metro routing |
+
+Without `TRANSIT_URL` the metro option is a clearly-labelled estimate (modelled from
+the walking distance at ~32 km/h plus 10 minutes of access and waiting), so "walk or
+metro?" still has an answer. Walking is routed either way.
 
 ## What's in it
 
@@ -61,9 +67,30 @@ instantly. Add the transit leg (× travelers) and a per-day food figure, and the
 header card sums Lodging / Transit / Food live against the budget you set. Costs
 you attach to itinerary items are tracked separately as "planned items".
 
-**Days.** Each city's nights become days, dated from the trip start. Add items with
-a time, title, note and cost; tap the dot to mark one done. Items stay attached to
-their city when you reorder the trip.
+**Plot first, route later.** Every place you pin shows on the map immediately, with
+a glyph for its kind (eat / do / stay / other) — across all cities, or just the open
+one. Nothing is routed at this stage: pinning costs no requests.
+
+**Day planner.** Each city's nights become days, dated from the trip start. A day is
+an ordered list of stops: give a stop a time, title, cost, and point it at one of the
+city's pinned places. The day then starts from your selected hotel and routes each
+consecutive pair:
+
+- **Walking** comes from a public OSRM instance — the line follows real streets and
+  the duration is a routed duration, not a straight line.
+- **Transit** comes from a MOTIS-compatible endpoint when `TRANSIT_URL` is set
+  (Transitous, or your own instance), including the lines you'd ride.
+- Each hop shows both options side by side with time and distance, a ★ on the faster
+  one, and `EST` on anything modelled rather than routed. Tap either to choose it.
+- The chosen legs are drawn on the map — walking dashed in blurple, transit solid in
+  cyan — with numbered stop markers. "Zoom to day" fits the whole day; the pin button
+  on any stop flies to it.
+- The day header totals your moving time.
+
+Reorder stops with the arrows and the routes recompute. Results are cached per hop,
+so reordering or switching modes doesn't re-hit the router.
+
+Items stay attached to their city when you reorder the trip.
 
 **Checklist.** Yours to write: add, rename, tick and delete items. "Print the
 itinerary" produces a letter-paper sheet of every city, its hotel, transit, food,
@@ -95,9 +122,12 @@ components.
 app/
   layout.tsx, page.tsx, globals.css   # shell + Nocturne design tokens
   api/geocode/route.ts                # address → coordinates
+  api/route/route.ts                  # walking (OSRM) and transit legs
 src/lib/
   data.ts        # the document's types and blank factories (no trip content)
   geo.ts         # great-circle route geometry, bounds
+  routing.ts     # client side of the router, per-hop cache, walk-vs-transit pick
+  useDayRoute.ts # routes the planned day's consecutive stops
   derive.ts      # schedule, budget and per-city totals
   tripState.ts   # persisted document + who-changed-what
   people.ts      # Conner / Anasophia

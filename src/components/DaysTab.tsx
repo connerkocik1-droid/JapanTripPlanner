@@ -1,34 +1,45 @@
 'use client';
 
-import { DayEntry } from '@/lib/derive';
-import { DayItem } from '@/lib/data';
+import { DayItem, LatLng, Place, TravelMode } from '@/lib/data';
+import { DayEntry, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtDow, fmtUsd } from '@/lib/format';
+import { HopResult } from '@/lib/useDayRoute';
+import { fmtDistance, fmtDuration } from '@/lib/routing';
 
 export interface DaysTabProps {
   schedule: DayEntry[];
   start: string;
   selected: number;
+  hops: HopResult[];
   onSelectDay: (n: number) => void;
   onAddItem: (key: string) => void;
   onSetItem: <K extends keyof DayItem>(key: string, id: string, field: K, val: DayItem[K]) => void;
   onToggleItem: (key: string, id: string) => void;
   onRemoveItem: (key: string, id: string) => void;
+  onMoveItem: (key: string, id: string, dir: number) => void;
+  onZoomDay: () => void;
+  onZoomStop: (ll: LatLng) => void;
 }
 
 export default function DaysTab({
-  schedule, start, selected, onSelectDay, onAddItem, onSetItem, onToggleItem, onRemoveItem,
+  schedule, start, selected, hops, onSelectDay, onAddItem, onSetItem,
+  onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop,
 }: DaysTabProps) {
   if (!schedule.length) {
-    return (
-      <div style={empty}>
-        Add a city on the Map tab and its nights show up here as days to fill in.
-      </div>
-    );
+    return <div style={empty}>Add a city on the Map tab and its nights show up here as days to plan.</div>;
   }
 
   const day = schedule[Math.min(Math.max(1, selected), schedule.length) - 1];
   const dt = dateOf(start, day.n - 1);
   const total = day.items.reduce((a, it) => a + (Number(it.cost) || 0), 0);
+  const places = day.city.places;
+  const hotel = selectedHotel(day.city);
+  const hopFor = (id: string) => hops.find((h) => h.toId === id);
+
+  const moving = hops.reduce((a, h) => {
+    const leg = h.options[h.to.mode] ?? h.options.walk;
+    return a + (leg?.seconds ?? 0);
+  }, 0);
 
   return (
     <div>
@@ -67,101 +78,82 @@ export default function DaysTab({
           {total ? fmtUsd(total) : ''}
         </div>
       </div>
-      <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)', margin: '3px 0 12px' }}>
-        Day {String(day.n).padStart(2, '0')} / {fmtDow(dt)} {fmtD(dt)} · night {day.nightIndex + 1} of{' '}
-        {day.city.nights}
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 8, margin: '3px 0 12px',
+        }}
+      >
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)' }}>
+          Day {String(day.n).padStart(2, '0')} / {fmtDow(dt)} {fmtD(dt)}
+          {moving ? ` · ${fmtDuration(moving)} moving` : ''}
+        </div>
+        <button
+          className="tap"
+          onClick={onZoomDay}
+          style={{
+            flex: 'none', minHeight: 32, padding: '0 10px', borderRadius: 9999,
+            border: '1px solid var(--color-neutral-800)', background: 'transparent',
+            color: 'var(--color-accent-200)', fontSize: 11, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}
+        >
+          <i className="ph ph-crosshair" style={{ fontSize: 12 }} />
+          Zoom to day
+        </button>
       </div>
 
-      {day.items.length === 0 ? (
-        <div style={empty}>Nothing planned for this day yet.</div>
-      ) : (
-        day.items.map((it, i) => (
-          <div
-            key={it.id}
-            style={{
-              display: 'grid', gridTemplateColumns: '58px 18px minmax(0,1fr) auto',
-              gap: '0 8px', alignItems: 'start', padding: '6px 0',
-              animation: 'riseIn .3s ease both', animationDelay: i * 45 + 'ms',
-            }}
+      {hotel?.ll ? (
+        <div style={{ ...anchorRow }}>
+          <i className="ph ph-bed" style={{ fontSize: 13, color: 'var(--color-accent-300)' }} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12 }}>
+            Starting from {hotel.name || 'your hotel'}
+          </span>
+          <button
+            className="tap"
+            onClick={() => hotel.ll && onZoomStop(hotel.ll)}
+            aria-label="Show hotel on the map"
+            style={iconBtn}
           >
-            <input
-              type="time"
-              value={it.time}
-              aria-label="Time"
-              onChange={(e) => onSetItem(day.key, it.id, 'time', e.target.value)}
-              className="mono num"
-              style={{
-                fontSize: 10, color: 'var(--color-neutral-400)', padding: '11px 0 0',
-                background: 'transparent', border: 'none', width: '100%',
-              }}
-            />
-            <button
-              className="tap"
-              onClick={() => onToggleItem(day.key, it.id)}
-              aria-label={it.done ? 'Mark not done' : 'Mark done'}
-              aria-pressed={it.done}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                paddingTop: 12, height: '100%',
-              }}
-            >
-              <span
-                style={{
-                  width: 9, height: 9, borderRadius: 9999,
-                  border: '1px solid ' + (it.done ? 'var(--color-accent-500)' : 'var(--color-neutral-600)'),
-                  background: it.done ? 'var(--color-accent-500)' : 'var(--color-bg)',
-                }}
-              />
-              <span style={{ flex: 1, width: 1, background: 'var(--color-neutral-800)', marginTop: 4 }} />
-            </button>
-            <div style={{ minWidth: 0, padding: '6px 0' }}>
-              <input
-                type="text"
-                value={it.title}
-                placeholder="What are you doing?"
-                onChange={(e) => onSetItem(day.key, it.id, 'title', e.target.value)}
-                style={{
-                  width: '100%', fontSize: 13.5, fontWeight: 500, height: 26,
-                  textDecoration: it.done ? 'line-through' : 'none',
-                  color: it.done ? 'var(--color-neutral-600)' : 'var(--color-text)',
-                }}
-              />
-              <input
-                type="text"
-                value={it.note}
-                placeholder="Note"
-                onChange={(e) => onSetItem(day.key, it.id, 'note', e.target.value)}
-                style={{ width: '100%', fontSize: 11, height: 22, color: 'var(--color-neutral-500)' }}
+            <i className="ph ph-map-pin" style={{ fontSize: 13 }} />
+          </button>
+        </div>
+      ) : null}
+
+      {day.items.length === 0 ? (
+        <div style={empty}>
+          Nothing planned for this day. Add a stop, then pick one of {day.city.name}&rsquo;s places
+          to get walking and metro times between them.
+        </div>
+      ) : (
+        day.items.map((it, i) => {
+          const place = places.find((p) => p.id === it.placeId) ?? null;
+          const hop = hopFor(it.id);
+          return (
+            <div key={it.id}>
+              {hop ? (
+                <HopStrip
+                  hop={hop}
+                  mode={it.mode}
+                  onMode={(m) => onSetItem(day.key, it.id, 'mode', m)}
+                />
+              ) : null}
+              <StopCard
+                index={i}
+                item={it}
+                place={place}
+                places={places}
+                first={i === 0}
+                last={i === day.items.length - 1}
+                onSet={(field, val) => onSetItem(day.key, it.id, field, val)}
+                onToggle={() => onToggleItem(day.key, it.id)}
+                onRemove={() => onRemoveItem(day.key, it.id)}
+                onMove={(dir) => onMoveItem(day.key, it.id, dir)}
+                onZoom={() => place?.ll && onZoomStop(place.ll)}
               />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingTop: 6 }}>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-600)' }}>$</span>
-              <input
-                type="number"
-                min={0}
-                inputMode="decimal"
-                value={it.cost || ''}
-                placeholder="0"
-                aria-label="Cost"
-                onChange={(e) => onSetItem(day.key, it.id, 'cost', Number(e.target.value) || 0)}
-                className="num"
-                style={{ width: 52, fontSize: 11.5, textAlign: 'right' }}
-              />
-              <button
-                className="tap"
-                onClick={() => onRemoveItem(day.key, it.id)}
-                aria-label="Remove item"
-                style={{
-                  width: 30, height: 30, border: 'none', background: 'transparent',
-                  color: 'var(--color-neutral-700)', cursor: 'pointer',
-                }}
-              >
-                <i className="ph ph-trash" style={{ fontSize: 12 }} />
-              </button>
-            </div>
-          </div>
-        ))
+          );
+        })
       )}
 
       <button
@@ -175,8 +167,228 @@ export default function DaysTab({
         }}
       >
         <i className="ph ph-plus" style={{ fontSize: 14 }} />
-        Add something to this day
+        Add a stop
       </button>
+    </div>
+  );
+}
+
+/** The travel strip between two stops: walk vs metro, with the better one marked. */
+function HopStrip({
+  hop, mode, onMode,
+}: {
+  hop: HopResult;
+  mode: TravelMode;
+  onMode: (m: TravelMode) => void;
+}) {
+  const { walk, transit } = hop.options;
+
+  if (hop.loading) {
+    return (
+      <div style={hopWrap}>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-600)' }}>
+          Routing…
+        </span>
+      </div>
+    );
+  }
+  if (!walk && !transit) {
+    return (
+      <div style={hopWrap}>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-700)' }}>
+          No route found
+        </span>
+      </div>
+    );
+  }
+
+  const opts: { id: TravelMode; icon: string; leg: typeof walk }[] = [
+    { id: 'walk', icon: 'ph-person-simple-walk', leg: walk },
+    { id: 'transit', icon: 'ph-train-simple', leg: transit },
+  ];
+
+  return (
+    <div style={hopWrap}>
+      <span style={{ width: 1, height: 14, background: 'var(--color-neutral-800)', marginLeft: 8 }} />
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', paddingLeft: 4 }}>
+        {opts.map(({ id, icon, leg }) => {
+          if (!leg) return null;
+          const on = mode === id;
+          const best = hop.suggested === id;
+          return (
+            <button
+              key={id}
+              className="tap"
+              onClick={() => onMode(id)}
+              aria-pressed={on}
+              title={leg.summary ?? (id === 'walk' ? 'Walking' : 'Transit')}
+              style={{
+                minHeight: 30, padding: '0 9px', borderRadius: 9999, cursor: 'pointer',
+                border: '1px solid ' + (on ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
+                background: on ? 'rgba(145,132,217,.12)' : 'transparent',
+                color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-400)',
+                display: 'flex', alignItems: 'center', gap: 5, fontSize: 11,
+              }}
+            >
+              <i className={'ph ' + icon} style={{ fontSize: 12 }} />
+              <span className="num">{fmtDuration(leg.seconds)}</span>
+              <span className="mono num" style={{ fontSize: 8.5, opacity: 0.75 }}>
+                {fmtDistance(leg.meters)}
+              </span>
+              {leg.estimated ? (
+                <span className="mono" style={{ fontSize: 7.5, opacity: 0.7 }} title="Estimated, not routed">
+                  EST
+                </span>
+              ) : null}
+              {best ? (
+                <i
+                  className="ph-fill ph-star"
+                  style={{ fontSize: 9, color: 'var(--color-accent-300)' }}
+                  title="Faster option"
+                />
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StopCard({
+  index, item, place, places, first, last, onSet, onToggle, onRemove, onMove, onZoom,
+}: {
+  index: number;
+  item: DayItem;
+  place: Place | null;
+  places: Place[];
+  first: boolean;
+  last: boolean;
+  onSet: <K extends keyof DayItem>(field: K, val: DayItem[K]) => void;
+  onToggle: () => void;
+  onRemove: () => void;
+  onMove: (dir: number) => void;
+  onZoom: () => void;
+}) {
+  return (
+    <div
+      style={{
+        borderRadius: 'var(--radius-md)', border: '1px solid var(--color-neutral-800)',
+        background: 'var(--color-surface)', padding: '8px 9px', marginTop: 6,
+        animation: 'riseIn .3s ease both', animationDelay: index * 40 + 'ms',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <button
+          className="tap"
+          onClick={onToggle}
+          aria-label={item.done ? 'Mark not done' : 'Mark done'}
+          aria-pressed={item.done}
+          style={{
+            flex: 'none', width: 22, height: 22, borderRadius: 9999, padding: 0, cursor: 'pointer',
+            border: '1px solid ' + (item.done ? 'var(--color-accent-500)' : 'var(--color-neutral-600)'),
+            background: item.done ? 'var(--color-accent-500)' : 'transparent',
+            color: 'var(--color-bg)', fontSize: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {item.done ? <i className="ph-fill ph-check" /> : <span className="num" style={{ color: 'var(--color-neutral-500)', fontSize: 10 }}>{index + 1}</span>}
+        </button>
+        <input
+          type="time"
+          value={item.time}
+          aria-label="Time"
+          onChange={(e) => onSet('time', e.target.value)}
+          className="mono num"
+          style={{
+            flex: 'none', width: 66, fontSize: 10, color: 'var(--color-neutral-400)',
+            background: 'transparent', border: 'none',
+          }}
+        />
+        <input
+          type="text"
+          value={item.title}
+          placeholder="What are you doing?"
+          onChange={(e) => onSet('title', e.target.value)}
+          style={{
+            flex: 1, minWidth: 0, height: 30, fontSize: 13.5, fontWeight: 500,
+            textDecoration: item.done ? 'line-through' : 'none',
+            color: item.done ? 'var(--color-neutral-600)' : 'var(--color-text)',
+          }}
+        />
+        <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-600)' }}>$</span>
+        <input
+          type="number"
+          min={0}
+          inputMode="decimal"
+          value={item.cost || ''}
+          placeholder="0"
+          aria-label="Cost"
+          onChange={(e) => onSet('cost', Number(e.target.value) || 0)}
+          className="num"
+          style={{ flex: 'none', width: 46, fontSize: 11.5, textAlign: 'right' }}
+        />
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+        <select
+          value={item.placeId ?? ''}
+          aria-label="Where this stop is"
+          onChange={(e) => onSet('placeId', e.target.value || null)}
+          style={{
+            flex: 1, minWidth: 0, minHeight: 34, fontSize: 11.5, padding: '0 8px',
+            borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-neutral-800)',
+            background: 'var(--color-bg)',
+            color: place ? 'var(--color-accent-200)' : 'var(--color-neutral-600)',
+          }}
+        >
+          <option value="">No location — not routed</option>
+          {places.map((p) => (
+            <option key={p.id} value={p.id} disabled={!p.ll}>
+              {p.name || 'Unnamed place'}
+              {p.ll ? '' : ' (no coordinates)'}
+            </option>
+          ))}
+        </select>
+        <button
+          className="tap"
+          onClick={onZoom}
+          disabled={!place?.ll}
+          aria-label="Show this stop on the map"
+          style={{ ...iconBtn, color: place?.ll ? 'var(--color-accent-300)' : 'var(--color-neutral-800)' }}
+        >
+          <i className="ph ph-map-pin" style={{ fontSize: 13 }} />
+        </button>
+        <button
+          className="tap"
+          onClick={() => onMove(-1)}
+          disabled={first}
+          aria-label="Move stop earlier"
+          style={{ ...iconBtn, opacity: first ? 0.3 : 1 }}
+        >
+          <i className="ph ph-arrow-up" style={{ fontSize: 12 }} />
+        </button>
+        <button
+          className="tap"
+          onClick={() => onMove(1)}
+          disabled={last}
+          aria-label="Move stop later"
+          style={{ ...iconBtn, opacity: last ? 0.3 : 1 }}
+        >
+          <i className="ph ph-arrow-down" style={{ fontSize: 12 }} />
+        </button>
+        <button className="tap" onClick={onRemove} aria-label="Remove stop" style={iconBtn}>
+          <i className="ph ph-trash" style={{ fontSize: 12 }} />
+        </button>
+      </div>
+
+      <input
+        type="text"
+        value={item.note}
+        placeholder="Note"
+        onChange={(e) => onSet('note', e.target.value)}
+        style={{ width: '100%', fontSize: 11, height: 24, color: 'var(--color-neutral-500)' }}
+      />
     </div>
   );
 }
@@ -188,4 +400,34 @@ const empty = {
   color: 'var(--color-neutral-600)',
   fontSize: 12.5,
   textAlign: 'center' as const,
+  lineHeight: 1.5,
+};
+
+const hopWrap = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '6px 0 2px',
+  minHeight: 34,
+};
+
+const iconBtn = {
+  flex: 'none' as const,
+  width: 34,
+  height: 34,
+  borderRadius: 'var(--radius-sm)',
+  border: 'none',
+  background: 'transparent',
+  color: 'var(--color-neutral-600)',
+  cursor: 'pointer',
+};
+
+const anchorRow = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '8px 9px',
+  borderRadius: 'var(--radius-md)',
+  border: '1px dashed var(--color-neutral-800)',
+  color: 'var(--color-neutral-400)',
 };

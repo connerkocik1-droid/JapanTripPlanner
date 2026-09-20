@@ -15,12 +15,26 @@ export interface Hotel {
   ll: LatLng | null;
 }
 
-/** Somewhere to eat, or anything else worth pinning near a city. */
+/** What a pinned place is, which decides its map marker. */
+export type PlaceKind = 'eat' | 'do' | 'stay' | 'other';
+
+export const PLACE_KINDS: { id: PlaceKind; label: string; icon: string }[] = [
+  { id: 'eat', label: 'Eat', icon: 'ph-fork-knife' },
+  { id: 'do', label: 'Do', icon: 'ph-camera' },
+  { id: 'stay', label: 'Stay', icon: 'ph-bed' },
+  { id: 'other', label: 'Other', icon: 'ph-map-pin' },
+];
+
+/**
+ * Somewhere pinned near a city — a restaurant, a sight, anything. Plotting one
+ * costs nothing; it is only routed once it goes into a day.
+ */
 export interface Place {
   id: string;
   name: string;
   addr: string;
   note: string;
+  kind: PlaceKind;
   /** Free text: "$", "$$", "reservation", whatever is useful. */
   band: string;
   ll: LatLng | null;
@@ -41,6 +55,9 @@ export interface City {
   places: Place[];
 }
 
+/** How you get to a stop from the one before it. */
+export type TravelMode = 'walk' | 'transit' | 'bike';
+
 export interface DayItem {
   id: string;
   time: string;
@@ -48,6 +65,10 @@ export interface DayItem {
   note: string;
   cost: number;
   done: boolean;
+  /** A pinned place this stop is at — what makes the day routable. */
+  placeId: string | null;
+  /** Chosen way of getting here from the previous stop. */
+  mode: TravelMode;
 }
 
 export interface CheckItem {

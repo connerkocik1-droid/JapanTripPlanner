@@ -16,6 +16,17 @@ export interface MapPin {
   ll: LatLng;
   selected: boolean;
   kind: 'city' | 'hotel' | 'place';
+  /** Position in the planned day, when this pin is a stop. */
+  stopNumber?: number;
+  /** Place category, for the marker glyph. */
+  icon?: string;
+}
+
+/** One routed hop of the planned day, drawn on the map. */
+export interface MapLeg {
+  id: string;
+  mode: 'walk' | 'transit' | 'bike';
+  geometry: [number, number][];
 }
 
 export interface MapFocus {
@@ -29,13 +40,17 @@ export interface TripMapProps {
   pins: MapPin[];
   /** City coordinates in trip order — the route is drawn through these. */
   route: LatLng[];
+  /** Routed legs of the day being planned; empty on the other tabs. */
+  legs: MapLeg[];
+  /** Fit the map to these points when the nonce changes. */
+  fit: { points: LatLng[]; nonce: number } | null;
   /** Pixels of map covered by the bottom sheet. */
   sheetPx: number;
   focus: MapFocus | null;
   onSelect: (id: string) => void;
 }
 
-export default function TripMap({ pins, route, sheetPx, focus, onSelect }: TripMapProps) {
+export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSelect }: TripMapProps) {
   const holder = useRef<HTMLDivElement | null>(null);
   const map = useRef<MlMap | null>(null);
   const markers = useRef<Record<string, Marker>>({});
@@ -44,8 +59,8 @@ export default function TripMap({ pins, route, sheetPx, focus, onSelect }: TripM
   const stepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const box = useRef({ w: 0, h: 0 });
 
-  const latest = useRef({ pins, route, sheetPx, onSelect });
-  latest.current = { pins, route, sheetPx, onSelect };
+  const latest = useRef({ pins, route, legs, sheetPx, onSelect });
+  latest.current = { pins, route, legs, sheetPx, onSelect };
 
   /** Frame the whole route, leaving the header and the sheet uncovered. */
   const frameTrip = (duration = 800) => {
@@ -113,6 +128,25 @@ export default function TripMap({ pins, route, sheetPx, focus, onSelect }: TripM
         });
       });
 
+      // Planned-day legs: walking dashed, transit solid, drawn above the route.
+      m.addSource('day-legs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      m.addLayer({
+        id: 'day-walk',
+        type: 'line',
+        source: 'day-legs',
+        filter: ['!=', ['get', 'mode'], 'transit'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#b5abfc', 'line-width': 3.2, 'line-dasharray': [1.6, 1.6] },
+      });
+      m.addLayer({
+        id: 'day-transit',
+        type: 'line',
+        source: 'day-legs',
+        filter: ['==', ['get', 'mode'], 'transit'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#58c8d8', 'line-width': 3.6 },
+      });
+
       // A light dash crawling the route.
       let phase = 0;
       const pulse = setInterval(() => {
@@ -147,6 +181,18 @@ export default function TripMap({ pins, route, sheetPx, focus, onSelect }: TripM
       src?.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line } });
     });
 
+    const legSrc = m.getSource('day-legs') as maplibregl.GeoJSONSource | undefined;
+    legSrc?.setData({
+      type: 'FeatureCollection',
+      features: latest.current.legs
+        .filter((l) => l.geometry.length > 1)
+        .map((l) => ({
+          type: 'Feature' as const,
+          properties: { mode: l.mode },
+          geometry: { type: 'LineString' as const, coordinates: l.geometry },
+        })),
+    });
+
     const seen = new Set(ps.map((p) => p.id));
     Object.keys(markers.current).forEach((id) => {
       if (!seen.has(id)) {
@@ -178,13 +224,19 @@ export default function TripMap({ pins, route, sheetPx, focus, onSelect }: TripM
       el.classList.toggle('is-sel', p.selected);
       el.classList.toggle('is-sub', p.kind !== 'city');
       el.style.zIndex = p.selected ? '500' : p.kind === 'city' ? '400' : '300';
+      el.classList.toggle('is-stop', p.stopNumber !== undefined);
+      const dot = p.stopNumber !== undefined
+        ? `<span class="tp-dot tp-num">${p.stopNumber}</span>`
+        : p.icon
+          ? `<span class="tp-dot tp-icon"><i class="ph ${p.icon}"></i></span>`
+          : '<span class="tp-dot"></span>';
       el.innerHTML =
-        '<span class="tp-ret"></span><span class="tp-dot"></span>' +
+        '<span class="tp-ret"></span>' + dot +
         '<span class="tp-label"><span class="tp-name"></span><span class="tp-sub"></span></span>';
       const name = el.querySelector('.tp-name');
       const sub = el.querySelector('.tp-sub');
       if (name) name.textContent = p.name;
-      if (sub) sub.textContent = p.selected ? p.sub : '';
+      if (sub) sub.textContent = p.selected || p.stopNumber !== undefined ? p.sub : '';
     });
 
     const coords = ps.map((p) => toLngLat(p.ll));
@@ -195,7 +247,29 @@ export default function TripMap({ pins, route, sheetPx, focus, onSelect }: TripM
     sync();
     if (!focus) frameTrip();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(pins), JSON.stringify(route)]);
+  }, [JSON.stringify(pins), JSON.stringify(route), JSON.stringify(legs.map((l) => l.id + l.mode + l.geometry.length))]);
+
+  /** Fit a specific set of points — "zoom to day". */
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready.current || !fit || fit.points.length === 0) return;
+    if (stepTimer.current) clearTimeout(stepTimer.current);
+    const coords = fit.points.map(toLngLat);
+    const H = holder.current?.clientHeight ?? 874;
+    const top = Math.min(150, Math.round(H * 0.16));
+    const bottom = Math.max(40, Math.min(latest.current.sheetPx + 24, H - top - 200));
+    m.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+    if (coords.length === 1) {
+      m.easeTo({ center: coords[0], zoom: 15, offset: [0, -Math.round(bottom / 2)], duration: 900 });
+      return;
+    }
+    m.fitBounds(boundsOf(coords) as LngLatBoundsLike, {
+      padding: { top, bottom, left: 48, right: 48 },
+      duration: 900,
+      maxZoom: 16,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fit?.nonce]);
 
   useEffect(() => {
     const m = map.current;

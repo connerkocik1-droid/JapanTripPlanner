@@ -208,3 +208,28 @@ input::placeholder { color: var(--color-neutral-600); }
   }
   #trip-print .pc { break-inside: avoid; page-break-inside: avoid; }
 }
+
+/* stop and place markers */
+.trip-pin .tp-dot.tp-num,
+.trip-pin .tp-dot.tp-icon {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #161826;
+  background: var(--color-accent-400);
+  border: 1.5px solid #161826;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.trip-pin .tp-dot.tp-icon {
+  background: var(--color-surface);
+  color: var(--color-accent-300);
+  border-color: var(--color-accent-700);
+  font-size: 11px;
+}
+.trip-pin.is-stop .tp-name { color: #e9e9ed; }
+.trip-pin.is-sub .tp-name { font-size: 10px; }
