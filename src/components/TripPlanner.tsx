@@ -2,20 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { ADDABLE, LatLng, PARTY, PLACE } from '@/lib/data';
-import { derive, dayView } from '@/lib/derive';
+import { City, LatLng } from '@/lib/data';
+import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import { geocode, hitToLatLng } from '@/lib/geocode';
-import { useTripStore } from '@/lib/tripState';
-import type { MapFocus } from './TripMap';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
+import { useTripStore } from '@/lib/tripState';
+import type { MapFocus, MapPin } from './TripMap';
 import CityPanel from './CityPanel';
-import Login from './Login';
-import NotesTab from './NotesTab';
-import TouchMark, { touchStyle } from './TouchMark';
 import DaysTab from './DaysTab';
 import ChecklistTab from './ChecklistTab';
+import Login from './Login';
+import NotesTab from './NotesTab';
 import PrintSheet from './PrintSheet';
+import TouchMark, { touchStyle } from './TouchMark';
+import TripSettings from './TripSettings';
 
 // MapLibre touches window on import — keep it off the server render.
 const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
@@ -30,10 +31,10 @@ const SEG_FILL: Record<string, string> = {
 
 export default function TripPlanner() {
   const store = useTripStore();
-  const { doc, order } = store;
+  const { doc } = store;
 
   const [tab, setTab] = useState<Tab>('map');
-  const [city, setCity] = useState(order[0] ?? 'Seoul');
+  const [cityId, setCityId] = useState<string | null>(null);
   const [day, setDay] = useState(1);
   const [expanded, setExpanded] = useState(false);
   const [snap, setSnap] = useState(0);
@@ -42,34 +43,25 @@ export default function TripPlanner() {
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [adding, setAdding] = useState(false);
   const [newCity, setNewCity] = useState('');
-  const [tick, setTick] = useState(0);
+  const [locating, setLocating] = useState(false);
+  const [settings, setSettings] = useState(false);
   const shell = useRef<HTMLDivElement | null>(null);
   const dragMoved = useRef(false);
   const focusNonce = useRef(0);
 
-  const d = useMemo(() => derive(doc, order), [doc, order]);
-  const places = useMemo<Record<string, LatLng>>(() => ({ ...PLACE, ...doc.coords }), [doc.coords]);
+  const d = useMemo(() => derive(doc), [doc]);
 
-  // Keep the selection valid when cities are removed or reordered.
   useEffect(() => {
-    if (order.length && !order.includes(city)) setCity(order[0]);
-  }, [order, city]);
+    if (cityId && !doc.cities.some((c) => c.id === cityId)) setCityId(null);
+  }, [doc.cities, cityId]);
   useEffect(() => {
     if (day > d.schedule.length) setDay(Math.max(1, d.schedule.length));
   }, [d.schedule.length, day]);
 
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 4000);
-    return () => clearInterval(t);
+  const snapPx = useCallback((i: number) => {
+    const h = shell.current?.clientHeight ?? 874;
+    return [238, Math.round(h * 0.56), Math.round(h * 0.88)][i];
   }, []);
-
-  const snapPx = useCallback(
-    (i: number) => {
-      const h = shell.current?.clientHeight ?? 874;
-      return [238, Math.round(h * 0.56), Math.round(h * 0.88)][i];
-    },
-    [],
-  );
 
   const sheetH = dragH ?? (tab === 'map' ? snapPx(expanded ? snap : 0) : snapPx(2));
 
@@ -79,16 +71,49 @@ export default function TripPlanner() {
   }, []);
 
   const selectCity = useCallback(
-    (c: string) => {
-      const same = c === city && expanded;
-      setCity(c);
+    (id: string) => {
+      const same = id === cityId && expanded;
+      setCityId(id);
       setExpanded(!same);
       if (snap === 0) setSnap(1);
-      const ll = places[c];
-      if (!same && ll) zoomTo(ll, 13.2);
+      const city = doc.cities.find((c) => c.id === id);
+      if (!same && city?.ll) zoomTo(city.ll, 11.5);
       if (same) setFocus(null);
     },
-    [city, expanded, snap, places, zoomTo],
+    [cityId, expanded, snap, doc.cities, zoomTo],
+  );
+
+  /** Map pins: every city, plus the selected city's hotel and places. */
+  const pins = useMemo<MapPin[]>(() => {
+    const out: MapPin[] = [];
+    doc.cities.forEach((c) => {
+      if (c.ll) {
+        out.push({
+          id: c.id,
+          name: c.name,
+          sub: `${c.nights} ${c.nights === 1 ? 'night' : 'nights'}`,
+          ll: c.ll,
+          selected: c.id === cityId,
+          kind: 'city',
+        });
+      }
+      if (c.id !== cityId) return;
+      const hotel = selectedHotel(c);
+      if (hotel?.ll && hotel.name) {
+        out.push({ id: hotel.id, name: hotel.name, sub: 'stay', ll: hotel.ll, selected: false, kind: 'hotel' });
+      }
+      c.places.forEach((p) => {
+        if (p.ll && p.name) {
+          out.push({ id: p.id, name: p.name, sub: p.band, ll: p.ll, selected: false, kind: 'place' });
+        }
+      });
+    });
+    return out;
+  }, [doc.cities, cityId]);
+
+  const route = useMemo(
+    () => doc.cities.map((c) => c.ll).filter((ll): ll is LatLng => !!ll),
+    [doc.cities],
   );
 
   const onDragStart = (e: React.PointerEvent) => {
@@ -130,55 +155,32 @@ export default function TripPlanner() {
       return;
     }
     setSnap((s) => (s === 0 ? 1 : 0));
-    setExpanded((x) => (snap === 0 ? true : x && false));
+    setExpanded(snap === 0);
   };
 
-  const addCity = async (name: string) => {
-    const c = name.trim();
-    if (!c || order.includes(c)) return;
-    store.setOrder([...order, c]);
-    setCity(c);
-    setExpanded(true);
-    setAdding(false);
+  const submitCity = async () => {
+    const name = newCity.trim();
+    if (!name) return;
+    setLocating(true);
+    // Geocode first so the pin and the route are right the moment it appears.
+    const hit = await geocode(name);
+    const id = store.addCity(name, hit ? hitToLatLng(hit) : null);
+    setLocating(false);
     setNewCity('');
-    if (!places[c]) {
-      // A typed city only earns a pin once it has real coordinates.
-      const hit = await geocode(c);
-      if (hit) store.setCoords(c, hitToLatLng(hit));
-    }
+    setAdding(false);
+    setCityId(id);
+    setExpanded(true);
+    if (snap === 0) setSnap(1);
+    if (hit) zoomTo(hitToLatLng(hit), 11.5);
   };
 
-  const moveCity = (c: string, dir: number) => {
-    const o = order.slice();
-    const i = o.indexOf(c);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= o.length) return;
-    o.splice(j, 0, o.splice(i, 1)[0]);
-    store.setOrder(o);
-  };
-
-  const removeCity = (c: string) => {
-    const o = order.filter((x) => x !== c);
-    if (!o.length) return;
-    store.setOrder(o);
-  };
-
-  const subs = useMemo(() => {
-    const out: Record<string, string> = {};
-    order.forEach((c) => {
-      const n = d.meta[c].count;
-      out[c] = n + (n === 1 ? ' night' : ' nights');
+  const cityNotes = useMemo(() => {
+    const out: Record<string, number> = {};
+    doc.comments.forEach((c) => {
+      if (c.city && !c.resolved) out[c.city] = (out[c.city] ?? 0) + 1;
     });
     return out;
-  }, [order, d.meta]);
-
-  const tickers = [
-    `${order.length} legs · ${d.schedule.length} days · ${PARTY} pax`,
-    d.segments.map((s) => `${s.label} ${s.amount}`).join(' · '),
-    '₩1,360 / $1 · ¥152 / $1',
-    'Bloom window: Mar 28 – Apr 5',
-    `Checklist ${d.checkedCount}/${d.checkTotal} done`,
-  ];
+  }, [doc.comments]);
 
   /** The most recent edit anyone made inside a city, for its row outline. */
   const cityTouch = useMemo(() => {
@@ -190,39 +192,21 @@ export default function TripPlanner() {
     return out;
   }, [doc.touches]);
 
-  const openNotes = doc.comments.filter((c) => !c.resolved).length;
-  const cityNotes = useMemo(() => {
-    const out: Record<string, number> = {};
-    doc.comments.forEach((c) => {
-      if (c.city && !c.resolved) out[c.city] = (out[c.city] ?? 0) + 1;
-    });
-    return out;
-  }, [doc.comments]);
-
-  const view = dayView(d, doc, Math.min(Math.max(1, day), Math.max(1, d.schedule.length)) - 1);
-  const dayChips = d.schedule.map((_, i) => ({ n: i + 1, dow: dayView(d, doc, i).dow }));
-
-  // Storage hasn't been read yet — render the shell empty so the server and
-  // client markup agree, then the login screen decides.
   if (!store.ready) return <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg)' }} />;
   if (!store.user) return <Login onPick={store.signIn} />;
 
   const me = PEOPLE[store.user];
+  const open = doc.cities.find((c) => c.id === cityId && expanded) ?? null;
+  const totalWithItems = d.totals.grand + d.totals.activities;
+  const planned = doc.trip.planned;
+  const segments = (['Lodging', 'Transit', 'Food'] as const).map((k) => {
+    const v = k === 'Lodging' ? d.totals.lodging : k === 'Transit' ? d.totals.transit : d.totals.food;
+    return { label: k, amount: fmtUsd(v), pct: Math.round((v / (d.totals.grand || 1)) * 100) + '%' };
+  });
 
   return (
-    <div
-      ref={shell}
-      style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: 'var(--color-bg)' }}
-    >
-      <TripMap
-        order={order}
-        places={places}
-        selected={city}
-        subs={subs}
-        sheetPx={sheetH}
-        focus={focus}
-        onSelect={selectCity}
-      />
+    <div ref={shell} style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: 'var(--color-bg)' }}>
+      <TripMap pins={pins} route={route} sheetPx={sheetH} focus={focus} onSelect={selectCity} />
 
       {/* Header */}
       <div
@@ -243,15 +227,36 @@ export default function TripPlanner() {
               background: 'var(--color-accent-400)', animation: 'blip 2.2s ease-in-out infinite',
             }}
           />
-          Itinerary live · {PARTY} travelers
+          {doc.trip.travelers} {doc.trip.travelers === 1 ? 'traveler' : 'travelers'}
+          {d.schedule.length ? ` · ${d.schedule.length} days` : ' · nothing planned yet'}
         </div>
+
         <div
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             gap: 10, marginTop: 4, pointerEvents: 'auto',
           }}
         >
-          <div style={{ fontSize: 20, fontWeight: 500, lineHeight: 1.15 }}>Korea + Japan</div>
+          <button
+            className="tap"
+            onClick={() => setSettings((v) => !v)}
+            style={{
+              flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none',
+              padding: 0, color: 'inherit', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 7,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 20, fontWeight: 500, lineHeight: 1.15,
+                color: doc.trip.name ? 'var(--color-text)' : 'var(--color-neutral-600)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >
+              {doc.trip.name || 'Name this trip'}
+            </span>
+            <i className="ph ph-caret-down" style={{ fontSize: 12, color: 'var(--color-neutral-600)' }} />
+          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {PERSON_LIST.map((p) => {
               const on = p.id === me.id;
@@ -277,12 +282,15 @@ export default function TripPlanner() {
             })}
           </div>
         </div>
-        <div
-          className="mono"
-          style={{ fontSize: 9.5, color: 'var(--color-neutral-400)', marginTop: 5, whiteSpace: 'nowrap' }}
-        >
-          {d.tripRange} / {d.tripLength} / T−{d.countdown}d
-        </div>
+
+        {d.schedule.length ? (
+          <div
+            className="mono"
+            style={{ fontSize: 9.5, color: 'var(--color-neutral-400)', marginTop: 5, whiteSpace: 'nowrap' }}
+          >
+            {fmtD(dateOf(doc.trip.start, 0))} – {fmtD(dateOf(doc.trip.start, d.schedule.length - 1))}
+          </div>
+        ) : null}
 
         {/* Total budget */}
         <div
@@ -294,28 +302,37 @@ export default function TripPlanner() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)' }}>Total budget</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>{d.vsPlanned}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
+              {planned
+                ? totalWithItems > planned
+                  ? fmtUsd(totalWithItems - planned) + ' over plan'
+                  : fmtUsd(planned - totalWithItems) + ' left of ' + fmtUsd(planned)
+                : 'no budget set'}
+            </div>
           </div>
           <div
-            key={d.grand}
+            key={d.totals.grand}
             className="num"
             style={{ fontSize: 25, fontWeight: 600, animation: 'countUp .28s ease both' }}
           >
-            {fmtUsd(d.grand)}
+            {fmtUsd(d.totals.grand)}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{d.totalNote}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>
+            {fmtUsd(d.totals.grand / Math.max(1, doc.trip.travelers))} each
+            {d.totals.activities ? ` · plus ${fmtUsd(d.totals.activities)} of planned items` : ''}
+          </div>
           <div
             style={{
               display: 'flex', height: 5, borderRadius: 9999, overflow: 'hidden',
               background: 'var(--color-neutral-900)', margin: '9px 0 7px',
             }}
           >
-            {d.segments.map((s) => (
+            {segments.map((s) => (
               <div key={s.label} style={{ width: s.pct, background: SEG_FILL[s.label] }} />
             ))}
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
-            {d.segments.map((s) => (
+            {segments.map((s) => (
               <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 7, height: 7, borderRadius: 2, background: SEG_FILL[s.label] }} />
                 <span className="mono" style={{ fontSize: 10, color: 'var(--color-neutral-500)' }}>
@@ -362,94 +379,78 @@ export default function TripPlanner() {
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
               {tab === 'map'
-                ? 'Tap a city to plan it'
+                ? d.cities.length
+                  ? `${d.cities.length} ${d.cities.length === 1 ? 'city' : 'cities'}`
+                  : 'add your first city'
                 : tab === 'days'
-                  ? `Day ${view.nn} of ${d.schedule.length}`
+                  ? d.schedule.length
+                    ? `Day ${day} of ${d.schedule.length}`
+                    : 'no days yet'
                   : tab === 'list'
-                    ? `${d.checkedCount}/${d.checkTotal}`
-                    : `${openNotes} open`}
+                    ? `${d.checkedCount}/${doc.checklist.length}`
+                    : `${d.openNotes} open`}
             </div>
-          </div>
-          <div
-            key={tick}
-            className="mono"
-            style={{ fontSize: 9, color: 'var(--color-accent-300)', marginTop: 6, animation: 'ticker 4s ease both' }}
-          >
-            {tickers[tick % tickers.length]}
           </div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 11px 96px' }}>
           {tab === 'map' ? (
             <>
-              {order.map((c, i) => {
-                const open = city === c && expanded;
-                const m = d.meta[c];
-                return (
-                  <div key={c} style={{ marginBottom: 7 }}>
-                    <button
-                      className="tap"
-                      onClick={() => selectCity(c)}
-                      style={{
-                        width: '100%', minHeight: 56, padding: 14, textAlign: 'left',
-                        borderRadius: 'var(--radius-md)',
-                        border: '1px solid ' + (open ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
-                        background: open ? 'rgba(145,132,217,.10)' : 'var(--color-surface)',
-                        ...(touchStyle(cityTouch[c]) ?? {}),
-                        color: 'inherit', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        animation: 'riseIn .34s ease both', animationDelay: i * 60 + 'ms',
-                      }}
-                    >
-                      <span style={{ flex: 1, fontSize: 16, fontWeight: 500 }}>{c}</span>
-                      <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
-                        {fmtD(dateOf(m.start))} – {fmtD(dateOf(m.start + m.count - 1))}
-                      </span>
-                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                        <span className="num" style={{ fontSize: 12 }}>{fmtUsd(d.picked[c].total)}</span>
-                        <TouchMark touch={cityTouch[c]} align="right" />
-                      </span>
-                      {cityNotes[c] ? (
-                        <span
-                          className="mono"
-                          style={{
-                            fontSize: 8.5, color: 'var(--color-accent-300)',
-                            border: '1px solid var(--color-accent-700)', borderRadius: 9999,
-                            padding: '2px 6px', flex: 'none',
-                          }}
-                        >
-                          {cityNotes[c]} note{cityNotes[c] > 1 ? 's' : ''}
-                        </span>
-                      ) : null}
-                      <i
-                        className={open ? 'ph ph-caret-up' : 'ph ph-caret-down'}
-                        style={{ fontSize: 13, color: 'var(--color-neutral-600)' }}
-                      />
-                    </button>
+              {settings ? (
+                <TripSettings
+                  trip={doc.trip}
+                  spent={totalWithItems}
+                  onChange={store.setTrip}
+                  touch={store.touch}
+                  onClose={() => setSettings(false)}
+                />
+              ) : null}
 
-                    {open ? (
-                      <>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
-                          <IconBtn icon="ph-arrow-up" label={`Move ${c} earlier`} onClick={() => moveCity(c, -1)} />
-                          <IconBtn icon="ph-arrow-down" label={`Move ${c} later`} onClick={() => moveCity(c, 1)} />
-                          <IconBtn icon="ph-trash" label={`Remove ${c}`} onClick={() => removeCity(c)} />
-                        </div>
-                        <CityPanel
-                          city={c}
-                          cfg={m.cfg}
-                          subtotal={d.picked[c].total}
-                          onNights={(n) => store.setCfg(c, 'nights', n)}
-                          onHotelSel={(idx) => store.setCfg(c, 'hotelSel', idx)}
-                          onHotelField={(idx, key, val) => store.setHotel(c, idx, key, val)}
-                          onCfgField={(key, val) => store.setCfg(c, key, val as never)}
-                          onZoom={zoomTo}
-                          touch={(suffix) => store.touch(`${c}/${suffix}`)}
-                        />
-                      </>
-                    ) : null}
+              {d.cities.length === 0 && !adding ? (
+                <div
+                  style={{
+                    padding: '22px 16px', borderRadius: 'var(--radius-md)',
+                    border: '1px dashed var(--color-neutral-800)', textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>Nothing planned yet</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', margin: '6px 0 2px', lineHeight: 1.5 }}>
+                    Add a city and it gets pinned on the map. Then fill in hotels,
+                    how you&rsquo;re getting there, food and what you&rsquo;ll do each day.
                   </div>
-                );
-              })}
+                </div>
+              ) : null}
+
+              {doc.cities.map((c, i) => (
+                <CityRow
+                  key={c.id}
+                  city={c}
+                  index={i}
+                  open={open?.id === c.id}
+                  start={doc.trip.start}
+                  startDay={d.span[c.id].start}
+                  total={d.spend[c.id].total}
+                  notes={cityNotes[c.id] ?? 0}
+                  touch={cityTouch[c.id]}
+                  onSelect={() => selectCity(c.id)}
+                  onMove={(dir) => store.moveCity(c.id, dir)}
+                  onRemove={() => store.removeCity(c.id)}
+                >
+                  <CityPanel
+                    city={c}
+                    spend={d.spend[c.id]}
+                    travelers={doc.trip.travelers}
+                    onCity={(key, val) => store.setCity(c.id, key, val)}
+                    onHotel={(hid, key, val) => store.setHotel(c.id, hid, key, val)}
+                    onAddHotel={() => store.addHotelSlot(c.id)}
+                    onAddPlace={() => store.addPlace(c.id)}
+                    onPlace={(pid, key, val) => store.setPlace(c.id, pid, key, val)}
+                    onRemovePlace={(pid) => store.removePlace(c.id, pid)}
+                    onZoom={zoomTo}
+                    touch={(suffix) => store.touch(`${c.id}/${suffix}`)}
+                  />
+                </CityRow>
+              ))}
 
               {adding ? (
                 <div
@@ -463,10 +464,10 @@ export default function TripPlanner() {
                       type="text"
                       autoFocus
                       value={newCity}
-                      placeholder="City name"
+                      placeholder="City or town"
                       onChange={(e) => setNewCity(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') void addCity(newCity);
+                        if (e.key === 'Enter') void submitCity();
                       }}
                       style={{
                         flex: 1, minWidth: 0, minHeight: 44, fontSize: 13,
@@ -475,37 +476,19 @@ export default function TripPlanner() {
                     />
                     <button
                       className="tap"
-                      onClick={() => void addCity(newCity)}
+                      onClick={() => void submitCity()}
+                      disabled={locating}
                       style={{
                         flex: 'none', minHeight: 44, padding: '0 15px', borderRadius: 'var(--radius-sm)',
                         border: '1px solid var(--color-accent-500)', background: 'transparent',
                         color: 'var(--color-accent-200)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
                       }}
                     >
-                      Add
+                      {locating ? 'Locating…' : 'Add'}
                     </button>
                   </div>
-                  <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-600)', margin: '10px 0 7px' }}>
-                    Suggested stops
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {Object.keys(ADDABLE)
-                      .filter((k) => !order.includes(k))
-                      .slice(0, 8)
-                      .map((k) => (
-                        <button
-                          key={k}
-                          className="tap"
-                          onClick={() => void addCity(k)}
-                          style={{
-                            minHeight: 36, padding: '0 12px', borderRadius: 9999,
-                            border: '1px solid var(--color-neutral-700)', background: 'transparent',
-                            color: 'var(--color-neutral-300)', fontSize: 11.5, cursor: 'pointer',
-                          }}
-                        >
-                          {k}
-                        </button>
-                      ))}
+                  <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-600)', marginTop: 8 }}>
+                    Looked up on OpenStreetMap so it lands in the right place
                   </div>
                   <button
                     className="tap"
@@ -527,11 +510,10 @@ export default function TripPlanner() {
                   className="tap"
                   onClick={() => setAdding(true)}
                   style={{
-                    width: '100%', minHeight: 48, borderRadius: 'var(--radius-md)',
+                    width: '100%', minHeight: 48, marginTop: 8, borderRadius: 'var(--radius-md)',
                     border: '1px dashed var(--color-neutral-700)', background: 'transparent',
                     color: 'var(--color-accent-200)', fontSize: 12.5, fontWeight: 500,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer',
                   }}
                 >
                   <i className="ph ph-plus" style={{ fontSize: 14 }} />
@@ -543,36 +525,40 @@ export default function TripPlanner() {
 
           {tab === 'days' ? (
             <DaysTab
-              days={dayChips}
-              selected={view.n}
-              view={view}
+              schedule={d.schedule}
+              start={doc.trip.start}
+              selected={day}
               onSelectDay={(n) => {
                 setDay(n);
                 const c = d.schedule[n - 1]?.city;
-                if (c) setCity(c);
+                if (c) setCityId(c.id);
               }}
-              onToggleItem={store.toggleDone}
+              onAddItem={store.addDayItem}
+              onSetItem={store.setDayItem}
+              onToggleItem={store.toggleDayItem}
+              onRemoveItem={store.removeDayItem}
+            />
+          ) : null}
+
+          {tab === 'list' ? (
+            <ChecklistTab
+              items={doc.checklist}
+              onAdd={store.addCheck}
+              onSet={store.setCheck}
+              onToggle={store.toggleCheck}
+              onRemove={store.removeCheck}
+              onPrint={() => window.print()}
             />
           ) : null}
 
           {tab === 'notes' ? (
             <NotesTab
               comments={doc.comments}
-              cities={order}
-              current={city}
+              cities={doc.cities.map((c) => ({ id: c.id, name: c.name }))}
+              current={cityId}
               onAdd={store.addComment}
               onToggle={store.toggleComment}
               onRemove={store.removeComment}
-            />
-          ) : null}
-
-          {tab === 'list' ? (
-            <ChecklistTab
-              checked={doc.checked}
-              count={d.checkedCount}
-              total={d.checkTotal}
-              onToggle={store.toggleChecked}
-              onPrint={() => window.print()}
             />
           ) : null}
         </div>
@@ -592,7 +578,7 @@ export default function TripPlanner() {
           ['days', 'Days', 'ph-calendar-blank'],
           ['list', 'Checklist', 'ph-check-square'],
           ['notes', 'Notes', 'ph-chat-teardrop-text'],
-        ] as [Tab, string, string][]).map(([id, label, icon]) => {
+        ] as [Tab, string, string][]).map(([id, labelText, icon]) => {
           const on = tab === id;
           return (
             <button
@@ -611,13 +597,90 @@ export default function TripPlanner() {
               }}
             >
               <i className={'ph ' + icon} style={{ fontSize: 14 }} />
-              {label}
+              {labelText}
             </button>
           );
         })}
       </div>
 
       <PrintSheet d={d} doc={doc} />
+    </div>
+  );
+}
+
+function CityRow({
+  city, index, open, start, startDay, total, notes, touch, onSelect, onMove, onRemove, children,
+}: {
+  city: City;
+  index: number;
+  open: boolean;
+  start: string;
+  startDay: number;
+  total: number;
+  notes: number;
+  touch?: { by: 'conner' | 'anasophia'; at: number };
+  onSelect: () => void;
+  onMove: (dir: number) => void;
+  onRemove: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ marginBottom: 7 }}>
+      <button
+        className="tap"
+        onClick={onSelect}
+        style={{
+          width: '100%', minHeight: 56, padding: 14, textAlign: 'left',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid ' + (open ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
+          background: open ? 'rgba(145,132,217,.10)' : 'var(--color-surface)',
+          color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+          animation: 'riseIn .34s ease both', animationDelay: index * 60 + 'ms',
+          ...(touchStyle(touch) ?? {}),
+        }}
+      >
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 16, fontWeight: 500 }}>{city.name}</span>
+          {!city.ll ? (
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>
+              no coordinates — not on the map
+            </span>
+          ) : null}
+        </span>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)', flex: 'none' }}>
+          {fmtD(dateOf(start, startDay - 1))} – {fmtD(dateOf(start, startDay + city.nights - 2))}
+        </span>
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flex: 'none' }}>
+          <span className="num" style={{ fontSize: 12 }}>{total ? fmtUsd(total) : '—'}</span>
+          <TouchMark touch={touch} align="right" />
+        </span>
+        {notes ? (
+          <span
+            className="mono"
+            style={{
+              fontSize: 8.5, color: 'var(--color-accent-300)', flex: 'none',
+              border: '1px solid var(--color-accent-700)', borderRadius: 9999, padding: '2px 6px',
+            }}
+          >
+            {notes}
+          </span>
+        ) : null}
+        <i
+          className={open ? 'ph ph-caret-up' : 'ph ph-caret-down'}
+          style={{ fontSize: 13, color: 'var(--color-neutral-600)', flex: 'none' }}
+        />
+      </button>
+
+      {open ? (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
+            <IconBtn icon="ph-arrow-up" label={`Move ${city.name} earlier`} onClick={() => onMove(-1)} />
+            <IconBtn icon="ph-arrow-down" label={`Move ${city.name} later`} onClick={() => onMove(1)} />
+            <IconBtn icon="ph-trash" label={`Remove ${city.name}`} onClick={onRemove} />
+          </div>
+          {children}
+        </>
+      ) : null}
     </div>
   );
 }

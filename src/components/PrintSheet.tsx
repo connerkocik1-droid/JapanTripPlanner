@@ -1,82 +1,90 @@
 'use client';
 
-import { PARTY } from '@/lib/data';
-import { Derived, dayView, transitLabel } from '@/lib/derive';
-import { dateOf, fmtD, fmtUsd } from '@/lib/format';
+import { Derived, selectedHotel } from '@/lib/derive';
+import { dateOf, fmtD, fmtDow, fmtUsd } from '@/lib/format';
 import { TripDoc } from '@/lib/tripState';
 
 /** Hidden in the app, printed on paper. */
 export default function PrintSheet({ d, doc }: { d: Derived; doc: TripDoc }) {
+  const { trip } = doc;
+  const last = Math.max(0, d.schedule.length - 1);
   return (
     <div id="trip-print">
       <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: '18pt', fontWeight: 600 }}>Korea + Japan</div>
+        <div style={{ fontSize: '18pt', fontWeight: 600 }}>{trip.name || 'Trip'}</div>
         <div style={{ fontSize: '10pt', color: '#4a4d5c' }}>
-          {d.tripRange} · {d.tripLength} · {PARTY} travelers
+          {d.schedule.length
+            ? `${fmtD(dateOf(trip.start, 0))} – ${fmtD(dateOf(trip.start, last))} · ${d.schedule.length} days`
+            : 'No days planned'}{' '}
+          · {trip.travelers} {trip.travelers === 1 ? 'traveler' : 'travelers'}
         </div>
         <div style={{ fontSize: '10pt', marginTop: 4 }}>
-          Selections {fmtUsd(d.grand)} · Activities {fmtUsd(d.ground)} · Total{' '}
-          {fmtUsd(d.grand + d.ground)}
+          Selections {fmtUsd(d.totals.grand)} · Planned items {fmtUsd(d.totals.activities)} · Total{' '}
+          {fmtUsd(d.totals.grand + d.totals.activities)}
+          {trip.planned ? ` · Budget ${fmtUsd(trip.planned)}` : ''}
         </div>
       </div>
 
-      {d.order.map((c) => {
-        const m = d.meta[c];
-        const cfg = m.cfg;
-        const hotel = cfg.hotels[cfg.hotelSel];
+      {d.cities.map((c) => {
+        const span = d.span[c.id];
+        const hotel = selectedHotel(c);
+        const days = d.schedule.filter((s) => s.city.id === c.id);
         return (
-          <div key={c} className="pc" style={{ marginBottom: 20 }}>
+          <div key={c.id} className="pc" style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <div style={{ fontSize: '13pt', fontWeight: 600 }}>{c}</div>
+              <div style={{ fontSize: '13pt', fontWeight: 600 }}>{c.name}</div>
               <div style={{ fontSize: '10pt' }}>
-                {fmtD(dateOf(m.start))} – {fmtD(dateOf(m.start + m.count - 1))} ·{' '}
-                {m.count} {m.count === 1 ? 'night' : 'nights'} · {fmtUsd(d.picked[c].total)}
+                {fmtD(dateOf(trip.start, span.start - 1))} –{' '}
+                {fmtD(dateOf(trip.start, span.start + span.nights - 2))} · {span.nights}{' '}
+                {span.nights === 1 ? 'night' : 'nights'} · {fmtUsd(d.spend[c.id].total)}
               </div>
             </div>
             <div style={{ fontSize: '10pt', color: '#4a4d5c', margin: '4px 0 8px' }}>
               {hotel?.name ? (
                 <div>
-                  Hotel: {hotel.name} · {fmtUsd(Number(hotel.cost) || 0)}/night
-                  {hotel.addr ? ' · ' + hotel.addr : ''}
+                  Hotel: {hotel.name}
+                  {hotel.cost ? ` · ${fmtUsd(hotel.cost)}/night` : ''}
+                  {hotel.addr ? ` · ${hotel.addr}` : ''}
                 </div>
               ) : null}
-              <div>
-                {transitLabel(c)}: {cfg.trainName || '—'} ·{' '}
-                {fmtUsd((Number(cfg.trainCost) || 0) * PARTY)}
-              </div>
-              <div>Food: {fmtUsd(cfg.foodPer)}/day</div>
+              {c.transitName ? (
+                <div>
+                  Getting there: {c.transitName}
+                  {c.transitCost ? ` · ${fmtUsd(c.transitCost * trip.travelers)}` : ''}
+                </div>
+              ) : null}
+              {c.foodPer ? <div>Food: {fmtUsd(c.foodPer)}/day</div> : null}
+              {c.places.length ? (
+                <div>Places: {c.places.map((p) => p.name).filter(Boolean).join(' · ')}</div>
+              ) : null}
             </div>
 
-            {Array.from({ length: m.count }, (_, j) => {
-              const day = dayView(d, doc, m.start + j);
+            {days.map((day) => {
+              const dt = dateOf(trip.start, day.n - 1);
               return (
-                <div key={j} style={{ marginBottom: 8 }}>
+                <div key={day.key} style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: '10pt', fontWeight: 600 }}>
-                    Day {day.nn} · {day.date} · {day.total}
+                    Day {String(day.n).padStart(2, '0')} · {fmtDow(dt)} {fmtD(dt)}
                   </div>
                   {day.items.length ? (
                     day.items.map((it) => (
                       <div
-                        key={it.key}
+                        key={it.id}
                         style={{
-                          display: 'grid',
-                          gridTemplateColumns: '44pt 1fr auto',
-                          gap: '0 10pt',
-                          fontSize: '10pt',
-                          padding: '3px 0',
-                          borderBottom: '1px dotted #d9dbe4',
+                          display: 'grid', gridTemplateColumns: '44pt 1fr auto', gap: '0 10pt',
+                          fontSize: '10pt', padding: '3px 0', borderBottom: '1px dotted #d9dbe4',
                         }}
                       >
-                        <span>{it.time}</span>
+                        <span>{it.time || '—'}</span>
                         <span>
                           {it.title}
                           {it.note ? ' — ' + it.note : ''}
                         </span>
-                        <span>{it.cost}</span>
+                        <span>{it.cost ? fmtUsd(it.cost) : ''}</span>
                       </div>
                     ))
                   ) : (
-                    <div style={{ fontSize: '10pt', color: '#75798c' }}>Nothing planned yet</div>
+                    <div style={{ fontSize: '10pt', color: '#75798c' }}>Nothing planned</div>
                   )}
                 </div>
               );
@@ -84,6 +92,17 @@ export default function PrintSheet({ d, doc }: { d: Derived; doc: TripDoc }) {
           </div>
         );
       })}
+
+      {doc.checklist.length ? (
+        <div className="pc">
+          <div style={{ fontSize: '13pt', fontWeight: 600, marginBottom: 6 }}>Checklist</div>
+          {doc.checklist.map((c) => (
+            <div key={c.id} style={{ fontSize: '10pt', padding: '2px 0' }}>
+              {c.done ? '☑' : '☐'} {c.text}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

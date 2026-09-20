@@ -51,11 +51,6 @@ export function routeLine(points: LatLng[]): Lng2[] {
   return out;
 }
 
-/** A short stub running off-frame from `from` toward `to` (the home airport). */
-export function stub(from: LatLng, to: LatLng, fraction = 0.12): Lng2[] {
-  return greatCircle(from, to, 64).slice(0, Math.max(2, Math.round(64 * fraction)));
-}
-
 export function boundsOf(points: Lng2[]): [Lng2, Lng2] | null {
   if (!points.length) return null;
   const lngs = points.map((p) => p[0]);

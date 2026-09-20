@@ -1,40 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DAYS, FOODS, HOTELS, LatLng, PLACE, TRANSIT } from './data';
+import {
+  CheckItem, City, DayItem, Hotel, LatLng, Place, Trip,
+  blankCity, blankHotel, newTrip, uid,
+} from './data';
 import { PersonId, isPersonId } from './people';
-
-export interface HotelCfg {
-  name: string;
-  url: string;
-  addr: string;
-  cost: number;
-  ll: LatLng | null;
-}
-
-export interface CityCfg {
-  nights: number;
-  hotelSel: number;
-  hotels: HotelCfg[];
-  trainName: string;
-  trainUrl: string;
-  trainCost: number;
-  foodPer: number;
-}
-
-/** Everything the traveler types or picks. This is what gets persisted. */
-export interface TripDoc {
-  cfg: Record<string, Partial<CityCfg>>;
-  /** Coordinates for cities typed in by hand, resolved by the geocoder. */
-  coords: Record<string, LatLng>;
-  /** Who last changed each field, keyed by field path (e.g. "Kyoto/foodPer"). */
-  touches: Record<string, Touch>;
-  /** Thoughts parked for later — things not yet in the plan. */
-  comments: Comment[];
-  order: string[] | null;
-  done: Record<string, boolean>;
-  checked: Record<string, boolean>;
-}
 
 export interface Touch {
   by: PersonId;
@@ -45,67 +16,52 @@ export interface Comment {
   id: string;
   by: PersonId;
   at: number;
-  /** The city it is about, or null for the trip as a whole. */
+  /** City id it is about, or null for the trip as a whole. */
   city: string | null;
   text: string;
   resolved: boolean;
 }
 
-const STORAGE_KEY = 'trip-planner:v1';
+/** Everything the travelers author. This is the whole persisted document. */
+export interface TripDoc {
+  trip: Trip;
+  cities: City[];
+  /** Itinerary items, keyed `${cityId}:${nightIndex}` so they survive reorder. */
+  days: Record<string, DayItem[]>;
+  checklist: CheckItem[];
+  comments: Comment[];
+  /** Who last changed each field, keyed by field path. */
+  touches: Record<string, Touch>;
+}
+
+const STORAGE_KEY = 'trip-planner:v2';
 const USER_KEY = 'trip-planner:user';
-const EMPTY: TripDoc = { cfg: {}, coords: {}, touches: {}, comments: [], order: null, done: {}, checked: {} };
 
-export function seedOrder(): string[] {
-  const o: string[] = [];
-  DAYS.forEach((d) => {
-    if (o.indexOf(d.city) < 0) o.push(d.city);
-  });
-  return o;
+export function emptyDoc(): TripDoc {
+  return { trip: newTrip(), cities: [], days: {}, checklist: [], comments: [], touches: {} };
 }
 
-export function defaultNights(city: string): number {
-  const n = DAYS.filter((d) => d.city === city).length;
-  return n || 2;
-}
-
-/** A city's config, with seed values filling anything the user has not set. */
-export function cfgFor(doc: TripDoc, city: string): CityCfg {
-  const preset = HOTELS[city] || [];
-  const t = TRANSIT[city]?.opts[0] ?? { name: '', per: 0 };
-  const hotels: HotelCfg[] = [0, 1, 2].map((i) =>
-    preset[i]
-      ? { name: preset[i].name, url: '', addr: preset[i].note, cost: preset[i].per, ll: preset[i].ll }
-      : { name: '', url: '', addr: '', cost: 0, ll: PLACE[city] ?? null },
-  );
-  return {
-    nights: defaultNights(city),
-    hotelSel: 0,
-    hotels,
-    trainName: t.name,
-    trainUrl: '',
-    trainCost: t.per,
-    foodPer: FOODS[1].per,
-    ...(doc.cfg[city] ?? {}),
-  };
+export function dayKey(cityId: string, n: number): string {
+  return `${cityId}:${n}`;
 }
 
 function read(): TripDoc {
-  if (typeof window === 'undefined') return EMPTY;
+  const base = emptyDoc();
+  if (typeof window === 'undefined') return base;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return EMPTY;
-    const parsed = JSON.parse(raw) as Partial<TripDoc>;
+    if (!raw) return base;
+    const p = JSON.parse(raw) as Partial<TripDoc>;
     return {
-      cfg: parsed.cfg ?? {},
-      coords: parsed.coords ?? {},
-      touches: parsed.touches ?? {},
-      comments: Array.isArray(parsed.comments) ? parsed.comments : [],
-      order: Array.isArray(parsed.order) ? parsed.order : null,
-      done: parsed.done ?? {},
-      checked: parsed.checked ?? {},
+      trip: { ...base.trip, ...(p.trip ?? {}) },
+      cities: Array.isArray(p.cities) ? p.cities : [],
+      days: p.days ?? {},
+      checklist: Array.isArray(p.checklist) ? p.checklist : [],
+      comments: Array.isArray(p.comments) ? p.comments : [],
+      touches: p.touches ?? {},
     };
   } catch {
-    return EMPTY;
+    return base;
   }
 }
 
@@ -113,27 +69,44 @@ export interface TripStore {
   doc: TripDoc;
   /** Hydrated from storage — false during the first (server-matching) render. */
   ready: boolean;
-  /** Signed-in person, or null while the login screen is up. */
   user: PersonId | null;
   signIn: (id: PersonId) => void;
   signOut: () => void;
-  order: string[];
-  cfg: (city: string) => CityCfg;
   touch: (path: string) => Touch | undefined;
-  setCfg: <K extends keyof CityCfg>(city: string, key: K, val: CityCfg[K]) => void;
-  setHotel: <K extends keyof HotelCfg>(city: string, i: number, key: K, val: HotelCfg[K]) => void;
-  setOrder: (next: string[]) => void;
-  setCoords: (city: string, ll: LatLng) => void;
-  toggleDone: (key: string) => void;
-  toggleChecked: (key: string) => void;
+
+  setTrip: <K extends keyof Trip>(key: K, val: Trip[K]) => void;
+
+  addCity: (name: string, ll: LatLng | null) => string;
+  removeCity: (id: string) => void;
+  moveCity: (id: string, dir: number) => void;
+  setCity: <K extends keyof City>(id: string, key: K, val: City[K]) => void;
+
+  setHotel: <K extends keyof Hotel>(cityId: string, hotelId: string, key: K, val: Hotel[K]) => void;
+  addHotelSlot: (cityId: string) => void;
+
+  addPlace: (cityId: string) => string;
+  setPlace: <K extends keyof Place>(cityId: string, placeId: string, key: K, val: Place[K]) => void;
+  removePlace: (cityId: string, placeId: string) => void;
+
+  addDayItem: (key: string) => string;
+  setDayItem: <K extends keyof DayItem>(key: string, itemId: string, field: K, val: DayItem[K]) => void;
+  removeDayItem: (key: string, itemId: string) => void;
+  toggleDayItem: (key: string, itemId: string) => void;
+
+  addCheck: (text: string) => void;
+  setCheck: (id: string, text: string) => void;
+  toggleCheck: (id: string) => void;
+  removeCheck: (id: string) => void;
+
   addComment: (text: string, city: string | null) => void;
   toggleComment: (id: string) => void;
   removeComment: (id: string) => void;
+
   reset: () => void;
 }
 
 export function useTripStore(): TripStore {
-  const [doc, setDoc] = useState<TripDoc>(EMPTY);
+  const [doc, setDoc] = useState<TripDoc>(emptyDoc);
   const [user, setUser] = useState<PersonId | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -179,63 +152,216 @@ export function useTripStore(): TripStore {
   const userRef = useRef<PersonId | null>(user);
   userRef.current = user;
 
-  /** Stamp a field path with whoever is signed in right now. */
-  const stamp = useCallback((d: TripDoc, path: string): TripDoc => {
-    const by = userRef.current;
-    if (!by) return d;
-    return { ...d, touches: { ...d.touches, [path]: { by, at: Date.now() } } };
+  /** Apply a change and stamp the field path with whoever is signed in. */
+  const edit = useCallback((path: string | null, fn: (d: TripDoc) => TripDoc) => {
+    setDoc((d) => {
+      const next = fn(d);
+      const by = userRef.current;
+      if (!path || !by) return next;
+      return { ...next, touches: { ...next.touches, [path]: { by, at: Date.now() } } };
+    });
   }, []);
 
-  const order = useMemo(() => doc.order ?? seedOrder(), [doc.order]);
-
-  const cfg = useCallback((city: string) => cfgFor(doc, city), [doc]);
+  const mapCity = (d: TripDoc, id: string, fn: (c: City) => City): TripDoc => ({
+    ...d,
+    cities: d.cities.map((c) => (c.id === id ? fn(c) : c)),
+  });
 
   const touch = useCallback((path: string) => doc.touches[path], [doc.touches]);
 
-  const setCfg = useCallback(
-    <K extends keyof CityCfg>(city: string, key: K, val: CityCfg[K]) => {
-      setDoc((d) =>
-        stamp({ ...d, cfg: { ...d.cfg, [city]: { ...cfgFor(d, city), [key]: val } } }, `${city}/${String(key)}`),
-      );
+  const setTrip = useCallback(
+    <K extends keyof Trip>(key: K, val: Trip[K]) => {
+      edit(`trip/${String(key)}`, (d) => ({ ...d, trip: { ...d.trip, [key]: val } }));
     },
-    [stamp],
+    [edit],
+  );
+
+  const addCity = useCallback(
+    (name: string, ll: LatLng | null) => {
+      const city = blankCity(name.trim(), ll);
+      edit(`${city.id}/added`, (d) => ({ ...d, cities: [...d.cities, city] }));
+      return city.id;
+    },
+    [edit],
+  );
+
+  const removeCity = useCallback(
+    (id: string) => {
+      edit(null, (d) => {
+        const days = { ...d.days };
+        Object.keys(days).forEach((k) => {
+          if (k.startsWith(id + ':')) delete days[k];
+        });
+        return { ...d, cities: d.cities.filter((c) => c.id !== id), days };
+      });
+    },
+    [edit],
+  );
+
+  const moveCity = useCallback(
+    (id: string, dir: number) => {
+      edit('order', (d) => {
+        const cities = d.cities.slice();
+        const i = cities.findIndex((c) => c.id === id);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= cities.length) return d;
+        cities.splice(j, 0, cities.splice(i, 1)[0]);
+        return { ...d, cities };
+      });
+    },
+    [edit],
+  );
+
+  const setCity = useCallback(
+    <K extends keyof City>(id: string, key: K, val: City[K]) => {
+      edit(`${id}/${String(key)}`, (d) => mapCity(d, id, (c) => ({ ...c, [key]: val })));
+    },
+    [edit],
   );
 
   const setHotel = useCallback(
-    <K extends keyof HotelCfg>(city: string, i: number, key: K, val: HotelCfg[K]) => {
-      setDoc((d) => {
-        const cur = cfgFor(d, city);
-        const hotels = cur.hotels.map((h, j) => (j === i ? { ...h, [key]: val } : h));
-        return stamp({ ...d, cfg: { ...d.cfg, [city]: { ...cur, hotels } } }, `${city}/hotel/${i}`);
-      });
+    <K extends keyof Hotel>(cityId: string, hotelId: string, key: K, val: Hotel[K]) => {
+      // Geocoding is the app's own work, not a person's edit — leave it unstamped.
+      const path = key === 'll' ? null : `${cityId}/hotel/${hotelId}`;
+      edit(path, (d) =>
+        mapCity(d, cityId, (c) => ({
+          ...c,
+          hotels: c.hotels.map((h) => (h.id === hotelId ? { ...h, [key]: val } : h)),
+        })),
+      );
     },
-    [stamp],
+    [edit],
   );
 
-  const setOrder = useCallback(
-    (next: string[]) => {
-      setDoc((d) => stamp({ ...d, order: next }, 'order'));
+  const addHotelSlot = useCallback(
+    (cityId: string) => {
+      edit(`${cityId}/hotels`, (d) => mapCity(d, cityId, (c) => ({ ...c, hotels: [...c.hotels, blankHotel()] })));
     },
-    [stamp],
+    [edit],
   );
 
-  // Geocoding is the app's own work, not a person's edit — no stamp.
-  const setCoords = useCallback((city: string, ll: LatLng) => {
-    setDoc((d) => ({ ...d, coords: { ...d.coords, [city]: ll } }));
-  }, []);
+  const addPlace = useCallback(
+    (cityId: string) => {
+      const id = uid();
+      edit(`${cityId}/places`, (d) =>
+        mapCity(d, cityId, (c) => ({
+          ...c,
+          places: [...c.places, { id, name: '', addr: '', note: '', band: '', ll: null }],
+        })),
+      );
+      return id;
+    },
+    [edit],
+  );
 
-  const toggleDone = useCallback(
+  const setPlace = useCallback(
+    <K extends keyof Place>(cityId: string, placeId: string, key: K, val: Place[K]) => {
+      const path = key === 'll' ? null : `${cityId}/place/${placeId}`;
+      edit(path, (d) =>
+        mapCity(d, cityId, (c) => ({
+          ...c,
+          places: c.places.map((p) => (p.id === placeId ? { ...p, [key]: val } : p)),
+        })),
+      );
+    },
+    [edit],
+  );
+
+  const removePlace = useCallback(
+    (cityId: string, placeId: string) => {
+      edit(null, (d) => mapCity(d, cityId, (c) => ({ ...c, places: c.places.filter((p) => p.id !== placeId) })));
+    },
+    [edit],
+  );
+
+  const addDayItem = useCallback(
     (key: string) => {
-      setDoc((d) => stamp({ ...d, done: { ...d.done, [key]: !d.done[key] } }, `day/${key}`));
+      const id = uid();
+      edit(`day/${key}`, (d) => ({
+        ...d,
+        days: {
+          ...d.days,
+          [key]: [...(d.days[key] ?? []), { id, time: '', title: '', note: '', cost: 0, done: false }],
+        },
+      }));
+      return id;
     },
-    [stamp],
+    [edit],
   );
 
-  const toggleChecked = useCallback(
-    (key: string) => {
-      setDoc((d) => stamp({ ...d, checked: { ...d.checked, [key]: !d.checked[key] } }, `check/${key}`));
+  const setDayItem = useCallback(
+    <K extends keyof DayItem>(key: string, itemId: string, field: K, val: DayItem[K]) => {
+      edit(`day/${key}`, (d) => ({
+        ...d,
+        days: {
+          ...d.days,
+          [key]: (d.days[key] ?? []).map((it) => (it.id === itemId ? { ...it, [field]: val } : it)),
+        },
+      }));
     },
-    [stamp],
+    [edit],
+  );
+
+  const removeDayItem = useCallback(
+    (key: string, itemId: string) => {
+      edit(null, (d) => ({
+        ...d,
+        days: { ...d.days, [key]: (d.days[key] ?? []).filter((it) => it.id !== itemId) },
+      }));
+    },
+    [edit],
+  );
+
+  const toggleDayItem = useCallback(
+    (key: string, itemId: string) => {
+      edit(`day/${key}`, (d) => ({
+        ...d,
+        days: {
+          ...d.days,
+          [key]: (d.days[key] ?? []).map((it) => (it.id === itemId ? { ...it, done: !it.done } : it)),
+        },
+      }));
+    },
+    [edit],
+  );
+
+  const addCheck = useCallback(
+    (text: string) => {
+      const body = text.trim();
+      if (!body) return;
+      edit('checklist', (d) => ({
+        ...d,
+        checklist: [...d.checklist, { id: uid(), text: body, done: false }],
+      }));
+    },
+    [edit],
+  );
+
+  const setCheck = useCallback(
+    (id: string, text: string) => {
+      edit('checklist', (d) => ({
+        ...d,
+        checklist: d.checklist.map((c) => (c.id === id ? { ...c, text } : c)),
+      }));
+    },
+    [edit],
+  );
+
+  const toggleCheck = useCallback(
+    (id: string) => {
+      edit(`check/${id}`, (d) => ({
+        ...d,
+        checklist: d.checklist.map((c) => (c.id === id ? { ...c, done: !c.done } : c)),
+      }));
+    },
+    [edit],
+  );
+
+  const removeCheck = useCallback(
+    (id: string) => {
+      edit(null, (d) => ({ ...d, checklist: d.checklist.filter((c) => c.id !== id) }));
+    },
+    [edit],
   );
 
   const addComment = useCallback((text: string, city: string | null) => {
@@ -245,14 +371,7 @@ export function useTripStore(): TripStore {
     setDoc((d) => ({
       ...d,
       comments: [
-        {
-          id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
-          by,
-          at: Date.now(),
-          city,
-          text: body,
-          resolved: false,
-        },
+        { id: uid(), by, at: Date.now(), city, text: body, resolved: false },
         ...d.comments,
       ],
     }));
@@ -269,11 +388,23 @@ export function useTripStore(): TripStore {
     setDoc((d) => ({ ...d, comments: d.comments.filter((c) => c.id !== id) }));
   }, []);
 
-  const reset = useCallback(() => setDoc(EMPTY), []);
+  const reset = useCallback(() => setDoc(emptyDoc()), []);
 
-  return {
-    doc, ready, user, signIn, signOut, order, cfg, touch,
-    setCfg, setHotel, setOrder, setCoords,
-    toggleDone, toggleChecked, addComment, toggleComment, removeComment, reset,
-  };
+  return useMemo(
+    () => ({
+      doc, ready, user, signIn, signOut, touch, setTrip,
+      addCity, removeCity, moveCity, setCity,
+      setHotel, addHotelSlot,
+      addPlace, setPlace, removePlace,
+      addDayItem, setDayItem, removeDayItem, toggleDayItem,
+      addCheck, setCheck, toggleCheck, removeCheck,
+      addComment, toggleComment, removeComment, reset,
+    }),
+    [
+      doc, ready, user, signIn, signOut, touch, setTrip,
+      addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
+      addPlace, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, toggleDayItem,
+      addCheck, setCheck, toggleCheck, removeCheck, addComment, toggleComment, removeComment, reset,
+    ],
+  );
 }

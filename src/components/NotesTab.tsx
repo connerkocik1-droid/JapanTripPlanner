@@ -6,17 +6,22 @@ import { Comment } from '@/lib/tripState';
 
 export interface NotesTabProps {
   comments: Comment[];
-  cities: string[];
+  cities: { id: string; name: string }[];
   /** Pre-selected scope for a new note — the city currently in focus. */
-  current: string;
+  current: string | null;
   onAdd: (text: string, city: string | null) => void;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
 }
 
+function cityName(cities: { id: string; name: string }[], id: string | null): string {
+  if (!id) return 'Whole trip';
+  return cities.find((c) => c.id === id)?.name ?? 'Removed city';
+}
+
 export default function NotesTab({ comments, cities, current, onAdd, onToggle, onRemove }: NotesTabProps) {
   const [text, setText] = useState('');
-  const [scope, setScope] = useState<string>(current);
+  const [scope, setScope] = useState<string>(current ?? '__trip');
   const [showDone, setShowDone] = useState(false);
 
   const visible = comments.filter((c) => showDone || !c.resolved);
@@ -63,8 +68,8 @@ export default function NotesTab({ comments, cities, current, onAdd, onToggle, o
           >
             <option value="__trip">Whole trip</option>
             {cities.map((c) => (
-              <option key={c} value={c}>
-                {c}
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </select>
@@ -135,7 +140,7 @@ export default function NotesTab({ comments, cities, current, onAdd, onToggle, o
                     {p.initial}
                   </span>
                   <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
-                    {p.name} · {c.city ?? 'Whole trip'} · {ago(c.at)}
+                    {p.name} · {cityName(cities, c.city)} · {ago(c.at)}
                   </span>
                   <button
                     className="tap"

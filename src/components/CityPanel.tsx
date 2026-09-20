@@ -1,60 +1,39 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { LatLng, PARTY, TRANSIT } from '@/lib/data';
-import { fmtUsd } from '@/lib/format';
-import { eatsFor, transitLabel } from '@/lib/derive';
-import { CityCfg, HotelCfg } from '@/lib/tripState';
+import { City, Hotel, LatLng, MAX_NIGHTS, Place } from '@/lib/data';
+import { fmtUsd, walkLabel } from '@/lib/format';
+import { CitySpend } from '@/lib/derive';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { Touch } from '@/lib/tripState';
 import TouchMark, { touchStyle } from './TouchMark';
 
-const S = {
-  label: { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const,
-  field: {
-    flex: 1,
-    minWidth: 0,
-    height: 44,
-    fontSize: 13,
-    fontWeight: 500,
-    color: 'var(--color-text)',
-  } as const,
-  icon44: {
-    flex: 'none',
-    width: 44,
-    height: 44,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  } as const,
-};
+const label = { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const;
+const boxed = {
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--color-neutral-800)',
+  background: 'var(--color-surface)',
+} as const;
 
 export interface CityPanelProps {
-  city: string;
-  cfg: CityCfg;
-  subtotal: number;
-  onNights: (n: number) => void;
-  onHotelSel: (i: number) => void;
-  onHotelField: <K extends keyof HotelCfg>(i: number, key: K, val: HotelCfg[K]) => void;
-  onCfgField: (key: 'trainName' | 'trainUrl' | 'trainCost' | 'foodPer', val: string | number) => void;
+  city: City;
+  spend: CitySpend;
+  travelers: number;
+  onCity: <K extends keyof City>(key: K, val: City[K]) => void;
+  onHotel: <K extends keyof Hotel>(hotelId: string, key: K, val: Hotel[K]) => void;
+  onAddHotel: () => void;
+  onAddPlace: () => void;
+  onPlace: <K extends keyof Place>(placeId: string, key: K, val: Place[K]) => void;
+  onRemovePlace: (placeId: string) => void;
   onZoom: (ll: LatLng, zoom: number) => void;
-  /** Who last changed each field of this city, by path suffix. */
   touch: (suffix: string) => Touch | undefined;
 }
 
 export default function CityPanel({
-  city,
-  cfg,
-  subtotal,
-  onNights,
-  onHotelSel,
-  onHotelField,
-  onCfgField,
-  onZoom,
-  touch,
+  city, spend, travelers, onCity, onHotel, onAddHotel,
+  onAddPlace, onPlace, onRemovePlace, onZoom, touch,
 }: CityPanelProps) {
-  const eats = eatsFor(city, cfg);
-  const transit = TRANSIT[city];
+  const chosen = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
 
   return (
     <div
@@ -70,72 +49,72 @@ export default function CityPanel({
       {/* Nights */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <div className="mono" style={S.label}>Nights</div>
+          <div className="mono" style={label}>Nights</div>
           <TouchMark touch={touch('nights')} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <button
             className="tap"
             aria-label="One night fewer"
-            onClick={() => onNights(Math.max(1, cfg.nights - 1))}
-            style={{
-              width: 44, height: 44, borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--color-neutral-700)', background: 'transparent',
-              color: 'var(--color-neutral-300)', fontSize: 14, cursor: 'pointer',
-            }}
+            onClick={() => onCity('nights', Math.max(1, city.nights - 1))}
+            style={stepper('var(--color-neutral-700)', 'var(--color-neutral-300)')}
           >
             &minus;
           </button>
           <div className="num" style={{ minWidth: 26, textAlign: 'center', fontSize: 15, fontWeight: 600 }}>
-            {cfg.nights}
+            {city.nights}
           </div>
           <button
             className="tap"
             aria-label="One night more"
-            onClick={() => onNights(Math.min(9, cfg.nights + 1))}
-            style={{
-              width: 44, height: 44, borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--color-accent-600)', background: 'transparent',
-              color: 'var(--color-accent-200)', fontSize: 14, cursor: 'pointer',
-            }}
+            onClick={() => onCity('nights', Math.min(MAX_NIGHTS, city.nights + 1))}
+            style={stepper('var(--color-accent-600)', 'var(--color-accent-200)')}
           >
             +
           </button>
         </div>
       </div>
 
-      {/* Hotels */}
+      {/* Hotels — one of these feeds the budget */}
       <div style={{ display: 'flex', justifyContent: 'space-between', margin: '12px 0 7px' }}>
-        <div className="mono" style={S.label}>Hotel · pick one of three</div>
-        <div className="mono" style={{ ...S.label, fontSize: 9 }}>
-          {fmtUsd((Number(cfg.hotels[cfg.hotelSel]?.cost) || 0) * cfg.nights)} total
+        <div className="mono" style={label}>
+          Hotel · {city.hotelSel ? 'selected one counts' : 'pick one to budget'}
+        </div>
+        <div className="mono num" style={{ ...label, fontSize: 9 }}>
+          {chosen ? fmtUsd((Number(chosen.cost) || 0) * city.nights) + ' total' : '—'}
         </div>
       </div>
       <div style={{ display: 'grid', gap: 6 }}>
-        {cfg.hotels.map((h, i) => (
+        {city.hotels.map((h, i) => (
           <HotelCard
-            key={i}
+            key={h.id}
             index={i}
             hotel={h}
-            nights={cfg.nights}
-            selected={cfg.hotelSel === i}
+            nights={city.nights}
+            selected={city.hotelSel === h.id}
             onSelect={() => {
-              onHotelSel(i);
+              onCity('hotelSel', h.id);
               if (h.ll) onZoom(h.ll, 16);
             }}
-            onField={(key, val) => onHotelField(i, key, val)}
-            touch={touch('hotel/' + i) ?? (cfg.hotelSel === i ? touch('hotelSel') : undefined)}
+            onField={(key, val) => onHotel(h.id, key, val)}
+            touch={touch('hotel/' + h.id) ?? (city.hotelSel === h.id ? touch('hotelSel') : undefined)}
           />
         ))}
       </div>
+      <button className="tap" onClick={onAddHotel} style={ghostBtn}>
+        <i className="ph ph-plus" style={{ fontSize: 12 }} /> Another option
+      </button>
 
       {/* Transit */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 7px' }}>
-        <div className="mono" style={S.label}>{transitLabel(city)}</div>
-        {cfg.trainUrl ? (
+        <div>
+          <div className="mono" style={label}>Getting to {city.name}</div>
+          <TouchMark touch={touch('transitName') ?? touch('transitCost')} />
+        </div>
+        {city.transitUrl ? (
           <a
             className="mono tap"
-            href={cfg.trainUrl}
+            href={city.transitUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -150,29 +129,26 @@ export default function CityPanel({
       </div>
       <div
         style={{
-          borderRadius: 'var(--radius-sm)',
-          border: '1px solid var(--color-neutral-800)',
-          background: 'var(--color-surface)',
+          ...boxed,
           padding: '2px 8px',
-          ...(touchStyle(touch('trainName') ?? touch('trainCost') ?? touch('trainUrl')) ?? {}),
+          ...(touchStyle(touch('transitName') ?? touch('transitCost') ?? touch('transitUrl')) ?? {}),
         }}
       >
         <input
           type="text"
-          value={cfg.trainName}
-          placeholder="Service (e.g. Nozomi, reserved)"
-          onChange={(e) => onCfgField('trainName', e.target.value)}
-          style={{ ...S.field, width: '100%' }}
+          value={city.transitName}
+          placeholder="Flight, train or bus"
+          onChange={(e) => onCity('transitName', e.target.value)}
+          style={{ width: '100%', height: 40, fontSize: 13, fontWeight: 500 }}
         />
         <input
           type="url"
-          value={cfg.trainUrl}
+          value={city.transitUrl}
           placeholder="Booking link"
-          onChange={(e) => onCfgField('trainUrl', e.target.value)}
+          onChange={(e) => onCity('transitUrl', e.target.value)}
           style={{
-            width: '100%', height: 38, fontSize: 11,
-            fontFamily: 'var(--font-mono)', color: 'var(--color-accent-300)',
-            borderTop: '1px solid var(--color-neutral-900)',
+            width: '100%', height: 38, fontSize: 11, fontFamily: 'var(--font-mono)',
+            color: 'var(--color-accent-300)', borderTop: '1px solid var(--color-neutral-900)',
           }}
         />
         <div
@@ -181,144 +157,162 @@ export default function CityPanel({
             borderTop: '1px solid var(--color-neutral-900)',
           }}
         >
-          <div className="mono" style={{ ...S.label, flex: 'none' }}>$ / person</div>
-          <input
-            type="number"
-            min={0}
-            value={cfg.trainCost}
-            onChange={(e) => onCfgField('trainCost', Number(e.target.value))}
-            className="num"
-            style={{ width: 92, fontSize: 13, fontWeight: 500 }}
+          <div className="mono" style={{ ...label, flex: 'none' }}>$ / person</div>
+          <NumField
+            value={city.transitCost}
+            onChange={(v) => onCity('transitCost', v)}
+            aria="Transit cost per person"
           />
-          <div className="mono num" style={{ ...S.label, marginLeft: 'auto' }}>
-            {fmtUsd((Number(cfg.trainCost) || 0) * PARTY)} for {PARTY}
+          <div className="mono num" style={{ ...label, marginLeft: 'auto' }}>
+            {fmtUsd((Number(city.transitCost) || 0) * travelers)} for {travelers}
           </div>
         </div>
       </div>
-      {transit ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
-          {transit.opts.map((o) => (
-            <button
-              key={o.name}
-              className="tap"
-              onClick={() => {
-                onCfgField('trainName', o.name);
-                onCfgField('trainCost', o.per);
-              }}
-              style={{
-                minHeight: 36, padding: '0 12px', borderRadius: 9999,
-                border: '1px solid var(--color-neutral-700)', background: 'transparent',
-                color: 'var(--color-neutral-300)', fontSize: 11.5, cursor: 'pointer',
-              }}
-              title={o.note}
-            >
-              {o.name} · {fmtUsd(o.per)}
-            </button>
+
+      {/* Places */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 7px' }}>
+        <div className="mono" style={label}>Places here</div>
+        <TouchMark touch={touch('places')} align="right" />
+      </div>
+      {city.places.length === 0 ? (
+        <div style={{ ...emptyNote }}>Restaurants, sights, anything worth pinning.</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 6 }}>
+          {city.places.map((p) => (
+            <PlaceCard
+              key={p.id}
+              place={p}
+              from={chosen?.ll ?? city.ll}
+              onField={(key, val) => onPlace(p.id, key, val)}
+              onRemove={() => onRemovePlace(p.id)}
+              onZoom={() => p.ll && onZoom(p.ll, 16.5)}
+              touch={touch('place/' + p.id)}
+            />
           ))}
         </div>
-      ) : null}
-
-      {/* Eating */}
-      {eats.length ? (
-        <>
-          <div className="mono" style={{ ...S.label, margin: '14px 0 7px' }}>Eating here</div>
-          <div style={{ display: 'flex', gap: 7 }}>
-            {eats.map((e) => (
-              <button
-                key={e.name}
-                className="tap"
-                onClick={() => onZoom(e.ll, 16.5)}
-                style={{
-                  flex: 1, minWidth: 0, textAlign: 'left', padding: 9, cursor: 'pointer',
-                  borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-neutral-800)',
-                  background: 'var(--color-surface)', color: 'inherit',
-                }}
-              >
-                <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500 }}>{e.name}</span>
-                <span style={{ display: 'block', fontSize: 11, color: 'var(--color-accent-300)' }}>{e.band}</span>
-                <span style={{ display: 'block', fontSize: 10, color: 'var(--color-neutral-500)' }}>{e.note}</span>
-                <span
-                  className="mono"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5, marginTop: 6,
-                    fontSize: 9, color: 'var(--color-accent-300)',
-                  }}
-                >
-                  <i className="ph ph-person-simple-walk" style={{ fontSize: 11 }} />
-                  {e.walk}
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
-      ) : null}
+      )}
+      <button className="tap" onClick={onAddPlace} style={ghostBtn}>
+        <i className="ph ph-plus" style={{ fontSize: 12 }} /> Add a place
+      </button>
 
       {/* Food slider */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 4px' }}>
         <div>
-          <div className="mono" style={S.label}>Food, per day</div>
+          <div className="mono" style={label}>Food, per day</div>
           <TouchMark touch={touch('foodPer')} />
         </div>
         <div className="num" style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-accent-300)' }}>
-          {fmtUsd(cfg.foodPer)}/day
+          {city.foodPer ? fmtUsd(city.foodPer) + '/day' : 'not set'}
         </div>
       </div>
       <input
         type="range"
-        min={10}
-        max={200}
+        min={0}
+        max={300}
         step={5}
-        value={cfg.foodPer}
+        value={city.foodPer}
         aria-label="Food budget per day"
-        onChange={(e) => onCfgField('foodPer', Number(e.target.value))}
+        onChange={(e) => onCity('foodPer', Number(e.target.value))}
         style={{ width: '100%', height: 32, accentColor: '#9184d9' }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <div className="mono" style={{ ...S.label, fontSize: 9, color: 'var(--color-neutral-600)' }}>$10</div>
-        <div className="mono num" style={{ ...S.label, fontSize: 9 }}>
-          {fmtUsd(cfg.foodPer * cfg.nights)} over {cfg.nights} days
+        <div className="mono" style={{ ...label, fontSize: 9, color: 'var(--color-neutral-600)' }}>$0</div>
+        <div className="mono num" style={{ ...label, fontSize: 9 }}>
+          {fmtUsd(city.foodPer * city.nights)} over {city.nights} {city.nights === 1 ? 'day' : 'days'}
         </div>
-        <div className="mono" style={{ ...S.label, fontSize: 9, color: 'var(--color-neutral-600)' }}>$200</div>
+        <div className="mono" style={{ ...label, fontSize: 9, color: 'var(--color-neutral-600)' }}>$300</div>
       </div>
 
       {/* Subtotal */}
       <div style={{ borderTop: '1px solid var(--color-divider)', margin: '12px 0 9px' }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: 12.5, color: 'var(--color-neutral-400)' }}>{city} subtotal</div>
+        <div style={{ fontSize: 12.5, color: 'var(--color-neutral-400)' }}>{city.name} subtotal</div>
         <div className="num" style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-accent-200)' }}>
-          {fmtUsd(subtotal)}
+          {fmtUsd(spend.total)}
         </div>
       </div>
+      {spend.activities ? (
+        <div className="mono num" style={{ ...label, fontSize: 9, textAlign: 'right', marginTop: 3 }}>
+          plus {fmtUsd(spend.activities)} of planned items
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function HotelCard({
-  index,
-  hotel,
-  nights,
-  selected,
-  onSelect,
-  onField,
-  touch,
-}: {
-  index: number;
-  hotel: HotelCfg;
-  nights: number;
-  selected: boolean;
-  onSelect: () => void;
-  onField: <K extends keyof HotelCfg>(key: K, val: HotelCfg[K]) => void;
-  touch?: Touch;
-}) {
-  const [status, setStatus] = useState<'idle' | 'looking' | 'found' | 'missing'>('idle');
-  const typed = useRef(hotel.addr);
+const emptyNote = {
+  padding: '12px 10px',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px dashed var(--color-neutral-800)',
+  color: 'var(--color-neutral-600)',
+  fontSize: 11.5,
+  textAlign: 'center' as const,
+};
 
-  // A typed address is only useful once it has coordinates — resolve it so the
-  // pin, the camera and the walking times all reflect the real location.
+const ghostBtn = {
+  width: '100%',
+  minHeight: 40,
+  marginTop: 6,
+  borderRadius: 'var(--radius-sm)',
+  border: '1px dashed var(--color-neutral-700)',
+  background: 'transparent',
+  color: 'var(--color-accent-200)',
+  fontSize: 11.5,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  cursor: 'pointer',
+};
+
+function stepper(border: string, color: string) {
+  return {
+    width: 44, height: 44, borderRadius: 'var(--radius-sm)',
+    border: '1px solid ' + border, background: 'transparent',
+    color, fontSize: 14, cursor: 'pointer',
+  } as const;
+}
+
+/** A number input that can be cleared instead of snapping back to 0. */
+function NumField({
+  value, onChange, aria, width = 92,
+}: { value: number; onChange: (v: number) => void; aria: string; width?: number }) {
+  const [text, setText] = useState(value ? String(value) : '');
+  const last = useRef(value);
   useEffect(() => {
-    if (hotel.addr === typed.current) return;
-    typed.current = hotel.addr;
-    const q = hotel.addr.trim();
+    if (value !== last.current) {
+      last.current = value;
+      setText(value ? String(value) : '');
+    }
+  }, [value]);
+  return (
+    <input
+      type="number"
+      min={0}
+      inputMode="decimal"
+      aria-label={aria}
+      value={text}
+      placeholder="0"
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = Number(e.target.value);
+        last.current = Number.isFinite(n) ? n : 0;
+        onChange(Number.isFinite(n) ? n : 0);
+      }}
+      className="num"
+      style={{ width, fontSize: 13, fontWeight: 500 }}
+    />
+  );
+}
+
+/** Resolves a typed address to coordinates so the pin and walk times are real. */
+function useGeocodedAddress(addr: string, onResolved: (ll: LatLng) => void) {
+  const [status, setStatus] = useState<'idle' | 'looking' | 'found' | 'missing'>('idle');
+  const typed = useRef(addr);
+  useEffect(() => {
+    if (addr === typed.current) return;
+    typed.current = addr;
+    const q = addr.trim();
     if (q.length < 6) {
       setStatus('idle');
       return;
@@ -329,7 +323,7 @@ function HotelCard({
       const hit = await geocode(q);
       if (!live) return;
       if (hit) {
-        onField('ll', hitToLatLng(hit));
+        onResolved(hitToLatLng(hit));
         setStatus('found');
       } else {
         setStatus('missing');
@@ -339,8 +333,32 @@ function HotelCard({
       live = false;
       clearTimeout(t);
     };
-  }, [hotel.addr, onField]);
+  }, [addr, onResolved]);
+  return status;
+}
 
+function GeoStatus({ status }: { status: 'idle' | 'looking' | 'found' | 'missing' }) {
+  return (
+    <div className="mono" style={{ fontSize: 9, minHeight: 12, color: 'var(--color-neutral-600)' }}>
+      {status === 'looking' ? 'Locating…' : null}
+      {status === 'found' ? 'Pinned from address' : null}
+      {status === 'missing' ? 'No match — pin unchanged' : null}
+    </div>
+  );
+}
+
+function HotelCard({
+  index, hotel, nights, selected, onSelect, onField, touch,
+}: {
+  index: number;
+  hotel: Hotel;
+  nights: number;
+  selected: boolean;
+  onSelect: () => void;
+  onField: <K extends keyof Hotel>(key: K, val: Hotel[K]) => void;
+  touch?: Touch;
+}) {
+  const status = useGeocodedAddress(hotel.addr, (ll) => onField('ll', ll));
   return (
     <div
       style={{
@@ -356,9 +374,12 @@ function HotelCard({
           className="tap"
           role="radio"
           aria-checked={selected}
-          aria-label={'Select option ' + (index + 1)}
+          aria-label={'Use option ' + (index + 1) + ' in the budget'}
           onClick={onSelect}
-          style={{ ...S.icon44, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+          style={{
+            flex: 'none', width: 44, height: 44, background: 'none', border: 'none',
+            padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
         >
           <span
             style={{
@@ -374,9 +395,12 @@ function HotelCard({
             value={hotel.name}
             placeholder={'Option ' + (index + 1)}
             onChange={(e) => onField('name', e.target.value)}
-            style={{ ...S.field, width: '100%', height: 30 }}
+            style={{ width: '100%', height: 30, fontSize: 13, fontWeight: 500 }}
           />
           <TouchMark touch={touch} />
+        </span>
+        <span className="num" style={{ fontSize: 11, color: 'var(--color-neutral-500)', flex: 'none' }}>
+          {hotel.cost ? fmtUsd(hotel.cost) + '/night' : ''}
         </span>
         {hotel.url ? (
           <a
@@ -385,7 +409,10 @@ function HotelCard({
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Open booking link"
-            style={{ ...S.icon44, fontSize: 13, color: 'var(--color-accent-300)', textDecoration: 'none' }}
+            style={{
+              flex: 'none', width: 44, height: 44, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontSize: 13, color: 'var(--color-accent-300)', textDecoration: 'none',
+            }}
           >
             ↗
           </a>
@@ -411,27 +438,103 @@ function HotelCard({
             onChange={(e) => onField('addr', e.target.value)}
             style={{ width: '100%', height: 38, fontSize: 12 }}
           />
-          <div className="mono" style={{ fontSize: 9, minHeight: 12, color: 'var(--color-neutral-600)' }}>
-            {status === 'looking' ? 'Locating…' : null}
-            {status === 'found' ? 'Pinned from address' : null}
-            {status === 'missing' ? 'No match — pin unchanged' : null}
-          </div>
+          <GeoStatus status={status} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 44 }}>
-            <div className="mono" style={{ ...S.label, flex: 'none' }}>$ / night</div>
-            <input
-              type="number"
-              min={0}
+            <div className="mono" style={{ ...label, flex: 'none' }}>$ / night</div>
+            <NumField
               value={hotel.cost}
-              onChange={(e) => onField('cost', Number(e.target.value))}
-              className="num"
-              style={{ width: 92, fontSize: 13, fontWeight: 500 }}
+              onChange={(v) => onField('cost', v)}
+              aria="Cost per night"
             />
-            <div className="mono num" style={{ ...S.label, marginLeft: 'auto' }}>
+            <div className="mono num" style={{ ...label, marginLeft: 'auto' }}>
               {fmtUsd((Number(hotel.cost) || 0) * nights)} total
             </div>
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function PlaceCard({
+  place, from, onField, onRemove, onZoom, touch,
+}: {
+  place: Place;
+  from: LatLng | null;
+  onField: <K extends keyof Place>(key: K, val: Place[K]) => void;
+  onRemove: () => void;
+  onZoom: () => void;
+  touch?: Touch;
+}) {
+  const status = useGeocodedAddress(place.addr, (ll) => onField('ll', ll));
+  const walk = walkLabel(from, place.ll);
+  return (
+    <div style={{ ...boxed, padding: '4px 8px 8px', ...(touchStyle(touch) ?? {}) }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="text"
+          value={place.name}
+          placeholder="Name"
+          onChange={(e) => onField('name', e.target.value)}
+          style={{ flex: 1, minWidth: 0, height: 38, fontSize: 12.5, fontWeight: 500 }}
+        />
+        <input
+          type="text"
+          value={place.band}
+          placeholder="$$"
+          onChange={(e) => onField('band', e.target.value)}
+          style={{ width: 44, height: 38, fontSize: 11.5, color: 'var(--color-accent-300)' }}
+        />
+        <button
+          className="tap"
+          onClick={onZoom}
+          disabled={!place.ll}
+          aria-label="Show on map"
+          style={{
+            width: 34, height: 34, borderRadius: 'var(--radius-sm)', border: 'none',
+            background: 'transparent', cursor: place.ll ? 'pointer' : 'default',
+            color: place.ll ? 'var(--color-accent-300)' : 'var(--color-neutral-800)',
+          }}
+        >
+          <i className="ph ph-map-pin" style={{ fontSize: 14 }} />
+        </button>
+        <button
+          className="tap"
+          onClick={onRemove}
+          aria-label="Remove place"
+          style={{
+            width: 34, height: 34, borderRadius: 'var(--radius-sm)', border: 'none',
+            background: 'transparent', color: 'var(--color-neutral-700)', cursor: 'pointer',
+          }}
+        >
+          <i className="ph ph-trash" style={{ fontSize: 13 }} />
+        </button>
+      </div>
+      <input
+        type="text"
+        value={place.addr}
+        placeholder="Address"
+        onChange={(e) => onField('addr', e.target.value)}
+        style={{ width: '100%', height: 34, fontSize: 11.5 }}
+      />
+      <input
+        type="text"
+        value={place.note}
+        placeholder="Note"
+        onChange={(e) => onField('note', e.target.value)}
+        style={{ width: '100%', height: 32, fontSize: 11, color: 'var(--color-neutral-400)' }}
+      />
+      {walk ? (
+        <span
+          className="mono"
+          style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, color: 'var(--color-accent-300)' }}
+        >
+          <i className="ph ph-person-simple-walk" style={{ fontSize: 11 }} />
+          {walk}
+        </span>
+      ) : (
+        <GeoStatus status={status} />
+      )}
     </div>
   );
 }
