@@ -9,6 +9,7 @@ import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import type { RouteStop } from '@/lib/geo';
 import { cityLegKind, hopKind } from '@/lib/legKind';
+import { useAirportRoutes } from '@/lib/airportRoute';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
@@ -114,6 +115,25 @@ export default function TripPlanner() {
    */
   const mapInset = tab === 'map' && d.cities.length > 1 ? 58 : 8;
 
+  /**
+   * How much of the map's bottom the plan builder covers. It floats over the
+   * map rather than pushing it up, so the only way a mini-card can stay clear
+   * of it is to be told how tall it is — and it changes height as stops go in.
+   */
+  const planBox = useRef<HTMLDivElement | null>(null);
+  const [planPx, setPlanPx] = useState(0);
+  useEffect(() => {
+    const el = planBox.current;
+    if (!el) {
+      setPlanPx(0);
+      return;
+    }
+    const ro = new ResizeObserver(() => setPlanPx(el.offsetHeight + 18));
+    ro.observe(el);
+    setPlanPx(el.offsetHeight + 18);
+    return () => ro.disconnect();
+  }, [draft, preview]);
+
   // The strip scrolls when the tabs outrun the width — keep the current one in view.
   useEffect(() => {
     activeTab.current?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
@@ -191,6 +211,37 @@ export default function TripPlanner() {
   const hops = useDayRoute(routeStops);
   const returnHop = useMemo(() => hops.find((h) => h.toId.startsWith('return:')) ?? null, [hops]);
 
+  /**
+   * Whose arrival the map shows. The same set the hotel pins use, so the
+   * airport and the options it routes to always appear together.
+   */
+  const arrivalCities = useMemo(
+    () => (plotAll ? doc.cities : doc.cities.filter((c) => c.id === cityId)),
+    [doc.cities, cityId, plotAll],
+  );
+  const { arrivals, routes: airportRoutes } = useAirportRoutes(arrivalCities, doc.trip.travelers);
+
+  /**
+   * The run in from the airport to each option, drawn in the colour of what it
+   * rides. These are what the city panel lists, so the numbers beside a hotel
+   * and the line on the map are the same journey.
+   */
+  const arrivalLegs = useMemo<MapLeg[]>(
+    () =>
+      Object.entries(airportRoutes)
+        .map(([hotelId, state]) => {
+          const r = state.route;
+          if (!r || r.geometry.length < 2) return null;
+          return {
+            id: 'arrival:' + hotelId,
+            kind: hopKind(r.mode, r.rail),
+            geometry: r.geometry,
+          };
+        })
+        .filter((l): l is MapLeg => !!l),
+    [airportRoutes],
+  );
+
   const legs = useMemo<MapLeg[]>(() => {
     // A plan being built owns the map: its hops, the way home, and the hop on offer.
     if (draft || preview) {
@@ -211,14 +262,15 @@ export default function TripPlanner() {
       }
       return out;
     }
-    return hops
+    const day = hops
       .map((h) => {
         const leg = h.toId.startsWith('return:') ? legOf(h) : legOf(h, h.to.mode);
         if (!leg) return null;
         return { id: h.toId, kind: hopKind(leg.mode, leg.rail), geometry: leg.geometry };
       })
       .filter((l): l is MapLeg => !!l);
-  }, [hops, draft, preview, backLeg]);
+    return [...arrivalLegs, ...day];
+  }, [hops, draft, preview, backLeg, arrivalLegs]);
 
   const dayCity = dayEntry?.city ?? null;
 
@@ -467,7 +519,7 @@ export default function TripPlanner() {
     [dayEntry, dayCity, store],
   );
 
-  /** Map pins: every city, plus the selected city's hotel and places. */
+  /** Map pins: every city, plus the selected city's hotel, places and airport. */
   const pins = useMemo<MapPin[]>(() => {
     const out: MapPin[] = [];
     // Stop numbers come from the day being planned, if any.
@@ -546,8 +598,24 @@ export default function TripPlanner() {
         });
       });
     });
+
+    // Where each arrival lands. One pin per airport, however many cities use it.
+    const seen = new Set<string>();
+    arrivals.forEach(({ airport }) => {
+      if (seen.has(airport.code)) return;
+      seen.add(airport.code);
+      out.push({
+        id: 'airport:' + airport.code,
+        name: airport.name,
+        sub: airport.code + ' · serves ' + airport.serves,
+        ll: airport.ll,
+        selected: false,
+        kind: 'airport',
+        icon: 'ph-airplane-tilt',
+      });
+    });
     return out;
-  }, [doc.cities, cityId, plotAll, stops, tab, draft]);
+  }, [doc.cities, cityId, plotAll, stops, tab, draft, arrivals]);
 
   const zoomToPoints = useCallback((points: LatLng[]) => {
     if (!points.length) return;
@@ -787,6 +855,7 @@ export default function TripPlanner() {
           legs={legs}
           fit={fit}
           sheetPx={mapInset}
+          overlayPx={planPx}
           focus={focus}
           onSelect={onPin}
           onHoverPlace={hoverPlace}
@@ -815,6 +884,7 @@ export default function TripPlanner() {
         ) : null}
 
         <PlanBuilder
+          ref={planBox}
           draft={draft}
           cityName={planCity?.name ?? ''}
           homeName={planHome?.name || 'your hotel'}

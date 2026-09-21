@@ -48,7 +48,7 @@ export interface MapPin {
   sub: string;
   ll: LatLng;
   selected: boolean;
-  kind: 'city' | 'hotel' | 'place';
+  kind: 'city' | 'hotel' | 'place' | 'airport';
   /** Position in the planned day, when this pin is a stop. */
   stopNumber?: number;
   /** Place category, for the marker glyph. */
@@ -83,6 +83,13 @@ export interface TripMapProps {
   fit: { points: LatLng[]; nonce: number } | null;
   /** Pixels of map covered by the bottom sheet. */
   sheetPx: number;
+  /**
+   * Pixels of map covered by the plan builder, which floats over it rather
+   * than pushing it up. Only the mini-card reads this: framing the trip around
+   * it would move the camera every time a hover routed something, which is the
+   * opposite of what hovering is for.
+   */
+  overlayPx: number;
   focus: MapFocus | null;
   onSelect: (id: string) => void;
   /**
@@ -95,7 +102,7 @@ export interface TripMapProps {
 }
 
 export default function TripMap({
-  pins, route, legs, fit, sheetPx, focus, onSelect, onHoverPlace, onActivateHotel,
+  pins, route, legs, fit, sheetPx, overlayPx, focus, onSelect, onHoverPlace, onActivateHotel,
 }: TripMapProps) {
   const holder = useRef<HTMLDivElement | null>(null);
   const map = useRef<MlMap | null>(null);
@@ -105,8 +112,8 @@ export default function TripMap({
   const stepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const box = useRef({ w: 0, h: 0 });
 
-  const latest = useRef({ pins, route, legs, sheetPx, onSelect, onHoverPlace, onActivateHotel });
-  latest.current = { pins, route, legs, sheetPx, onSelect, onHoverPlace, onActivateHotel };
+  const latest = useRef({ pins, route, legs, sheetPx, overlayPx, onSelect, onHoverPlace, onActivateHotel });
+  latest.current = { pins, route, legs, sheetPx, overlayPx, onSelect, onHoverPlace, onActivateHotel };
 
   // The mini-card, for a hotel or a pinned place. `sticky` is set by a tap and
   // survives the pointer leaving; a hover-opened card closes as the pointer does.
@@ -161,7 +168,8 @@ export default function TripMap({
     const cardW = el.offsetWidth;
     const cardH = el.offsetHeight;
     const ceiling = Math.min(150, Math.round(h * 0.17)) + 8;
-    const floor = h - Math.min(latest.current.sheetPx, Math.round(h * 0.6)) - 8;
+    const covered = Math.max(latest.current.sheetPx, latest.current.overlayPx);
+    const floor = h - Math.min(covered, Math.round(h * 0.6)) - 8;
 
     let top = pt.y - 22 - cardH;
     if (top < ceiling) top = pt.y + 30;
@@ -383,6 +391,7 @@ export default function TripMap({
       el.style.zIndex = p.selected ? '500' : p.kind === 'city' ? '400' : '300';
       el.classList.toggle('is-stop', p.stopNumber !== undefined);
       el.classList.toggle('is-hotel', p.kind === 'hotel');
+      el.classList.toggle('is-airport', p.kind === 'airport');
       el.classList.toggle('is-pick', p.kind === 'hotel' && !!p.hotel?.pick);
       el.classList.toggle('is-open', cardId.current === p.id);
       el.classList.toggle('is-place', p.kind === 'place');
@@ -394,10 +403,13 @@ export default function TripMap({
       const placeDot = p.place ? ' tp-place' : '';
       if (p.place) el.style.setProperty('--pin', p.place.color);
       else el.style.removeProperty('--pin');
+      // Airports are the blue of a flight leg — the same colour arrives twice.
+      const airportDot = p.kind === 'airport' ? ' tp-airport' : '';
+      const extra = hotelDot + placeDot + airportDot;
       const dot = p.stopNumber !== undefined
-        ? `<span class="tp-dot tp-num${hotelDot}${placeDot}">${p.stopNumber}</span>`
+        ? `<span class="tp-dot tp-num${extra}">${p.stopNumber}</span>`
         : p.icon
-          ? `<span class="tp-dot tp-icon${hotelDot}${placeDot}"><i class="ph ${p.icon}"></i></span>`
+          ? `<span class="tp-dot tp-icon${extra}"><i class="ph ${p.icon}"></i></span>`
           : '<span class="tp-dot"></span>';
       el.innerHTML =
         '<span class="tp-ret"></span>' + dot +
@@ -476,7 +488,7 @@ export default function TripMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     card?.id, cardPin?.ll[0], cardPin?.ll[1],
-    cardPin?.hotel?.images.length, cardPin?.place?.images.length, sheetPx,
+    cardPin?.hotel?.images.length, cardPin?.place?.images.length, sheetPx, overlayPx,
   ]);
 
   // Resize only on a real box change — an unconditional resize cancels

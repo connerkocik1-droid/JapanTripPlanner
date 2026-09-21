@@ -433,6 +433,16 @@ input::placeholder { color: var(--color-neutral-600); }
   overflow: hidden;
 }
 .place-card .pc-link { display: inline-block; margin-top: 8px; }
+/* --- airports ----------------------------------------------------------- */
+/* Blue, the colour a flight leg is already drawn in, so where you land and how
+   you got there read as the same thing. */
+.trip-pin .tp-dot.tp-airport {
+  background: #12243d;
+  color: #8fc2ff;
+  border-color: #4f9dfd;
+  box-shadow: 0 2px 10px rgba(79, 157, 253, 0.45);
+}
+.trip-pin.is-airport .tp-name { color: #8fc2ff; }
 
 /* Above the tint layers and the pins themselves (which run to 500), but still
    inside the map holder, so the header and the sheet stay on top. */

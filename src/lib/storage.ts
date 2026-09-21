@@ -3,10 +3,16 @@
 /**
  * Where the plan is kept.
  *
- * IndexedDB is the store of record: unlike localStorage it is asynchronous,
- * has real quota, and is what browsers keep when a site is installed. A copy
- * also goes to localStorage as a cheap belt-and-braces backup, and as the
- * migration path from the first version of the app.
+ * Two stores, and neither one can be trusted alone. IndexedDB has real quota
+ * and is what browsers keep when a site is installed, but every write to it is
+ * asynchronous, so a write started as the tab goes away can die before it
+ * lands. localStorage is small, but it writes synchronously, which is the only
+ * kind of write that survives being closed mid-edit.
+ *
+ * So the plan goes to both, and every record carries the revision it was
+ * written at. On load the two are compared and the newer one wins, whichever
+ * store it came from; the stale store is then healed from it. Preferring one
+ * store outright would throw away the copy that the other one rescued.
  *
  * Nothing here throws. A browser with storage blocked still runs the app for
  * the session; the UI reports the save state rather than pretending.
@@ -16,6 +22,44 @@ const DB_NAME = 'trip-planner';
 const STORE = 'docs';
 const DOC_KEY = 'trip';
 const MIRROR_KEY = 'trip-planner:v2';
+
+/**
+ * A saved record. `rev` counts writes within a session and `savedAt` breaks
+ * ties between sessions and between tabs, which start their own count.
+ */
+interface Envelope {
+  rev: number;
+  savedAt: number;
+  doc: unknown;
+}
+
+/** The revision this session last wrote, seeded from whatever it loaded. */
+let rev = 0;
+
+function isEnvelope(raw: unknown): raw is Envelope {
+  if (!raw || typeof raw !== 'object') return false;
+  const e = raw as Partial<Envelope>;
+  return typeof e.rev === 'number' && 'doc' in e;
+}
+
+/** Read a record from either store, accepting the bare docs written before this. */
+function unwrap(raw: unknown): Envelope | null {
+  if (raw === null || raw === undefined) return null;
+  if (isEnvelope(raw)) {
+    return { rev: raw.rev, savedAt: typeof raw.savedAt === 'number' ? raw.savedAt : 0, doc: raw.doc };
+  }
+  // Written before saves were versioned: the record is the document itself,
+  // and it is older than anything this version has written.
+  return { rev: 0, savedAt: 0, doc: raw };
+}
+
+/** Which of two records was written last. */
+function newer(a: Envelope | null, b: Envelope | null): Envelope | null {
+  if (!a) return b;
+  if (!b) return a;
+  if (a.rev !== b.rev) return a.rev > b.rev ? a : b;
+  return a.savedAt >= b.savedAt ? a : b;
+}
 
 function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
@@ -83,22 +127,43 @@ function mirrorWrite(value: unknown): void {
   }
 }
 
-/** Read the saved plan, preferring IndexedDB and falling back to the mirror. */
+/**
+ * Read the saved plan: whichever store holds the newer record wins.
+ *
+ * The mirror is not just a backup. A save that starts as the tab closes only
+ * finishes in localStorage, because that write is synchronous, so the mirror is
+ * routinely a revision ahead of IndexedDB. Reading IndexedDB first and
+ * stopping there would hand back the stale copy and then save it over the
+ * rescued one, losing the edit for good.
+ */
 export async function loadDoc<T>(): Promise<T | null> {
-  const fromIdb = await idbGet<T>();
-  if (fromIdb) return fromIdb;
-  const fromMirror = mirrorRead<T>();
-  if (fromMirror) {
-    // First run after the upgrade: move the old copy into IndexedDB.
-    void idbPut(fromMirror);
-    return fromMirror;
-  }
-  return null;
+  const fromIdb = unwrap(await idbGet<unknown>());
+  const fromMirror = unwrap(mirrorRead<unknown>());
+  const best = newer(fromIdb, fromMirror);
+  if (!best) return null;
+
+  // Keep counting from the newest revision on disk so the next save is
+  // recognisably later than it, rather than restarting at 1 and losing to it.
+  rev = best.rev;
+
+  // Bring the store that lost back up to date: either the mirror rescued an
+  // edit IndexedDB never got, or this is the first run after the upgrade and
+  // the old bare copy needs moving in.
+  if (best !== fromIdb) void idbPut({ rev: best.rev, savedAt: best.savedAt, doc: best.doc });
+  else if (best !== fromMirror) mirrorWrite({ rev: best.rev, savedAt: best.savedAt, doc: best.doc });
+
+  return (best.doc ?? null) as T | null;
 }
 
+/**
+ * Write the plan to both stores. The mirror goes first and synchronously, so
+ * that a save racing the tab's close still leaves the edit somewhere.
+ */
 export async function saveDoc(value: unknown): Promise<boolean> {
-  mirrorWrite(value);
-  return idbPut(value);
+  rev += 1;
+  const record: Envelope = { rev, savedAt: Date.now(), doc: value };
+  mirrorWrite(record);
+  return idbPut(record);
 }
 
 /**
