@@ -1,0 +1,432 @@
+{
+  "id": "seoul-restaurants-45",
+  "name": "Seoul restaurants, 4.5★ and up",
+  "city": "Seoul",
+  "summary": "47 places rated 4.5 or better on Google Maps and TripAdvisor.",
+  "source": "Compiled from Google Maps and TripAdvisor ratings, September 2026.",
+  "places": [
+    {
+      "name": "Mingles",
+      "korean": "밍글스",
+      "addr": "19 Dosan-daero 67-gil, Gangnam-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Korean fine dining (3 Michelin stars) · Cheongdam / Gangnam · 2F Hilltop Bldg · 853 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Mingles%202F%20Hilltop%20Bldg%2C%2019%20Dosan-daero%2067-gil%2C%20Gangnam-gu%2C%20Seoul"
+    },
+    {
+      "name": "Baekseju Maeul (Samseong branch)",
+      "korean": "백세주마을 삼성점",
+      "addr": "641 Bongeunsa-ro, Gangnam-gu, Seoul 06083",
+      "kind": "eat",
+      "band": "4.9★",
+      "note": "Korean traditional / makgeolli pub · Gangnam · 1F Guksundang Bldg · TripAdvisor rating",
+      "url": "https://www.google.com/maps/search/?api=1&query=Baekseju%20Maeul%20%28Samseong%20branch%29%20641%20Bongeunsa-ro%2C%201F%20Guksundang%20Bldg%2C%20Gangnam-gu%2C%20Seoul%2006083"
+    },
+    {
+      "name": "Mosu",
+      "korean": "모수",
+      "addr": "4 Hoenamu-ro 41-gil, Yongsan-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Korean fine dining (2 Michelin stars) · Itaewon / Hannam-dong · 302 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Mosu%204%20Hoenamu-ro%2041-gil%2C%20Yongsan-gu%20%28Hannam-dong%29%2C%20Seoul"
+    },
+    {
+      "name": "Yookji Hongdae",
+      "korean": "육지 홍대",
+      "addr": "34 Dongmak-ro 3-gil, Mapo-gu, Seoul",
+      "kind": "eat",
+      "band": "4.9★",
+      "note": "Korean BBQ · Hongdae / Mapo · 3,374 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Yookji%20Hongdae%2034%20Dongmak-ro%203-gil%2C%20Mapo-gu%2C%20Seoul"
+    },
+    {
+      "name": "Taker's Table (Yeonnam)",
+      "korean": "테이커테이블 연남점",
+      "addr": "Donggyo-dong 150-2, Mapo-gu, Seoul",
+      "kind": "eat",
+      "band": "4.8★",
+      "note": "Italian (fresh pasta) · Yeonnam-dong / Hongdae · 76 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Taker%27s%20Table%20%28Yeonnam%29%20Donggyo-dong%20150-2%2C%20Mapo-gu%2C%20Seoul"
+    },
+    {
+      "name": "DingDim 1968 (Sinsa)",
+      "korean": "딩딤 1968",
+      "addr": "27 Gangnam-daero 160-gil, Gangnam-gu, Seoul 06028",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Hong Kong dim sum · Sinsa · TripAdvisor rating",
+      "url": "https://www.google.com/maps/search/?api=1&query=DingDim%201968%20%28Sinsa%29%2027%20Gangnam-daero%20160-gil%2C%20Gangnam-gu%2C%20Seoul%2006028"
+    },
+    {
+      "name": "Yeongdong Gyojip (Gangnam branch)",
+      "korean": "영동교집 강남점",
+      "addr": "499 Gangnam-daero, Seocho-gu, Seoul",
+      "kind": "eat",
+      "band": "4.9★",
+      "note": "Korean BBQ · Gangnam / Sinsa border · 2F Dongyang Bldg · 646 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Yeongdong%20Gyojip%20%28Gangnam%20branch%29%202F%20Dongyang%20Bldg%2C%20499%20Gangnam-daero%2C%20Seocho-gu%2C%20Seoul"
+    },
+    {
+      "name": "Cote Jardin",
+      "korean": "꼬떼자르당",
+      "addr": "122-1 Bogwang-ro 1-gil, Yongsan-gu, Seoul 04406",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "French bistro · Itaewon · 2F · 197 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Cote%20Jardin%20122-1%20Bogwang-ro%201-gil%20%282F%29%2C%20Yongsan-gu%2C%20Seoul%2004406"
+    },
+    {
+      "name": "Blacklist",
+      "korean": "블랙리스트",
+      "addr": "134 Itaewon-ro, Yongsan-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Rooftop steaks & cocktails · Itaewon · 3F · 164 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Blacklist%20134%20Itaewon-ro%20%283F%29%2C%20Yongsan-gu%2C%20Seoul"
+    },
+    {
+      "name": "Buddha's Belly",
+      "korean": "붓다스벨리",
+      "addr": "48 Noksapyeong-daero 40-gil, Yongsan-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Thai · Itaewon (Noksapyeong) · 895 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Buddha%27s%20Belly%2048%20Noksapyeong-daero%2040-gil%2C%20Yongsan-gu%2C%20Seoul"
+    },
+    {
+      "name": "Jukto",
+      "korean": "적토발효구이 용산점",
+      "addr": "12 Hangang-daero 14-gil, Yongsan-gu, Seoul",
+      "kind": "eat",
+      "band": "5.0★",
+      "note": "Korean BBQ (fermented pork belly) · Itaewon / Yongsan · TripAdvisor rating",
+      "url": "https://www.google.com/maps/search/?api=1&query=Jukto%2012%20Hangang-daero%2014-gil%2C%20Yongsan-gu%2C%20Seoul"
+    },
+    {
+      "name": "Mr. Ahn's Craft Makgeolli (Anssi Makgeolli)",
+      "korean": "안씨막걸리",
+      "addr": "3 Hoenamu-ro, Yongsan-gu, Seoul 04343",
+      "kind": "eat",
+      "band": "4.7★",
+      "note": "Korean bar / makgeolli · Itaewon · 19 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Mr.%20Ahn%27s%20Craft%20Makgeolli%20%28Anssi%20Makgeolli%29%203%20Hoenamu-ro%2C%20Yongsan-gu%2C%20Seoul%2004343"
+    },
+    {
+      "name": "Krappom",
+      "korean": "크랍폼",
+      "addr": "18 Seolleung-ro 153-gil, Gangnam-gu, Seoul 06019",
+      "kind": "eat",
+      "band": "4.8★",
+      "note": "Thai street food · Apgujeong / near Sinsa · 5 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Krappom%2018%20Seolleung-ro%20153-gil%2C%20Gangnam-gu%2C%20Seoul%2006019"
+    },
+    {
+      "name": "Ryunique",
+      "korean": "류니끄",
+      "addr": "8-1 Dosan-daero 45-gil, Gangnam-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Fusion fine dining (2 Michelin stars) · Sinsa / Apgujeong · 1F-2F · 141 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Ryunique%208-1%20Dosan-daero%2045-gil%2C%201F-2F%2C%20Gangnam-gu%2C%20Seoul"
+    },
+    {
+      "name": "Yang Good",
+      "korean": "양구디",
+      "addr": "15 Nonhyeon-ro 95-gil, Gangnam-gu, Seoul",
+      "kind": "eat",
+      "band": "4.7★",
+      "note": "Korean BBQ (lamb skewers) · Gangnam · 1,663 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Yang%20Good%2015%20Nonhyeon-ro%2095-gil%2C%20Gangnam-gu%2C%20Seoul"
+    },
+    {
+      "name": "Osteria Ora",
+      "korean": "오스테리아 오라",
+      "addr": "Mapo-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Italian · Mapo (Seogyo-dong) · Seogyo-dong/Mangwon area · 141 reviews · address unconfirmed",
+      "url": "https://www.google.com/maps/search/?api=1&query=Osteria%20Ora%20Mapo-gu%20%28Seogyo-dong/Mangwon%20area%29%2C%20Seoul%20-%20exact%20street%20number%20unconfirmed"
+    },
+    {
+      "name": "Thanks Nature Cafe",
+      "korean": "땡스네이처카페",
+      "addr": "10 Hongik-ro, Mapo-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Cafe · Hongdae · 987 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Thanks%20Nature%20Cafe%2010%20Hongik-ro%2C%20Mapo-gu%2C%20Seoul"
+    },
+    {
+      "name": "Coffee Nap Roasters (Yeonnam)",
+      "korean": "커피냅로스터스 연남",
+      "addr": "70 Seongmisan-ro 27-gil, Mapo-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Specialty coffee cafe · Yeonnam-dong · 242 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Coffee%20Nap%20Roasters%20%28Yeonnam%29%2070%20Seongmisan-ro%2027-gil%2C%20Mapo-gu%2C%20Seoul"
+    },
+    {
+      "name": "Cesta",
+      "korean": "세스타",
+      "addr": "68-4 Hannam-dong, Yongsan-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Wine bar / Western · Itaewon / Hannam-dong · 63 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Cesta%2068-4%20Hannam-dong%2C%20Yongsan-gu%2C%20Seoul"
+    },
+    {
+      "name": "Insadong Boribap Main Store",
+      "korean": "",
+      "addr": "20-3 Insadong 12-gil, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Korean traditional (barley rice) · Jongno-gu / Insadong · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Insadong%20Boribap%20Main%20Store%2020-3%20Insadong%2012-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Doma Yuzu Ramen",
+      "korean": "",
+      "addr": "24 Bukchon-ro 2-gil, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.7★",
+      "note": "Fusion ramen · Jongno-gu / Bukchon · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Doma%20Yuzu%20Ramen%2024%20Bukchon-ro%202-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Jogeum",
+      "korean": "",
+      "addr": "60 Yulgok-ro, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Japanese-style hot stone pot rice · Jongno-gu (Anguk) · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Jogeum%2060%20Yulgok-ro%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Eunseol Seolleongtang",
+      "korean": "",
+      "addr": "9-4 Bukchon-ro 2-gil, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Korean traditional (beef bone soup) · Jongno-gu / Bukchon · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Eunseol%20Seolleongtang%209-4%20Bukchon-ro%202-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Orenoman Ramen (Insadong branch)",
+      "korean": "오레노라멘 인사점",
+      "addr": "49-4 Yulgok-ro 5-gil, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.8★",
+      "note": "Japanese ramen · Jongno-gu / Insadong · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Orenoman%20Ramen%20%28Insadong%20branch%29%2049-4%20Yulgok-ro%205-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Taekdaerine Insadong Garlic Bossam",
+      "korean": "택대리네 인사동마늘보쌈",
+      "addr": "12-5 Insadong 8-gil, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Korean (bossam) · Jongno-gu / Insadong · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Taekdaerine%20Insadong%20Garlic%20Bossam%2012-5%20Insadong%208-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Jongno Dodam",
+      "korean": "종로도담",
+      "addr": "78 Sambong-ro, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Korean traditional · Jongno-gu · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Jongno%20Dodam%2078%20Sambong-ro%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Ilwol Katsu",
+      "korean": "일월카츠",
+      "addr": "11 Bukchon-ro 1-gil, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.7★",
+      "note": "Japanese (katsu) · Jongno-gu / Bukchon · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Ilwol%20Katsu%2011%20Bukchon-ro%201-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "A Flower Blossom on the Rice",
+      "korean": "꽃,밥에피다",
+      "addr": "16 Insadong 16-gil, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.8★",
+      "note": "Modern Korean · Jongno-gu / Insadong · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=A%20Flower%20Blossom%20on%20the%20Rice%2016%20Insadong%2016-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Restaurant Jueun",
+      "korean": "",
+      "addr": "Gyeonghuigung-gil, Jongno-gu, Seoul",
+      "kind": "eat",
+      "band": "4.8★",
+      "note": "Korean fine dining · Jongno-gu · address unconfirmed",
+      "url": "https://www.google.com/maps/search/?api=1&query=Restaurant%20Jueun%20Gyeonghuigung-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Daol Charcoal Grill",
+      "korean": "",
+      "addr": "54-2 Myeongdong 2-ga, Jung-gu, Seoul",
+      "kind": "eat",
+      "band": "4.9★",
+      "note": "Korean BBQ · Myeongdong / Jung-gu · 1F-2F · 591 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Daol%20Charcoal%20Grill%2054-2%20Myeongdong%202-ga%2C%201F-2F%2C%20Jung-gu%2C%20Seoul"
+    },
+    {
+      "name": "Ziu BBQ",
+      "korean": "",
+      "addr": "20 Toegye-ro 18-gil, Jung-gu, Seoul",
+      "kind": "eat",
+      "band": "4.9★",
+      "note": "Korean BBQ · Myeongdong / Jung-gu · TripAdvisor rating",
+      "url": "https://www.google.com/maps/search/?api=1&query=Ziu%20BBQ%2020%20Toegye-ro%2018-gil%2C%20Jung-gu%2C%20Seoul"
+    },
+    {
+      "name": "Namsandodam",
+      "korean": "남산도담",
+      "addr": "37-1 Supyo-ro 6-gil, Jung-gu, Seoul",
+      "kind": "eat",
+      "band": "5.0★",
+      "note": "Korean traditional (bossam, kimchi steam) · Myeongdong / Jung-gu · 23 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Namsandodam%2037-1%20Supyo-ro%206-gil%2C%20Jung-gu%2C%20Seoul"
+    },
+    {
+      "name": "Hangaram",
+      "korean": "",
+      "addr": "25 Namdaemun-ro 5-gil, Jung-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Korean · Myeongdong / Jung-gu · 46 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Hangaram%2025%20Namdaemun-ro%205-gil%2C%20Jung-gu%2C%20Seoul"
+    },
+    {
+      "name": "Seongsu Jokbal",
+      "korean": "성수족발",
+      "addr": "7 Achasan-ro 7-gil, Seongdong-gu, Seoul",
+      "kind": "eat",
+      "band": "4.8★",
+      "note": "Korean (jokbal / pig's trotters) · Seongsu-dong · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Seongsu%20Jokbal%207%20Achasan-ro%207-gil%2C%20Seongdong-gu%2C%20Seoul"
+    },
+    {
+      "name": "Grandmother's Recipe",
+      "korean": "할머니의 레시피",
+      "addr": "44-12 Seoulsup 2-gil, Seongdong-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Korean home-style · Seongsu-dong · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Grandmother%27s%20Recipe%2044-12%20Seoulsup%202-gil%2C%20Seongdong-gu%2C%20Seoul"
+    },
+    {
+      "name": "Seongsu Budu",
+      "korean": "성수부두",
+      "addr": "41-26 Yeonmujang-gil, Seongdong-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Korean / seafood · Seongsu-dong · B1 · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Seongsu%20Budu%20B1%2C%2041-26%20Yeonmujang-gil%2C%20Seongdong-gu%2C%20Seoul"
+    },
+    {
+      "name": "Horangi Siktak",
+      "korean": "호랑이식탁",
+      "addr": "32-10 Seongsu-iro, Seongdong-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Korean · Seongsu-dong · 1F · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Horangi%20Siktak%201F%2C%2032-10%20Seongsu-iro%2C%20Seongdong-gu%2C%20Seoul"
+    },
+    {
+      "name": "Le Freak",
+      "korean": "르프리크",
+      "addr": "9-16 Yeonmujang 5-gil, Seongdong-gu, Seoul",
+      "kind": "eat",
+      "band": "4.7★",
+      "note": "Casual fusion / Western · Seongsu-dong · B1 · Bluestone Tower · rating cited secondhand",
+      "url": "https://www.google.com/maps/search/?api=1&query=Le%20Freak%20B1%2C%20Bluestone%20Tower%2C%209-16%20Yeonmujang%205-gil%2C%20Seongdong-gu%2C%20Seoul"
+    },
+    {
+      "name": "Atrio",
+      "korean": "",
+      "addr": "23-1 Yeouido-dong, Yeongdeungpo-gu, Seoul",
+      "kind": "eat",
+      "band": "4.8★",
+      "note": "Italian · Yeouido · 2F Conrad Seoul · 382 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Atrio%2023-1%20Yeouido-dong%2C%202F%20Conrad%20Seoul%2C%20Yeongdeungpo-gu%2C%20Seoul"
+    },
+    {
+      "name": "SUT - The Butcher's Edge",
+      "korean": "",
+      "addr": "23-1 Yeouido-dong, Yeongdeungpo-gu, Seoul",
+      "kind": "eat",
+      "band": "4.7★",
+      "note": "Steakhouse · Yeouido · 37F Conrad Seoul · 338 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=SUT%20-%20The%20Butcher%27s%20Edge%2023-1%20Yeouido-dong%2C%2037F%20Conrad%20Seoul%2C%20Yeongdeungpo-gu%2C%20Seoul"
+    },
+    {
+      "name": "10G",
+      "korean": "",
+      "addr": "10 Gukjegeumyung-ro, Yeongdeungpo-gu, Seoul",
+      "kind": "eat",
+      "band": "4.8★",
+      "note": "Cafe / coffee & bakery · Yeouido · Lobby Fl. · Conrad Seoul · 49 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=10G%2010%20Gukjegeumyung-ro%2C%20Lobby%20Fl.%2C%20Conrad%20Seoul%2C%20Yeongdeungpo-gu%2C%20Seoul"
+    },
+    {
+      "name": "Jungsik",
+      "korean": "정식당",
+      "addr": "11 Seolleung-ro 158-gil, Gangnam-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "Modern Korean fine dining (2 Michelin stars) · Cheongdam / Apgujeong · 506 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Jungsik%2011%20Seolleung-ro%20158-gil%2C%20Gangnam-gu%2C%20Seoul"
+    },
+    {
+      "name": "Wooga",
+      "korean": "",
+      "addr": "652 Gangnam-daero, Gangnam-gu, Seoul",
+      "kind": "eat",
+      "band": "4.6★",
+      "note": "Korean steakhouse · Apgujeong / Cheongdam · 11 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Wooga%20652%20Gangnam-daero%2C%20Gangnam-gu%2C%20Seoul"
+    },
+    {
+      "name": "Toc Toc",
+      "korean": "톡톡",
+      "addr": "33 Dosan-daero 51-gil, Gangnam-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "European-Korean fusion · Apgujeong / Cheongdam · 3F · 21 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Toc%20Toc%2033%20Dosan-daero%2051-gil%2C%203F%2C%20Gangnam-gu%2C%20Seoul"
+    },
+    {
+      "name": "New Delhi",
+      "korean": "",
+      "addr": "28 Nonhyeon-ro 176-gil, Gangnam-gu, Seoul",
+      "kind": "eat",
+      "band": "4.9★",
+      "note": "Indian · Apgujeong / Cheongdam · Sinsa-dong · 168 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=New%20Delhi%2028%20Nonhyeon-ro%20176-gil%2C%20Gangnam-gu%20%28Sinsa-dong%29%2C%20Seoul"
+    },
+    {
+      "name": "Sushi Seonsu",
+      "korean": "",
+      "addr": "6 Dosan-daero 45-gil, Gangnam-gu, Seoul",
+      "kind": "eat",
+      "band": "4.9★",
+      "note": "Japanese / sushi omakase · Sinsa / Apgujeong · Horim Art Center Bldg. · TripAdvisor rating",
+      "url": "https://www.google.com/maps/search/?api=1&query=Sushi%20Seonsu%206%20Dosan-daero%2045-gil%2C%20Horim%20Art%20Center%20Bldg.%2C%20Gangnam-gu%2C%20Seoul"
+    },
+    {
+      "name": "OPNNG",
+      "korean": "",
+      "addr": "22 Dosan-daero 34-gil, Gangnam-gu, Seoul",
+      "kind": "eat",
+      "band": "4.5★",
+      "note": "International fine dining / bar · Apgujeong / Sinsa · B1 · Michelin-listed",
+      "url": "https://www.google.com/maps/search/?api=1&query=OPNNG%2022%20Dosan-daero%2034-gil%2C%20B1%2C%20Gangnam-gu%2C%20Seoul"
+    }
+  ]
+}

@@ -58,11 +58,29 @@ coordinates:
 - Selecting a city, hotel, or place runs a two-stage camera descent (out-and-in
   arc, then a step down to block level).
 - The selected city also shows its chosen hotel and its places as secondary pins.
+- Places are coloured by what they are: **somewhere to eat is red, something to do
+  is green**, lodging keeps the app's purple. A city's hundred pins sort themselves
+  out before you read a single label.
+
+**Place cards.** Hovering a place pin — or tapping it, which is how a phone does the
+same thing — opens a small card over it: a picture, the rating or price band, what it
+is, and a link out to the listing. A photo you have pasted is used if there is one;
+otherwise the card draws its own from the place's name and kind, so a shortlist of
+forty restaurants reads as places rather than empty boxes. The same hover routes the
+place from where you would be, so the way there appears on the map and the plan
+builder prices it, without committing to anything.
 
 **Addresses become pins.** Type an address into a hotel or a place and it is
 geocoded through `/api/geocode` (Nominatim, proxied server-side and cached), so the
-pin, the camera, and the walking times all reflect the real location. The card says
-whether the lookup landed (`Pinned from address`) or not.
+pin, the camera, and the walking times all reflect the real location.
+
+A typed address rarely matches first time — a floor and a building name mean
+something to a person and nothing to a gazetteer — so the query is tried in widening
+steps: as written, then without the floor and building, then the road without the
+house number, then the district. The answer says which step matched, and the card
+says so too: `Pinned from address` when it found the door, `Approximate — matched
+the road, not the number` or `— only the district matched` when it did not. A pin
+that is a guess is never dressed up as one that is not.
 
 **Walking times** are haversine distance × 1.25 for street grid, at 4.8 km/h; over
 35 minutes it says "transit" instead. They appear once the selected hotel and the
@@ -150,6 +168,30 @@ Items stay attached to their city when you reorder the trip.
 Presets are plain JSON — see `public/presets/EXAMPLE.json` for the shape. List the
 ones you want offered in `public/presets/index.json`; an empty list is fine, and the
 builder just says there are none yet.
+
+**Place packs.** A pack is a ready-made *shortlist* rather than a ready-made day:
+somewhere's restaurants, its museums, its coffee. Nothing is ordered and nothing is
+scheduled — importing one pins every entry on the map, and you decide afterwards
+which of them a day is built out of. The city panel offers the packs that match the
+city by name, under *Places here*.
+
+Packs carry addresses rather than coordinates on purpose: an address is something
+you can check against a listing, and resolving it in the app means every pin comes
+from the same geocoder. The import queue is deliberately unhurried — Nominatim asks
+for no more than a request a second and the app is a guest there — and it reports as
+it goes: how many landed, how many were already pinned, and a list of the ones that
+only matched a road or a district, by name, to look at before you rely on them.
+
+Two ship with the app, both for Seoul: `seoul-restaurants-45` (47 places at 4.5★ and
+up) and `seoul-activities-45` (30 museums, temples, parks and experiences). They are
+generated from the CSVs in `data/` — edit a CSV and run:
+
+    python3 scripts/build-place-packs.py
+
+A handful of entries are not a door at all: a mountain, a river park, a warren of
+hanok alleys. Those are pinned where you would actually start — Dobongsan Station,
+the Ui-dong trailhead, Donhwamun-ro — and the note says which, so the map never
+claims more than it knows.
 
 **Time allotment.** Each stop carries how long you'll spend there (defaulted by kind
 — 75 min for a meal, 90 for a sight). The day planner lays that out on a clock with

@@ -23,12 +23,27 @@ export interface Hotel {
 /** What a pinned place is, which decides its map marker. */
 export type PlaceKind = 'eat' | 'do' | 'stay' | 'other';
 
-export const PLACE_KINDS: { id: PlaceKind; label: string; icon: string }[] = [
-  { id: 'eat', label: 'Eat', icon: 'ph-fork-knife' },
-  { id: 'do', label: 'Do', icon: 'ph-camera' },
-  { id: 'stay', label: 'Stay', icon: 'ph-bed' },
-  { id: 'other', label: 'Other', icon: 'ph-map-pin' },
+/**
+ * The colour a kind is drawn in, on the pin and on its card.
+ *
+ * The travelers picked these: somewhere to eat is red, something to do is
+ * green. Those two are the densest thing on a city's map and have to read
+ * apart at a glance. Purple stays the app's own accent and stands for lodging,
+ * so the kinds nobody has ruled on keep it.
+ *
+ * Red and green are also two of the leg colours, but a leg is a line and a
+ * place is a disc, so the two never have to be told apart from each other.
+ */
+export const PLACE_KINDS: { id: PlaceKind; label: string; icon: string; color: string }[] = [
+  { id: 'eat', label: 'Eat', icon: 'ph-fork-knife', color: '#f2545b' },
+  { id: 'do', label: 'Do', icon: 'ph-camera', color: '#37c46f' },
+  { id: 'stay', label: 'Stay', icon: 'ph-bed', color: '#9184d9' },
+  { id: 'other', label: 'Other', icon: 'ph-map-pin', color: '#9184d9' },
 ];
+
+export function placeKind(kind: PlaceKind): (typeof PLACE_KINDS)[number] {
+  return PLACE_KINDS.find((k) => k.id === kind) ?? PLACE_KINDS[3];
+}
 
 /**
  * Somewhere pinned near a city — a restaurant, a sight, anything. Plotting one
@@ -40,9 +55,17 @@ export interface Place {
   addr: string;
   note: string;
   kind: PlaceKind;
-  /** Free text: "$", "$$", "reservation", whatever is useful. */
+  /** Free text: "$", "$$", "4.7★", "reservation" — whatever is useful. */
   band: string;
+  /** Photo URLs, shown on the map card. Blank lines are ignored. */
+  images: string[];
+  /** Where to read more — a listing, a menu, a map link. */
+  url: string;
   ll: LatLng | null;
+}
+
+export function blankPlace(kind: PlaceKind = 'eat'): Place {
+  return { id: uid(), name: '', addr: '', note: '', kind, band: '', images: [], url: '', ll: null };
 }
 
 export interface City {

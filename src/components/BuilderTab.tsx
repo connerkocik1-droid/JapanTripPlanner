@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { City, DEFAULT_DWELL, PLACE_KINDS, Place } from '@/lib/data';
+import { City, DEFAULT_DWELL, PLACE_KINDS, Place, placeKind } from '@/lib/data';
 import { DayEntry } from '@/lib/derive';
 import { fmtUsd } from '@/lib/format';
 import { fmtSpan } from '@/lib/dayPlan';
@@ -301,9 +301,10 @@ function CustomPicker({
           return (
             <div key={p.id} style={card}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* Same colour the pin is drawn in, so the list and the map agree. */}
                 <i
-                  className={'ph ' + (PLACE_KINDS.find((k) => k.id === p.kind)?.icon ?? 'ph-map-pin')}
-                  style={{ fontSize: 14, color: 'var(--color-accent-300)' }}
+                  className={'ph ' + placeKind(p.kind).icon}
+                  style={{ fontSize: 14, color: placeKind(p.kind).color }}
                 />
                 <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500 }}>
                   {p.name || 'Unnamed place'}

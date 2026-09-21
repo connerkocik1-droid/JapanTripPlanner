@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckItem, City, DayItem, Hotel, LatLng, Place, TravelMode, Trip,
-  blankCity, blankHotel, newTrip, uid,
+  blankCity, blankHotel, blankPlace, newTrip, uid,
 } from './data';
 import { fmtClock } from './dayPlan';
 import { PersonId, isPersonId } from './people';
@@ -50,20 +50,28 @@ export function dayKey(cityId: string, n: number): string {
   return `${cityId}:${n}`;
 }
 
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
+
 /**
- * Saves written before a field existed are missing it. Fill the hotel gaps so
- * the inputs bound to them stay controlled and the map card has something
- * defined to read.
+ * Saves written before a field existed are missing it. Fill the hotel and place
+ * gaps so the inputs bound to them stay controlled and the map cards have
+ * something defined to read.
  */
 function fillCity(city: City): City {
-  if (!Array.isArray(city?.hotels)) return { ...city, hotels: [] };
   return {
     ...city,
-    hotels: city.hotels.map((h) => ({
+    hotels: (Array.isArray(city?.hotels) ? city.hotels : []).map((h) => ({
       ...blankHotel(),
       ...h,
       overview: typeof h?.overview === 'string' ? h.overview : '',
-      images: Array.isArray(h?.images) ? h.images.filter((s) => typeof s === 'string') : [],
+      images: strings(h?.images),
+    })),
+    places: (Array.isArray(city?.places) ? city.places : []).map((p) => ({
+      ...blankPlace(),
+      ...p,
+      images: strings(p?.images),
+      url: typeof p?.url === 'string' ? p.url : '',
     })),
   };
 }
@@ -115,6 +123,8 @@ export interface TripStore {
   addHotelSlot: (cityId: string) => void;
 
   addPlace: (cityId: string) => string;
+  /** Pin several at once, skipping names already pinned. Returns what was added. */
+  addPlaces: (cityId: string, places: Place[]) => Place[];
   setPlace: <K extends keyof Place>(cityId: string, placeId: string, key: K, val: Place[K]) => void;
   removePlace: (cityId: string, placeId: string) => void;
 
@@ -307,19 +317,47 @@ export function useTripStore(): TripStore {
 
   const addPlace = useCallback(
     (cityId: string) => {
-      const id = uid();
+      const place = blankPlace();
       edit(`${cityId}/places`, (d) =>
-        mapCity(d, cityId, (c) => ({
-          ...c,
-          places: [
-            ...c.places,
-            { id, name: '', addr: '', note: '', band: '', kind: 'eat' as const, ll: null },
-          ],
-        })),
+        mapCity(d, cityId, (c) => ({ ...c, places: [...c.places, place] })),
       );
-      return id;
+      return place.id;
     },
     [edit],
+  );
+
+  /**
+   * Pin a whole set at once — what importing a pack of places does.
+   *
+   * A place already pinned under the same name is left alone rather than
+   * doubled, so importing the same pack twice is harmless and a name the
+   * travelers have since edited keeps their version.
+   */
+  const addPlaces = useCallback(
+    (cityId: string, incoming: Place[]) => {
+      const city = doc.cities.find((c) => c.id === cityId);
+      if (!city) return [];
+      const taken = new Set(city.places.map((p) => p.name.trim().toLowerCase()));
+      const added: Place[] = [];
+      incoming.forEach((p) => {
+        const key = p.name.trim().toLowerCase();
+        if (!key || taken.has(key)) return;
+        taken.add(key);
+        added.push(p);
+      });
+      if (!added.length) return [];
+      // The set is handed back so the caller can geocode each one as its
+      // address resolves. Appending skips ids already there, because React may
+      // run the updater more than once for a single call.
+      edit(`${cityId}/places`, (d) =>
+        mapCity(d, cityId, (c) => {
+          const have = new Set(c.places.map((p) => p.id));
+          return { ...c, places: [...c.places, ...added.filter((p) => !have.has(p.id))] };
+        }),
+      );
+      return added;
+    },
+    [doc.cities, edit],
   );
 
   const setPlace = useCallback(
@@ -557,7 +595,7 @@ export function useTripStore(): TripStore {
       user, signIn, signOut, touch, setTrip,
       addCity, removeCity, moveCity, setCity,
       setHotel, addHotelSlot,
-      addPlace, setPlace, removePlace,
+      addPlace, addPlaces, setPlace, removePlace,
       addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck,
       applyPreset, applyPlan, addComment, toggleComment, removeComment, reset,
@@ -566,7 +604,7 @@ export function useTripStore(): TripStore {
       doc, ready, saveState, lastSaved, persisted, exportDoc, importDoc,
       user, signIn, signOut, touch, setTrip,
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
-      addPlace, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
+      addPlace, addPlaces, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck, applyPreset, applyPlan,
       addComment, toggleComment, removeComment, reset,
     ],

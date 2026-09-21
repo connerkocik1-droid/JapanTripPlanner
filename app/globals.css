@@ -372,6 +372,68 @@ input::placeholder { color: var(--color-neutral-600); }
 }
 .trip-pin .tp-dot.tp-hotel { transition: transform 0.14s ease, border-color 0.14s ease; }
 
+/* --- places ------------------------------------------------------------- */
+/* A place pin is drawn in its kind's colour, handed down as --pin: red for
+   somewhere to eat, the app's accent for everything else. The glyph sits on a
+   dark disc so a bright pin still reads on a pale basemap. */
+.trip-pin .tp-dot.tp-place {
+  background: var(--color-surface);
+  color: var(--pin, var(--color-accent-300));
+  border-color: var(--pin, var(--color-accent-700));
+  box-shadow: 0 2px 8px rgba(8, 9, 18, 0.5);
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+/* A stop in the planned day is filled instead of outlined: it is settled. */
+.trip-pin .tp-dot.tp-num.tp-place {
+  background: var(--pin, var(--color-accent-400));
+  color: #161826;
+  border-color: #161826;
+}
+.trip-pin.is-place:hover .tp-dot.tp-place,
+.trip-pin.is-place.is-open .tp-dot.tp-place {
+  transform: scale(1.16);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--pin, #9184d9) 55%, transparent);
+}
+.trip-pin.is-place.is-open .tp-name { color: #e9e9ed; }
+
+.place-card { border-color: color-mix(in srgb, var(--pin, #9184d9) 52%, var(--color-neutral-800)); }
+.place-card .pc-shot {
+  position: relative;
+  height: 76px;
+  margin: -9px -10px 9px;
+  overflow: hidden;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--color-neutral-900);
+}
+.place-card .pc-shot img,
+.place-card .pc-art {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  align-items: center;
+  justify-content: center;
+}
+.place-card .pc-art i { font-size: 26px; color: rgba(233, 233, 237, 0.42); }
+.place-card .pc-band {
+  position: absolute;
+  right: 7px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: rgba(16, 18, 32, 0.82);
+  color: var(--pin, var(--color-accent-200));
+  font-size: 9.5px;
+  font-weight: 600;
+}
+.place-card .hc-where i { font-size: 10px; color: var(--pin, var(--color-accent-300)); }
+.place-card .pc-note {
+  margin-top: 6px;
+  max-height: 72px;
+  overflow: hidden;
+}
+.place-card .pc-link { display: inline-block; margin-top: 8px; }
+
 /* Above the tint layers and the pins themselves (which run to 500), but still
    inside the map holder, so the header and the sheet stay on top. */
 .hotel-card {

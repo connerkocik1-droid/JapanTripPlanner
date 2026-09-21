@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { LatLng } from '@/lib/data';
-import { geocode, hitToLatLng } from '@/lib/geocode';
+import { GeocodeHit, geocode, hitToLatLng, isApprox, precisionNote } from '@/lib/geocode';
 
 export const label = { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const;
 
@@ -30,9 +30,16 @@ export const ghostBtn = {
 
 export type GeoState = 'idle' | 'looking' | 'found' | 'missing';
 
+/** What the address resolved to, and how exactly. */
+export interface GeoResult {
+  state: GeoState;
+  /** Set on 'found': what the geocoder actually matched. */
+  hit: GeocodeHit | null;
+}
+
 /** Resolves a typed address to coordinates so the pin and walk times are real. */
-export function useGeocodedAddress(addr: string, onResolved: (ll: LatLng) => void): GeoState {
-  const [status, setStatus] = useState<GeoState>('idle');
+export function useGeocodedAddress(addr: string, onResolved: (ll: LatLng) => void): GeoResult {
+  const [status, setStatus] = useState<GeoResult>({ state: 'idle', hit: null });
   const typed = useRef(addr);
   // Held in a ref: the caller passes a fresh closure every render, and putting
   // that in the dependency list would clear the debounce timer before it fires.
@@ -43,19 +50,19 @@ export function useGeocodedAddress(addr: string, onResolved: (ll: LatLng) => voi
     typed.current = addr;
     const q = addr.trim();
     if (q.length < 6) {
-      setStatus('idle');
+      setStatus({ state: 'idle', hit: null });
       return;
     }
     let live = true;
-    setStatus('looking');
+    setStatus({ state: 'looking', hit: null });
     const t = setTimeout(async () => {
       const hit = await geocode(q);
       if (!live) return;
       if (hit) {
         cb.current(hitToLatLng(hit));
-        setStatus('found');
+        setStatus({ state: 'found', hit });
       } else {
-        setStatus('missing');
+        setStatus({ state: 'missing', hit: null });
       }
     }, 700);
     return () => {
@@ -66,12 +73,22 @@ export function useGeocodedAddress(addr: string, onResolved: (ll: LatLng) => voi
   return status;
 }
 
-export function GeoStatus({ status }: { status: GeoState }) {
+export function GeoStatus({ status }: { status: GeoResult }) {
+  // A pin that only matched a road or a district is worth saying out loud:
+  // it looks exactly like an exact one on the map, and it is not one.
+  const vague = status.state === 'found' && status.hit && isApprox(status.hit);
   return (
-    <div className="mono" style={{ fontSize: 9, minHeight: 12, color: 'var(--color-neutral-600)' }}>
-      {status === 'looking' ? 'Locating…' : null}
-      {status === 'found' ? 'Pinned from address' : null}
-      {status === 'missing' ? 'No match — pin unchanged' : null}
+    <div
+      className="mono"
+      style={{ fontSize: 9, minHeight: 12, color: vague ? '#ffc46b' : 'var(--color-neutral-600)' }}
+    >
+      {status.state === 'looking' ? 'Locating…' : null}
+      {status.state === 'found'
+        ? vague && status.hit
+          ? 'Approximate — ' + precisionNote(status.hit)
+          : 'Pinned from address'
+        : null}
+      {status.state === 'missing' ? 'No match — pin unchanged' : null}
     </div>
   );
 }

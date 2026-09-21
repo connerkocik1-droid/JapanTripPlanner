@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { City, LatLng, MAX_NIGHTS, PLACE_KINDS, Place } from '@/lib/data';
+import { City, LatLng, MAX_NIGHTS, PLACE_KINDS, Place, placeKind } from '@/lib/data';
 import { fmtUsd, walkLabel } from '@/lib/format';
 import { CitySpend } from '@/lib/derive';
 import { isFlightLeg } from '@/lib/legKind';
 import { Touch } from '@/lib/tripState';
 import AirportRoutes from './AirportRoutes';
+import PlacePacks from './PlacePacks';
 import TouchMark, { touchStyle } from './TouchMark';
 import { GeoStatus, NumField, boxed, ghostBtn, label, useGeocodedAddress } from './fields';
 
@@ -18,6 +19,8 @@ export interface CityPanelProps {
   /** Switches to the Stay tab, where the lodging options live. */
   onOpenStay: () => void;
   onAddPlace: () => void;
+  /** Pin a ready-made list; returns the ones that were not already there. */
+  onAddPlaces: (places: Place[]) => Place[];
   onPlace: <K extends keyof Place>(placeId: string, key: K, val: Place[K]) => void;
   onRemovePlace: (placeId: string) => void;
   onZoom: (ll: LatLng, zoom: number) => void;
@@ -26,7 +29,7 @@ export interface CityPanelProps {
 
 export default function CityPanel({
   city, spend, travelers, onCity, onOpenStay,
-  onAddPlace, onPlace, onRemovePlace, onZoom, touch,
+  onAddPlace, onAddPlaces, onPlace, onRemovePlace, onZoom, touch,
 }: CityPanelProps) {
   const active = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
   const options = city.hotels.filter((h) => h.name.trim()).length;
@@ -235,6 +238,11 @@ export default function CityPanel({
       <button className="tap" onClick={onAddPlace} style={ghostBtn}>
         <i className="ph ph-plus" style={{ fontSize: 12 }} /> Add a place
       </button>
+      <PlacePacks
+        cityName={city.name}
+        onAdd={onAddPlaces}
+        onLocate={(placeId, ll) => onPlace(placeId, 'll', ll)}
+      />
 
       {/* Food slider */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 4px' }}>
@@ -312,6 +320,8 @@ function PlaceCard({
 }) {
   const status = useGeocodedAddress(place.addr, (ll) => onField('ll', ll));
   const walk = walkLabel(from, place.ll);
+  const kind = placeKind(place.kind);
+  const shot = place.images.find((src) => src.trim()) ?? '';
   return (
     <div style={{ ...boxed, padding: '4px 8px 8px', ...(touchStyle(touch) ?? {}) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -322,7 +332,7 @@ function PlaceCard({
           style={{
             flex: 'none', width: 58, height: 34, fontSize: 11, padding: '0 4px',
             borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-neutral-800)',
-            background: 'var(--color-bg)', color: 'var(--color-accent-200)',
+            background: 'var(--color-bg)', color: kind.color,
           }}
         >
           {PLACE_KINDS.map((k) => (
@@ -384,6 +394,52 @@ function PlaceCard({
         onChange={(e) => onField('note', e.target.value)}
         style={{ width: '100%', height: 32, fontSize: 11, color: 'var(--color-neutral-400)' }}
       />
+      {/* What the map card shows above the name. One photo is enough there. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {shot ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={shot}
+            alt=""
+            loading="lazy"
+            onError={(e) => {
+              e.currentTarget.style.visibility = 'hidden';
+            }}
+            style={{
+              flex: 'none', width: 30, height: 24, objectFit: 'cover',
+              borderRadius: 4, border: '1px solid var(--color-neutral-800)',
+            }}
+          />
+        ) : null}
+        <input
+          type="url"
+          value={place.images[0] ?? ''}
+          placeholder="Photo URL"
+          aria-label={`Photo for ${place.name || 'this place'}`}
+          onChange={(e) => onField('images', e.target.value.trim() ? [e.target.value] : [])}
+          style={{
+            flex: 1, minWidth: 0, height: 32, fontSize: 10.5,
+            fontFamily: 'var(--font-mono)', color: 'var(--color-neutral-400)',
+          }}
+        />
+        {place.url ? (
+          <a
+            className="mono tap"
+            href={place.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${place.name || 'this place'}`}
+            style={{
+              flex: 'none', display: 'flex', alignItems: 'center', height: 32, padding: '0 6px',
+              fontSize: 9, color: 'var(--color-accent-300)', textDecoration: 'none',
+            }}
+          >
+            Link ↗
+          </a>
+        ) : null}
+      </div>
+      {/* The walk time answers "is it near the hotel"; the geocoder's own note
+          answers "is the pin where the address says". Both can matter at once. */}
       {walk ? (
         <span
           className="mono"
@@ -392,9 +448,8 @@ function PlaceCard({
           <i className="ph ph-person-simple-walk" style={{ fontSize: 11 }} />
           {walk}
         </span>
-      ) : (
-        <GeoStatus status={status} />
-      )}
+      ) : null}
+      {!walk || status.state !== 'idle' ? <GeoStatus status={status} /> : null}
     </div>
   );
 }
