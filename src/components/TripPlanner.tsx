@@ -174,7 +174,9 @@ export default function TripPlanner() {
     ];
   }, [stops, dayEntry]);
 
-  const hops = useDayRoute(tab === 'days' || tab === 'build' ? routeStops : []);
+  // Routed whatever tab is open: the map is the focal point, so the day's
+  // metro and walking legs have to be on it even when nothing is overlaid.
+  const hops = useDayRoute(routeStops);
   const returnHop = useMemo(() => hops.find((h) => h.toId.startsWith('return:')) ?? null, [hops]);
 
   const legs = useMemo<MapLeg[]>(() => {
@@ -197,7 +199,6 @@ export default function TripPlanner() {
       }
       return out;
     }
-    if (tab !== 'days' && tab !== 'build') return [];
     return hops
       .map((h) => {
         const leg = h.toId.startsWith('return:') ? legOf(h) : legOf(h, h.to.mode);
@@ -205,7 +206,7 @@ export default function TripPlanner() {
         return { id: h.toId, kind: hopKind(leg.mode, leg.rail), geometry: leg.geometry };
       })
       .filter((l): l is MapLeg => !!l);
-  }, [hops, tab, draft, preview, backLeg]);
+  }, [hops, draft, preview, backLeg]);
 
   const dayCity = dayEntry?.city ?? null;
 

@@ -24,6 +24,16 @@ import { NextResponse } from 'next/server';
 const OSRM = process.env.OSRM_URL ?? 'https://routing.openstreetmap.de';
 const TRANSIT_URL = process.env.TRANSIT_URL ?? '';
 
+/**
+ * How long an upstream router gets before we give up on it. Both are public
+ * services that throttle, and a request with no deadline hangs the whole
+ * handler until the platform kills it — which loses the walking leg and the
+ * metro leg together, so the caller sees no route at all. A deadline turns
+ * that into the modelled estimate instead, which is always better than
+ * nothing.
+ */
+const UPSTREAM_MS = 4000;
+
 export const runtime = 'nodejs';
 
 export type Mode = 'walk' | 'bike' | 'transit';
@@ -149,7 +159,7 @@ async function osrm(from: Pt, to: Pt, mode: Mode): Promise<Leg | null> {
   const coords = `${from[1]},${from[0]};${to[1]},${to[0]}`;
   const url = `${OSRM}/${profile}/route/v1/driving/${coords}?overview=full&geometries=geojson`;
   try {
-    const res = await fetch(url, { cache: 'force-cache' });
+    const res = await fetch(url, { cache: 'force-cache', signal: AbortSignal.timeout(UPSTREAM_MS) });
     if (!res.ok) return null;
     const body = (await res.json()) as {
       code: string;
@@ -224,6 +234,7 @@ async function motis(from: Pt, to: Pt): Promise<Leg | null> {
     const res = await fetch(`${TRANSIT_URL}?${qs}`, {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
+      signal: AbortSignal.timeout(UPSTREAM_MS),
     });
     if (!res.ok) return null;
     const body = (await res.json()) as {
@@ -299,20 +310,27 @@ export async function POST(req: Request) {
       ? (body.modes.filter((m): m is Mode => m === 'walk' || m === 'bike' || m === 'transit'))
       : ['walk', 'transit'];
 
-  // Both options are fetched together so the UI can compare them side by side.
-  const legs = await Promise.all(
-    modes.map(async (mode) => {
-      if (mode === 'transit') {
-        const viaMotis = await motis(from, to);
-        if (viaMotis) return viaMotis;
-        const walk = await osrm(from, to, 'walk');
-        // Model the metro off the real walking distance when one is available.
-        const base = walk ?? straightLine(from, to, 'walk');
-        return modelTransit(from, to, base.meters);
-      }
-      return (await osrm(from, to, mode)) ?? straightLine(from, to, mode);
-    }),
-  );
+  const wantsTransit = modes.includes('transit');
+
+  // One walking route serves two purposes — the walking option itself, and the
+  // distance the metro estimate is modelled off — so it is only asked for once.
+  // Asking twice doubled the load on a router that throttles by IP.
+  const [walk, viaMotis, bike] = await Promise.all([
+    modes.includes('walk') || wantsTransit
+      ? osrm(from, to, 'walk').then((l) => l ?? straightLine(from, to, 'walk'))
+      : Promise.resolve(null),
+    wantsTransit ? motis(from, to) : Promise.resolve(null),
+    modes.includes('bike')
+      ? osrm(from, to, 'bike').then((l) => l ?? straightLine(from, to, 'bike'))
+      : Promise.resolve(null),
+  ]);
+
+  // Answered in the order asked for, and every mode asked for gets an answer.
+  const legs = modes.map((mode) => {
+    if (mode === 'bike') return bike ?? straightLine(from, to, 'bike');
+    if (mode === 'walk') return walk ?? straightLine(from, to, 'walk');
+    return viaMotis ?? modelTransit(from, to, (walk ?? straightLine(from, to, 'walk')).meters);
+  });
 
   return NextResponse.json({ legs });
 }
