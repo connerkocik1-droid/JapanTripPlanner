@@ -28,7 +28,18 @@ import TripSettings from './TripSettings';
 // MapLibre touches window on import — keep it off the server render.
 const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
 
-type Tab = 'map' | 'stay' | 'days' | 'build' | 'list' | 'notes';
+type Tab = 'map' | 'cities' | 'stay' | 'days' | 'build' | 'list' | 'notes';
+
+/** The tab strip, in order. The map is first and is the default view. */
+const TABS: [Tab, string, string][] = [
+  ['map', 'Map', 'ph-map-trifold'],
+  ['cities', 'Cities', 'ph-buildings'],
+  ['stay', 'Stay', 'ph-bed'],
+  ['days', 'Days', 'ph-calendar-blank'],
+  ['build', 'Build', 'ph-squares-four'],
+  ['list', 'Checklist', 'ph-check-square'],
+  ['notes', 'Notes', 'ph-chat-teardrop-text'],
+];
 
 const SEG_FILL: Record<string, string> = {
   Lodging: 'var(--color-accent-400)',
@@ -43,10 +54,6 @@ export default function TripPlanner() {
   const [tab, setTab] = useState<Tab>('map');
   const [cityId, setCityId] = useState<string | null>(null);
   const [day, setDay] = useState(1);
-  const [expanded, setExpanded] = useState(false);
-  const [snap, setSnap] = useState(0);
-  const [dragH, setDragH] = useState<number | null>(null);
-  const [dragging, setDragging] = useState(false);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [adding, setAdding] = useState(false);
   const [newCity, setNewCity] = useState('');
@@ -57,7 +64,7 @@ export default function TripPlanner() {
   const [fit, setFit] = useState<{ points: LatLng[]; nonce: number } | null>(null);
   const fitNonce = useRef(0);
   const shell = useRef<HTMLDivElement | null>(null);
-  const dragMoved = useRef(false);
+  const activeTab = useRef<HTMLButtonElement | null>(null);
   const focusNonce = useRef(0);
 
   const d = useMemo(() => derive(doc), [doc]);
@@ -80,14 +87,16 @@ export default function TripPlanner() {
     if (day > d.schedule.length) setDay(Math.max(1, d.schedule.length));
   }, [d.schedule.length, day]);
 
-  const snapPx = useCallback((i: number) => {
-    const h = shell.current?.clientHeight ?? 874;
-    // The peek has to clear the floating tab pill and the home indicator.
-    const peek = Math.min(268, Math.round(h * 0.3));
-    return [peek, Math.round(h * 0.58), Math.round(h * 0.9)][i];
-  }, []);
+  /**
+   * How much of the map's bottom edge is covered. Nothing sits over the map any
+   * more, so this is just the clearance for the plot-all pill.
+   */
+  const mapInset = tab === 'map' && d.cities.length > 1 ? 58 : 8;
 
-  const sheetH = dragH ?? (tab === 'map' ? snapPx(expanded ? snap : 0) : snapPx(2));
+  // The strip scrolls when the tabs outrun the width — keep the current one in view.
+  useEffect(() => {
+    activeTab.current?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }, [tab]);
 
   const zoomTo = useCallback((ll: LatLng, zoom: number) => {
     focusNonce.current += 1;
@@ -96,15 +105,25 @@ export default function TripPlanner() {
 
   const selectCity = useCallback(
     (id: string) => {
-      const same = id === cityId && expanded;
-      setCityId(id);
-      setExpanded(!same);
-      if (snap === 0) setSnap(1);
+      const same = id === cityId;
+      setCityId(same ? null : id);
+      if (same) {
+        setFocus(null);
+        return;
+      }
       const city = doc.cities.find((c) => c.id === id);
-      if (!same && city?.ll) zoomTo(city.ll, 11.5);
-      if (same) setFocus(null);
+      if (city?.ll) zoomTo(city.ll, 11.5);
     },
-    [cityId, expanded, snap, doc.cities, zoomTo],
+    [cityId, doc.cities, zoomTo],
+  );
+
+  /** Zooming from another tab only helps if the map is what you end up looking at. */
+  const showOnMap = useCallback(
+    (ll: LatLng, zoom: number) => {
+      setTab('map');
+      zoomTo(ll, zoom);
+    },
+    [zoomTo],
   );
 
   /** How many cities have an option made active — the Stay tab's tally. */
@@ -276,48 +295,6 @@ export default function TripPlanner() {
     [doc.cities],
   );
 
-  const onDragStart = (e: React.PointerEvent) => {
-    const startY = e.clientY;
-    const startH = sheetH;
-    setDragging(true);
-    setDragH(startH);
-    const move = (ev: PointerEvent) => {
-      setDragH(Math.min(snapPx(2), Math.max(150, startH - (ev.clientY - startY))));
-    };
-    const up = (ev: PointerEvent) => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      const h = Math.min(snapPx(2), Math.max(150, startH - (ev.clientY - startY)));
-      let best = 0;
-      let dist = Infinity;
-      [0, 1, 2].forEach((i) => {
-        const dd = Math.abs(snapPx(i) - h);
-        if (dd < dist) {
-          dist = dd;
-          best = i;
-        }
-      });
-      const moved = Math.abs(ev.clientY - startY) > 6;
-      dragMoved.current = moved;
-      setDragging(false);
-      setDragH(null);
-      setSnap(best);
-      if (moved) setExpanded(best > 0);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
-
-  const toggleSheet = () => {
-    // A drag of more than 6px already changed the snap — don't also toggle.
-    if (dragMoved.current) {
-      dragMoved.current = false;
-      return;
-    }
-    setSnap((s) => (s === 0 ? 1 : 0));
-    setExpanded(snap === 0);
-  };
-
   const submitCity = async () => {
     const name = newCity.trim();
     if (!name) return;
@@ -329,8 +306,6 @@ export default function TripPlanner() {
     setNewCity('');
     setAdding(false);
     setCityId(id);
-    setExpanded(true);
-    if (snap === 0) setSnap(1);
     if (hit) zoomTo(hitToLatLng(hit), 11.5);
   };
 
@@ -356,7 +331,6 @@ export default function TripPlanner() {
   if (!store.user) return <Login onPick={store.signIn} />;
 
   const me = PEOPLE[store.user];
-  const open = doc.cities.find((c) => c.id === cityId && expanded) ?? null;
   const totalWithItems = d.totals.grand + d.totals.activities;
   const planned = doc.trip.planned;
   const segments = (['Lodging', 'Transit', 'Food'] as const).map((k) => {
@@ -365,25 +339,19 @@ export default function TripPlanner() {
   });
 
   return (
-    <div ref={shell} style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: 'var(--color-bg)' }}>
-      <TripMap
-        pins={pins}
-        route={route}
-        legs={legs}
-        fit={fit}
-        sheetPx={sheetH}
-        focus={focus}
-        onSelect={selectCity}
-      />
-
-      {/* Header */}
+    <div
+      ref={shell}
+      style={{
+        position: 'fixed', inset: 0, overflow: 'hidden', background: 'var(--color-bg)',
+        display: 'flex', flexDirection: 'column',
+      }}
+    >
+      {/* Header — opaque and in the flow, so nothing sits over the map. */}
       <div
         style={{
-          position: 'absolute', top: 0, left: 0, right: 0, zIndex: 6,
-          padding: 'calc(var(--safe-top) + 14px) calc(var(--safe-right) + 16px) 14px calc(var(--safe-left) + 16px)',
-          pointerEvents: 'none',
-          background:
-            'linear-gradient(180deg, rgba(16,18,32,.94) 0%, rgba(16,18,32,.72) 62%, transparent 100%)',
+          flex: 'none', position: 'relative', zIndex: 9, background: 'var(--color-bg)',
+          borderBottom: '1px solid var(--color-neutral-900)',
+          padding: 'calc(var(--safe-top) + 12px) calc(var(--safe-right) + 16px) 0 calc(var(--safe-left) + 16px)',
         }}
       >
         <div
@@ -422,7 +390,10 @@ export default function TripPlanner() {
         >
           <button
             className="tap"
-            onClick={() => setSettings((v) => !v)}
+            onClick={() => {
+              setSettings((v) => !v);
+              setTab('cities');
+            }}
             style={{
               flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none',
               padding: 0, color: 'inherit', cursor: 'pointer',
@@ -475,129 +446,115 @@ export default function TripPlanner() {
           </div>
         ) : null}
 
-        {/* Total budget */}
-        <div
+        {/* The running total; the breakdown it opens lives on the Cities tab. */}
+        <button
+          className="tap"
+          onClick={() => setTab('cities')}
           style={{
-            marginTop: 12, padding: '11px 13px', pointerEvents: 'auto',
-            background: 'rgba(35,37,50,.92)', border: '1px solid var(--color-neutral-800)',
-            borderRadius: 'var(--radius-md)',
+            width: '100%', marginTop: 9, padding: 0, border: 'none', background: 'none',
+            color: 'inherit', cursor: 'pointer', textAlign: 'left',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)' }}>Total budget</div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span key={d.totals.grand} className="num" style={{ fontSize: 19, fontWeight: 600, animation: 'countUp .28s ease both' }}>
+              {fmtUsd(d.totals.grand)}
+            </span>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
+              {fmtUsd(d.totals.grand / Math.max(1, doc.trip.travelers))} each
+            </span>
+            <span style={{ flex: 1 }} />
+            <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
               {planned
                 ? totalWithItems > planned
                   ? fmtUsd(totalWithItems - planned) + ' over plan'
-                  : fmtUsd(planned - totalWithItems) + ' left of ' + fmtUsd(planned)
+                  : fmtUsd(planned - totalWithItems) + ' left'
                 : 'no budget set'}
-            </div>
-          </div>
-          <div
-            key={d.totals.grand}
-            className="num"
-            style={{ fontSize: 25, fontWeight: 600, animation: 'countUp .28s ease both' }}
-          >
-            {fmtUsd(d.totals.grand)}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>
-            {fmtUsd(d.totals.grand / Math.max(1, doc.trip.travelers))} each
-            {d.totals.activities ? ` · plus ${fmtUsd(d.totals.activities)} of planned items` : ''}
+            </span>
           </div>
           <div
             style={{
-              display: 'flex', height: 5, borderRadius: 9999, overflow: 'hidden',
-              background: 'var(--color-neutral-900)', margin: '9px 0 7px',
+              display: 'flex', height: 4, borderRadius: 9999, overflow: 'hidden',
+              background: 'var(--color-neutral-900)', marginTop: 7,
             }}
           >
             {segments.map((s) => (
               <div key={s.label} style={{ width: s.pct, background: SEG_FILL[s.label] }} />
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            {segments.map((s) => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ width: 7, height: 7, borderRadius: 2, background: SEG_FILL[s.label] }} />
-                <span className="mono" style={{ fontSize: 10, color: 'var(--color-neutral-500)' }}>
-                  {s.label} {s.amount}
-                </span>
-              </div>
-            ))}
-          </div>
+        </button>
+
+        <div className="tab-strip" role="tablist" aria-label="Sections">
+          {TABS.map(([id, labelText, icon]) => {
+            const on = tab === id;
+            return (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={on}
+                ref={on ? activeTab : undefined}
+                className={'tab-btn tap' + (on ? ' is-on' : '')}
+                onClick={() => {
+                  setTab(id);
+                  if (id !== 'map') setFocus(null);
+                }}
+              >
+                <i className={'ph ' + icon} />
+                {labelText}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Bottom sheet */}
-      <div
-        style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 8,
-          height: sheetH, display: 'flex', flexDirection: 'column',
-          background: 'rgba(27,30,46,.97)', backdropFilter: 'blur(16px)',
-          borderTop: '1px solid var(--color-neutral-700)', borderRadius: '14px 14px 0 0',
-          boxShadow: '0 -12px 40px rgba(0,0,0,.5)',
-          transition: dragging ? 'none' : 'height .34s cubic-bezier(.22,1.1,.3,1)',
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-            background:
-              'linear-gradient(90deg, transparent, var(--color-accent-700) 22%, var(--color-accent-500) 50%, var(--color-accent-700) 78%, transparent)',
-          }}
+      {/* Everything below the header is the map, until a tab covers it. */}
+      <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+        <TripMap
+          pins={pins}
+          route={route}
+          legs={legs}
+          fit={fit}
+          sheetPx={mapInset}
+          focus={focus}
+          onSelect={selectCity}
         />
-        <div
-          onPointerDown={onDragStart}
-          onClick={toggleSheet}
-          style={{ cursor: 'grab', touchAction: 'none', padding: '11px 16px 10px', flex: 'none' }}
-        >
-          <div
-            style={{
-              width: 40, height: 5, borderRadius: 9999, margin: '0 auto 10px',
-              background: dragging ? 'var(--color-accent-400)' : 'var(--color-neutral-700)',
-            }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <div style={{ fontSize: 14, fontWeight: 500 }}>
-              {tab === 'map'
-                ? 'Route'
-                : tab === 'stay'
-                  ? 'Stay'
-                  : tab === 'days'
-                    ? 'Days'
-                    : tab === 'build'
-                      ? 'Itinerary builder'
-                      : tab === 'list'
-                        ? 'Checklist'
-                        : 'Notes'}
-            </div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
-              {tab === 'map'
-                ? d.cities.length
-                  ? `${d.cities.length} ${d.cities.length === 1 ? 'city' : 'cities'}`
-                  : 'add your first city'
-                : tab === 'stay'
-                  ? d.cities.length
-                    ? `${stayPicked} of ${d.cities.length} chosen`
-                    : 'no cities yet'
-                  : tab === 'days' || tab === 'build'
-                    ? d.schedule.length
-                      ? `Day ${day} of ${d.schedule.length}`
-                      : 'no days yet'
-                    : tab === 'list'
-                      ? `${d.checkedCount}/${doc.checklist.length}`
-                      : `${d.openNotes} open`}
-            </div>
-          </div>
-        </div>
 
-        <div
-          className="scroll-pane"
-          style={{
-            flex: 1,
-            padding: '0 calc(var(--safe-right) + 11px) calc(var(--safe-bottom) + 108px) calc(var(--safe-left) + 11px)',
-          }}
-        >
-          {tab === 'map' ? (
+        {tab === 'map' && d.cities.length === 0 ? (
+          <div className="map-empty">
+            <div style={{ fontSize: 14, fontWeight: 500 }}>Nothing planned yet</div>
+            <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', margin: '6px 0 12px', lineHeight: 1.5 }}>
+              Add a city and it gets pinned here. Then fill in where you&rsquo;re staying,
+              how you&rsquo;re getting there and what you&rsquo;ll do each day.
+            </div>
+            <button
+              className="tap"
+              onClick={() => setTab('cities')}
+              style={{
+                minHeight: 40, padding: '0 16px', borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--color-accent-500)', background: 'transparent',
+                color: 'var(--color-accent-200)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+              }}
+            >
+              Add a city
+            </button>
+          </div>
+        ) : null}
+
+        {tab === 'map' && d.cities.length > 1 ? (
+          <button className="map-toggle tap" onClick={() => setPlotAll((v) => !v)}>
+            <i className={plotAll ? 'ph-fill ph-map-pin' : 'ph ph-map-pin'} />
+            {plotAll ? 'Every place' : 'Open city only'}
+          </button>
+        ) : null}
+
+        {tab !== 'map' ? (
+          <div
+            className="scroll-pane"
+            style={{
+              position: 'absolute', inset: 0, zIndex: 8, background: 'var(--color-bg)',
+              padding: '11px calc(var(--safe-right) + 11px) calc(var(--safe-bottom) + 28px) calc(var(--safe-left) + 11px)',
+            }}
+          >
+{tab === 'cities' ? (
             <>
               {settings ? (
                 <TripSettings
@@ -612,22 +569,56 @@ export default function TripPlanner() {
                 />
               ) : null}
 
-              {d.cities.length > 1 ? (
-                <button
-                  className="tap"
-                  onClick={() => setPlotAll((v) => !v)}
+              {/* Total budget */}
+              <div
+                style={{
+                  marginTop: 12, padding: '11px 13px', pointerEvents: 'auto',
+                  background: 'rgba(35,37,50,.92)', border: '1px solid var(--color-neutral-800)',
+                  borderRadius: 'var(--radius-md)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)' }}>Total budget</div>
+                  <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
+                    {planned
+                      ? totalWithItems > planned
+                        ? fmtUsd(totalWithItems - planned) + ' over plan'
+                        : fmtUsd(planned - totalWithItems) + ' left of ' + fmtUsd(planned)
+                      : 'no budget set'}
+                  </div>
+                </div>
+                <div
+                  key={d.totals.grand}
+                  className="num"
+                  style={{ fontSize: 25, fontWeight: 600, animation: 'countUp .28s ease both' }}
+                >
+                  {fmtUsd(d.totals.grand)}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>
+                  {fmtUsd(d.totals.grand / Math.max(1, doc.trip.travelers))} each
+                  {d.totals.activities ? ` · plus ${fmtUsd(d.totals.activities)} of planned items` : ''}
+                </div>
+                <div
                   style={{
-                    width: '100%', minHeight: 36, marginBottom: 8, borderRadius: 9999,
-                    border: '1px solid var(--color-neutral-800)', background: 'transparent',
-                    color: plotAll ? 'var(--color-accent-200)' : 'var(--color-neutral-500)',
-                    fontSize: 11.5, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    display: 'flex', height: 5, borderRadius: 9999, overflow: 'hidden',
+                    background: 'var(--color-neutral-900)', margin: '9px 0 7px',
                   }}
                 >
-                  <i className={plotAll ? 'ph-fill ph-map-pin' : 'ph ph-map-pin'} style={{ fontSize: 12 }} />
-                  {plotAll ? 'Showing every place on the map' : 'Showing only the open city'}
-                </button>
-              ) : null}
+                  {segments.map((s) => (
+                    <div key={s.label} style={{ width: s.pct, background: SEG_FILL[s.label] }} />
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  {segments.map((s) => (
+                    <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: 2, background: SEG_FILL[s.label] }} />
+                      <span className="mono" style={{ fontSize: 10, color: 'var(--color-neutral-500)' }}>
+                        {s.label} {s.amount}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {d.cities.length === 0 && !adding ? (
                 <div
@@ -649,7 +640,7 @@ export default function TripPlanner() {
                   key={c.id}
                   city={c}
                   index={i}
-                  open={open?.id === c.id}
+                  open={cityId === c.id}
                   start={doc.trip.start}
                   startDay={d.span[c.id].start}
                   total={d.spend[c.id].total}
@@ -668,7 +659,7 @@ export default function TripPlanner() {
                     onAddPlace={() => store.addPlace(c.id)}
                     onPlace={(pid, key, val) => store.setPlace(c.id, pid, key, val)}
                     onRemovePlace={(pid) => store.removePlace(c.id, pid)}
-                    onZoom={zoomTo}
+                    onZoom={showOnMap}
                     touch={(suffix) => store.touch(`${c.id}/${suffix}`)}
                   />
                 </CityRow>
@@ -745,13 +736,13 @@ export default function TripPlanner() {
             </>
           ) : null}
 
-          {tab === 'stay' ? (
+{tab === 'stay' ? (
             <StayTab
               cities={doc.cities}
               onSetActive={(cid, hid) => store.setCity(cid, 'hotelSel', hid)}
               onHotel={(cid, hid, key, val) => store.setHotel(cid, hid, key, val)}
               onAddHotel={(cid) => store.addHotelSlot(cid)}
-              onZoom={zoomTo}
+              onZoom={showOnMap}
               touch={store.touch}
             />
           ) : null}
@@ -775,8 +766,11 @@ export default function TripPlanner() {
               onToggleItem={store.toggleDayItem}
               onRemoveItem={store.removeDayItem}
               onMoveItem={store.moveDayItem}
-              onZoomDay={() => zoomToPoints(stops.map((s) => s.ll))}
-              onZoomStop={(ll) => zoomTo(ll, 16.5)}
+              onZoomDay={() => {
+                setTab('map');
+                zoomToPoints(stops.map((s) => s.ll));
+              }}
+              onZoomStop={(ll) => showOnMap(ll, 16.5)}
             />
           ) : null}
 
@@ -790,7 +784,7 @@ export default function TripPlanner() {
               onApplyPreset={applyPreset}
               onAddStop={addStopFromPlace}
               onSetFare={(f) => dayCity && store.setCity(dayCity.id, 'metroFare', f)}
-              onZoom={(ll) => zoomTo(ll, 16)}
+              onZoom={(ll) => showOnMap(ll, 16)}
             />
           ) : null}
 
@@ -815,52 +809,8 @@ export default function TripPlanner() {
               onRemove={store.removeComment}
             />
           ) : null}
-        </div>
-      </div>
-
-      {/* Tab pill */}
-      <div
-        style={{
-          position: 'absolute', bottom: 'calc(var(--safe-bottom) + 14px)',
-          left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 24px)',
-          zIndex: 12, display: 'flex', gap: 2, padding: 3, borderRadius: 9999,
-          background: 'rgba(35,37,50,.94)', border: '1px solid var(--color-neutral-800)',
-          backdropFilter: 'blur(12px)',
-          // Six tabs overflow a narrow phone — the row scrolls rather than wraps.
-          overflowX: 'auto',
-        }}
-      >
-        {([
-          ['map', 'Map', 'ph-map-trifold'],
-          ['stay', 'Stay', 'ph-bed'],
-          ['days', 'Days', 'ph-calendar-blank'],
-          ['build', 'Build', 'ph-squares-four'],
-          ['list', 'Checklist', 'ph-check-square'],
-          ['notes', 'Notes', 'ph-chat-teardrop-text'],
-        ] as [Tab, string, string][]).map(([id, labelText, icon]) => {
-          const on = tab === id;
-          return (
-            <button
-              key={id}
-              className="tap"
-              onClick={() => {
-                setTab(id);
-                if (id !== 'map') setFocus(null);
-              }}
-              style={{
-                flex: 'none', whiteSpace: 'nowrap',
-                minHeight: 44, padding: '0 10px', borderRadius: 9999, border: 'none',
-                background: on ? 'var(--color-accent-800)' : 'transparent',
-                color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-400)',
-                fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 5,
-              }}
-            >
-              <i className={'ph ' + icon} style={{ fontSize: 14 }} />
-              {labelText}
-            </button>
-          );
-        })}
+          </div>
+        ) : null}
       </div>
 
       <PrintSheet d={d} doc={doc} />
