@@ -8,7 +8,8 @@ import {
 import { fmtClock } from './dayPlan';
 import { PersonId, isPersonId } from './people';
 import { Preset, dwellFor, stopToPlace } from './presets';
-import { downloadDoc, loadDoc, requestPersistence, saveDoc } from './storage';
+import { adoptRev, currentRev, downloadDoc, loadDoc, requestPersistence, saveDoc } from './storage';
+import { ensureCode, pullTrip, pushTrip, shareLink, syncConfigured } from './remote';
 
 export interface Touch {
   by: PersonId;
@@ -41,6 +42,15 @@ const USER_KEY = 'trip-planner:user';
 
 /** What the save indicator shows. */
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+/**
+ * How the shared copy is doing. 'off' means this build has nowhere to sync to,
+ * which is the local-only app exactly as it was.
+ */
+export type SyncState = 'off' | 'syncing' | 'synced' | 'error';
+
+/** How often to look for an edit made on the other device, while on screen. */
+const PULL_EVERY_MS = 20_000;
 
 export function emptyDoc(): TripDoc {
   return { trip: newTrip(), cities: [], days: {}, checklist: [], comments: [], touches: {} };
@@ -103,6 +113,10 @@ export interface TripStore {
   ready: boolean;
   saveState: SaveState;
   lastSaved: number | null;
+  /** How the shared copy is doing; 'off' when this build has nowhere to sync. */
+  syncState: SyncState;
+  /** The link that puts another device on this trip, or '' when there is none. */
+  deviceLink: string;
   /** True when the browser promised not to evict this origin's storage. */
   persisted: boolean;
   exportDoc: () => void;
@@ -157,6 +171,32 @@ export function useTripStore(): TripStore {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [lastSaved, setLastSaved] = useState<number | null>(null);
   const [persisted, setPersisted] = useState(false);
+  const [code, setCode] = useState<string | null>(null);
+  const [syncState, setSyncState] = useState<SyncState>('off');
+
+  const codeRef = useRef<string | null>(null);
+  codeRef.current = code;
+
+  /**
+   * The plan as the shared copy last had it, so an edit that only arrived from
+   * the other device is not sent straight back. Without this the two devices
+   * would answer each other's pulls forever.
+   */
+  const shared = useRef<string | null>(null);
+
+  /** The plan as it stands, for the retry that runs outside the save path. */
+  const latest = useRef<TripDoc>(doc);
+  latest.current = doc;
+
+  /** Take the shared copy: adopt its revision, show it, and save it here. */
+  const adopt = useCallback((remoteDoc: unknown, remoteRev: number) => {
+    adoptRev(remoteRev);
+    const next = normalize(remoteDoc);
+    shared.current = JSON.stringify(next);
+    setDoc(next);
+    void saveDoc(next);
+    return next;
+  }, []);
 
   // Read after mount so the server and first client render agree.
   useEffect(() => {
@@ -171,13 +211,55 @@ export function useTripStore(): TripStore {
       } catch {
         /* storage blocked — the login screen just shows every time */
       }
+
+      // Join the shared copy, if this build has one and this device knows the
+      // trip. A shared copy that is behind what is on this device is left for
+      // the next save to bring up to date.
+      const c = ensureCode();
+      if (live && c) {
+        setCode(c);
+        setSyncState('syncing');
+        const remote = await pullTrip(c);
+        if (live) {
+          if (remote && remote.rev > currentRev()) adopt(remote.doc, remote.rev);
+          setSyncState(remote === null && !syncConfigured() ? 'off' : 'synced');
+        }
+      }
+
+      if (!live) return;
       setReady(true);
       setPersisted(await requestPersistence());
     })();
     return () => {
       live = false;
     };
-  }, []);
+  }, [adopt]);
+
+  /**
+   * Offer this revision to the shared copy.
+   *
+   * An edit that only came from the other device is skipped, and a revision
+   * that loses to a newer one already there is dropped in favour of it, so the
+   * two devices settle instead of overwriting each other in turn.
+   */
+  const send = useCallback(
+    async (d: TripDoc, rev: number) => {
+      const c = codeRef.current;
+      if (!c) return;
+      const body = JSON.stringify(d);
+      if (body === shared.current) return; // nothing of ours to send
+      setSyncState('syncing');
+      const res = await pushTrip(c, d, rev);
+      if (!res) {
+        setSyncState('error');
+        return;
+      }
+      if (res.accepted) shared.current = body;
+      else if (res.remote.rev > rev) adopt(res.remote.doc, res.remote.rev);
+      setSyncState('synced');
+    },
+    [adopt],
+  );
 
   // Writes are debounced: typing a hotel name shouldn't hit the disk per key.
   const pending = useRef<TripDoc | null>(null);
@@ -186,15 +268,16 @@ export function useTripStore(): TripStore {
     pending.current = doc;
     setSaveState('saving');
     const t = setTimeout(async () => {
-      const ok = await saveDoc(doc);
+      const { ok, rev } = await saveDoc(doc);
       if (pending.current !== doc) return; // a newer edit is already queued
       // Landed, so there is nothing for the unload flush to rescue.
       if (ok) pending.current = null;
       setSaveState(ok ? 'saved' : 'error');
       if (ok) setLastSaved(Date.now());
+      if (ok) void send(doc, rev);
     }, 400);
     return () => clearTimeout(t);
-  }, [doc, ready]);
+  }, [doc, ready, send]);
 
   // A save may still be queued when the app is backgrounded or closed. Only
   // the localStorage half of it is sure to land — the IndexedDB write is
@@ -216,6 +299,34 @@ export function useTripStore(): TripStore {
       document.removeEventListener('visibilitychange', onHidden);
     };
   }, []);
+
+  // Look for an edit made on the other device. Only while the app is on
+  // screen: a backgrounded phone has nobody to show the change to.
+  useEffect(() => {
+    if (!ready || !code) return;
+    let live = true;
+    const look = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const remote = await pullTrip(code);
+      if (!live) return;
+      if (remote && remote.rev > currentRev()) {
+        adopt(remote.doc, remote.rev);
+        return;
+      }
+      // An edit made with no signal never reached the shared copy, and without
+      // this it would wait for the next edit to carry it. `send` does nothing
+      // when there is nothing of ours outstanding.
+      void send(latest.current, currentRev());
+    };
+    const id = setInterval(look, PULL_EVERY_MS);
+    // Coming back to the app is the moment you most want to be up to date.
+    document.addEventListener('visibilitychange', look);
+    return () => {
+      live = false;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', look);
+    };
+  }, [ready, code, adopt, send]);
 
   const signIn = useCallback((id: PersonId) => {
     setUser(id);
@@ -600,9 +711,12 @@ export function useTripStore(): TripStore {
 
   const reset = useCallback(() => setDoc(emptyDoc()), []);
 
+  const deviceLink = useMemo(() => (code ? shareLink(code) : ''), [code]);
+
   return useMemo(
     () => ({
-      doc, ready, saveState, lastSaved, persisted, exportDoc, importDoc,
+      doc, ready, saveState, lastSaved, persisted, syncState, deviceLink,
+      exportDoc, importDoc,
       user, signIn, signOut, touch, setTrip,
       addCity, removeCity, moveCity, setCity,
       setHotel, addHotelSlot,
@@ -612,7 +726,8 @@ export function useTripStore(): TripStore {
       applyPreset, applyPlan, addComment, toggleComment, removeComment, reset,
     }),
     [
-      doc, ready, saveState, lastSaved, persisted, exportDoc, importDoc,
+      doc, ready, saveState, lastSaved, persisted, syncState, deviceLink,
+      exportDoc, importDoc,
       user, signIn, signOut, touch, setTrip,
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
       addPlace, addPlaces, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
