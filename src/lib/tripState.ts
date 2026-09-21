@@ -8,8 +8,15 @@ import {
 import { fmtClock } from './dayPlan';
 import { PersonId, isPersonId } from './people';
 import { Preset, dwellFor, stopToPlace } from './presets';
-import { adoptRev, currentRev, downloadDoc, loadDoc, requestPersistence, saveDoc } from './storage';
-import { ensureCode, pullTrip, pushTrip, shareLink, syncConfigured } from './remote';
+import {
+  adoptRev, currentRev, downloadDoc, dropDoc, loadDoc, migrateLegacyTrip,
+  requestPersistence, resetRev, saveDoc,
+} from './storage';
+import { joinTrip, pullTrip, pushTrip, setJoinCode, syncConfigured } from './remote';
+import {
+  TripRef, activeCode, codeFromLink, forgetTrip, knownTrips, newCode,
+  rememberTrip, setActiveCode, shareLink,
+} from './trips';
 
 export interface Touch {
   by: PersonId;
@@ -116,7 +123,9 @@ export interface PlanCommit {
 
 export interface TripStore {
   doc: TripDoc;
-  /** Hydrated from storage — false during the first (server-matching) render. */
+  /** Storage has been read, so which screen to show is known. */
+  booted: boolean;
+  /** The chosen trip's plan is loaded. False while the picker is up. */
   ready: boolean;
   saveState: SaveState;
   lastSaved: number | null;
@@ -131,6 +140,25 @@ export interface TripStore {
   user: PersonId | null;
   signIn: (id: PersonId) => void;
   signOut: () => void;
+
+  /** The trip being planned, or null while the picker is up. */
+  code: string | null;
+  /** The trips this device can offer, for the picker. */
+  trips: TripRef[];
+  /** True while the trip list is still being gathered. */
+  tripsLoading: boolean;
+  openTrip: (code: string) => void;
+  createTrip: () => void;
+  /** Open a trip this device has never seen, by its short code. */
+  joinByCode: (short: string) => Promise<boolean>;
+  /** The short code for the open trip, or '' when it has none. */
+  joinCode: string;
+  /** Set the short code others type to join. Returns why, when it will not. */
+  setTripCode: (short: string) => Promise<{ ok: boolean; message: string }>;
+  /** Put the picker back up without touching the trip. */
+  closeTrip: () => void;
+  /** Take a trip off this device. The shared copy is untouched. */
+  removeTrip: (code: string) => void;
   touch: (path: string) => Touch | undefined;
 
   setTrip: <K extends keyof Trip>(key: K, val: Trip[K]) => void;
@@ -180,6 +208,10 @@ export function useTripStore(): TripStore {
   const [persisted, setPersisted] = useState(false);
   const [code, setCode] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<SyncState>('off');
+  const [booted, setBooted] = useState(false);
+  const [trips, setTrips] = useState<TripRef[]>([]);
+  const [tripsLoading, setTripsLoading] = useState(true);
+  const [joinCode, setJoinCodeState] = useState('');
 
   const codeRef = useRef<string | null>(null);
   codeRef.current = code;
@@ -201,46 +233,74 @@ export function useTripStore(): TripStore {
     const next = normalize(remoteDoc);
     shared.current = JSON.stringify(next);
     setDoc(next);
-    void saveDoc(next);
+    const c = codeRef.current;
+    if (c) void saveDoc(c, next);
     return next;
   }, []);
 
-  // Read after mount so the server and first client render agree.
-  useEffect(() => {
-    let live = true;
-    (async () => {
-      const stored = await loadDoc<unknown>();
-      if (!live) return;
-      if (stored) setDoc(normalize(stored));
-      try {
-        const saved = window.localStorage.getItem(USER_KEY);
-        if (isPersonId(saved)) setUser(saved);
-      } catch {
-        /* storage blocked — the login screen just shows every time */
-      }
+  /**
+   * Open a trip: its own copy on this device first, then whatever the shared
+   * copy has if that is newer. Called from the picker, and once on load for
+   * the trip this device was already on.
+   */
+  const openTrip = useCallback(
+    (c: string) => {
+      setActiveCode(c);
+      setCode(c);
+      setReady(false);
+      resetRev();
+      shared.current = null;
+      (async () => {
+        // A plan written before the picker existed belongs to this trip, and
+        // is the one thing an upgrade must not lose.
+        await migrateLegacyTrip(c);
+        const stored = await loadDoc<unknown>(c);
+        const local = stored ? normalize(stored) : emptyDoc();
+        setDoc(local);
+        rememberTrip(c, local.trip.name);
+        setTrips(knownTrips());
 
-      // Join the shared copy, if this build has one and this device knows the
-      // trip. A shared copy that is behind what is on this device is left for
-      // the next save to bring up to date.
-      const c = ensureCode();
-      if (live && c) {
-        setCode(c);
         setSyncState('syncing');
         const remote = await pullTrip(c);
-        if (live) {
-          if (remote && remote.rev > currentRev()) adopt(remote.doc, remote.rev);
-          setSyncState(remote === null && !syncConfigured() ? 'off' : 'synced');
-        }
-      }
+        if (remote && remote.rev > currentRev()) adopt(remote.doc, remote.rev);
+        setJoinCodeState(remote?.joinCode ?? '');
+        setSyncState(!syncConfigured() ? 'off' : remote === null ? 'error' : 'synced');
+        setReady(true);
+        setPersisted(await requestPersistence());
+      })();
+    },
+    [adopt],
+  );
 
-      if (!live) return;
-      setReady(true);
-      setPersisted(await requestPersistence());
-    })();
-    return () => {
-      live = false;
-    };
-  }, [adopt]);
+  /** A trip arrived in the address bar and should open as soon as we know who you are. */
+  const linkedTrip = useRef<string | null>(null);
+
+  // Read after mount so the server and first client render agree.
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem(USER_KEY);
+      if (isPersonId(saved)) setUser(saved);
+    } catch {
+      /* storage blocked — the login screen just shows every time */
+    }
+
+    // A code in the address bar is how a second device joins a trip it has
+    // never seen, so it wins over whatever this device was last on.
+    const linked = codeFromLink();
+    linkedTrip.current = linked;
+    setTrips(knownTrips());
+    setTripsLoading(false);
+    setBooted(true);
+
+    // Coming back to the app goes straight to where you left off. Signing in
+    // is the moment you get asked which trip, and that is handled in signIn.
+    const start = linked ?? activeCode();
+    if (start && isPersonId(saved)) openTrip(start);
+    // Opening a trip is this effect's whole job; it must not re-run on state
+    // it sets itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * Offer this revision to the shared copy.
@@ -274,8 +334,10 @@ export function useTripStore(): TripStore {
     if (!ready) return;
     pending.current = doc;
     setSaveState('saving');
+    const c = codeRef.current;
+    if (!c) return;
     const t = setTimeout(async () => {
-      const { ok, rev } = await saveDoc(doc);
+      const { ok, rev } = await saveDoc(c, doc);
       if (pending.current !== doc) return; // a newer edit is already queued
       // Landed, so there is nothing for the unload flush to rescue.
       if (ok) pending.current = null;
@@ -292,7 +354,8 @@ export function useTripStore(): TripStore {
   // loadDoc compares the two stores rather than trusting IndexedDB.
   useEffect(() => {
     const flush = () => {
-      if (pending.current) void saveDoc(pending.current);
+      const c = codeRef.current;
+      if (c && pending.current) void saveDoc(c, pending.current);
     };
     // 'hidden' is the last event a backgrounded phone reliably delivers;
     // 'pagehide' covers a tab being closed or navigated away from.
@@ -335,14 +398,24 @@ export function useTripStore(): TripStore {
     };
   }, [ready, code, adopt, send]);
 
-  const signIn = useCallback((id: PersonId) => {
-    setUser(id);
-    try {
-      window.localStorage.setItem(USER_KEY, id);
-    } catch {
-      /* not fatal */
-    }
-  }, []);
+  const signIn = useCallback(
+    (id: PersonId) => {
+      setUser(id);
+      try {
+        window.localStorage.setItem(USER_KEY, id);
+      } catch {
+        /* not fatal */
+      }
+      // A link names the trip outright, so there is nothing to ask. Otherwise
+      // the picker follows, which is the point of asking who you are first.
+      const linked = linkedTrip.current;
+      if (linked) {
+        linkedTrip.current = null;
+        openTrip(linked);
+      }
+    },
+    [openTrip],
+  );
 
   const signOut = useCallback(() => {
     setUser(null);
@@ -718,13 +791,76 @@ export function useTripStore(): TripStore {
 
   const reset = useCallback(() => setDoc(emptyDoc()), []);
 
+  /** Start a trip that does not exist yet, and open it. */
+  const createTrip = useCallback(() => {
+    const c = newCode();
+    rememberTrip(c);
+    setTrips(knownTrips());
+    openTrip(c);
+  }, [openTrip]);
+
+  /**
+   * Join a trip by the short code someone read out. The long code that comes
+   * back is what this device keeps; the short one is not needed here again.
+   */
+  const joinByCode = useCallback(
+    async (short: string) => {
+      const found = await joinTrip(short.trim());
+      if (!found) return false;
+      rememberTrip(found);
+      setTrips(knownTrips());
+      openTrip(found);
+      return true;
+    },
+    [openTrip],
+  );
+
+  const setTripCode = useCallback(async (short: string) => {
+    const c = codeRef.current;
+    if (!c) return { ok: false, message: 'No trip is open.' };
+    const res = await setJoinCode(c, short);
+    if (res.ok) setJoinCodeState(res.joinCode);
+    return { ok: res.ok, message: res.message };
+  }, []);
+
+  /** Back to the picker. The trip and its copies are left alone. */
+  const closeTrip = useCallback(() => {
+    setActiveCode(null);
+    setCode(null);
+    setReady(false);
+    setJoinCodeState('');
+    setDoc(emptyDoc());
+    shared.current = null;
+    resetRev();
+    setTrips(knownTrips());
+  }, []);
+
+  const removeTrip = useCallback(
+    (c: string) => {
+      forgetTrip(c);
+      void dropDoc(c);
+      setTrips(knownTrips());
+      if (codeRef.current === c) closeTrip();
+    },
+    [closeTrip],
+  );
+
+  // Keep the picker's label in step with what the plan is called.
+  useEffect(() => {
+    if (!ready || !code) return;
+    rememberTrip(code, doc.trip.name);
+    setTrips(knownTrips());
+  }, [ready, code, doc.trip.name]);
+
   const deviceLink = useMemo(() => (code ? shareLink(code) : ''), [code]);
 
   return useMemo(
     () => ({
-      doc, ready, saveState, lastSaved, persisted, syncState, deviceLink,
+      doc, booted, ready, saveState, lastSaved, persisted, syncState, deviceLink,
       exportDoc, importDoc,
       user, signIn, signOut, touch, setTrip,
+      code, trips, tripsLoading, openTrip, createTrip, closeTrip, removeTrip,
+      joinByCode, joinCode, setTripCode,
       addCity, removeCity, moveCity, setCity,
       setHotel, addHotelSlot,
       addPlace, addPlaces, setPlace, removePlace,
@@ -733,9 +869,11 @@ export function useTripStore(): TripStore {
       applyPreset, applyPlan, addComment, toggleComment, removeComment, reset,
     }),
     [
-      doc, ready, saveState, lastSaved, persisted, syncState, deviceLink,
+      doc, booted, ready, saveState, lastSaved, persisted, syncState, deviceLink,
       exportDoc, importDoc,
       user, signIn, signOut, touch, setTrip,
+      code, trips, tripsLoading, openTrip, createTrip, closeTrip, removeTrip,
+      joinByCode, joinCode, setTripCode,
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
       addPlace, addPlaces, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck, applyPreset, applyPlan,

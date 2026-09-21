@@ -24,6 +24,7 @@ import DaysTab from './DaysTab';
 import BuilderTab from './BuilderTab';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
+import TripPicker from './TripPicker';
 import NotesTab from './NotesTab';
 import StayTab from './StayTab';
 import PrintSheet from './PrintSheet';
@@ -665,8 +666,22 @@ export default function TripPlanner() {
     return out;
   }, [doc.touches]);
 
-  if (!store.ready) return <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg)' }} />;
+  const blank = <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg)' }} />;
+  if (!store.booted) return blank;
   if (!store.user) return <Login onPick={store.signIn} />;
+  if (!store.code)
+    return (
+      <TripPicker
+        person={PEOPLE[store.user]}
+        trips={store.trips}
+        loading={store.tripsLoading}
+        onOpen={store.openTrip}
+        onCreate={store.createTrip}
+        onJoin={store.joinByCode}
+        onBack={store.signOut}
+      />
+    );
+  if (!store.ready) return blank;
 
   const me = PEOPLE[store.user];
   /** The city a new plan would be for: the open one, else the day's, else the first. */
@@ -949,6 +964,9 @@ export default function TripPlanner() {
                   onImport={store.importDoc}
                   persisted={store.persisted}
                   syncState={store.syncState}
+                  joinCode={store.joinCode}
+                  onSetJoinCode={store.setTripCode}
+                  onSwitchTrip={store.closeTrip}
                   deviceLink={store.deviceLink}
                 />
               ) : null}
