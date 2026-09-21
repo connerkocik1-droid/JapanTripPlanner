@@ -20,6 +20,11 @@ export interface TripSettingsProps {
   syncState: SyncState;
   /** The link that puts another device on this trip, or '' when there is none. */
   deviceLink: string;
+  /** The short code someone types to join this trip, or '' when it has none. */
+  joinCode: string;
+  onSetJoinCode: (short: string) => Promise<{ ok: boolean; message: string }>;
+  /** Put the trip picker back up. */
+  onSwitchTrip: () => void;
 }
 
 const label = { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const;
@@ -33,12 +38,23 @@ const row = {
 
 export default function TripSettings({
   trip, spent, onChange, touch, onClose, onExport, onImport, persisted,
-  syncState, deviceLink,
+  syncState, deviceLink, joinCode, onSetJoinCode, onSwitchTrip,
 }: TripSettingsProps) {
   const left = trip.planned ? trip.planned - spent : 0;
   const file = useRef<HTMLInputElement | null>(null);
   const [problem, setProblem] = useState('');
   const [copied, setCopied] = useState(false);
+  const [codeDraft, setCodeDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const saveCode = async () => {
+    if (codeDraft === null || saving) return;
+    setSaving(true);
+    const res = await onSetJoinCode(codeDraft.trim());
+    setSaving(false);
+    setProblem(res.ok ? '' : res.message);
+    if (res.ok) setCodeDraft(null);
+  };
   return (
     <div
       style={{
@@ -135,8 +151,35 @@ export default function TripSettings({
         </div>
       ) : null}
 
-      {/* One link is all another phone or laptop needs to join this trip. */}
+      {/* A short code to type, or one link — either puts another device on this trip. */}
       {deviceLink ? (
+        <>
+        <div style={{ ...row, gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="mono" style={label}>Trip code</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-600)' }}>
+              Type it on a new device to open this trip
+            </div>
+          </div>
+          <input
+            value={codeDraft ?? joinCode}
+            onChange={(e) => setCodeDraft(e.target.value)}
+            onBlur={() => void saveCode()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void saveCode();
+            }}
+            placeholder="none"
+            style={{
+              flex: '0 0 auto', width: 108, minHeight: 40, padding: '0 10px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-neutral-800)',
+              background: 'transparent', color: 'inherit',
+              fontSize: 13, textAlign: 'center', letterSpacing: '.08em',
+              opacity: saving ? 0.5 : 1,
+            }}
+          />
+        </div>
+
         <div style={{ ...row, gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="mono" style={label}>Your other devices</div>
@@ -167,6 +210,7 @@ export default function TripSettings({
             {copied ? 'Copied' : 'Copy link'}
           </button>
         </div>
+        </>
       ) : null}
 
       {/* The plan lives on this device, so it needs a way off it. */}
@@ -174,6 +218,10 @@ export default function TripSettings({
         <button className="tap" onClick={onExport} style={backupBtn}>
           <i className="ph ph-download-simple" style={{ fontSize: 13 }} />
           Back up
+        </button>
+        <button className="tap" onClick={onSwitchTrip} style={backupBtn}>
+          <i className="ph ph-arrows-left-right" style={{ fontSize: 13 }} />
+          Switch trip
         </button>
         <button className="tap" onClick={() => file.current?.click()} style={backupBtn}>
           <i className="ph ph-upload-simple" style={{ fontSize: 13 }} />

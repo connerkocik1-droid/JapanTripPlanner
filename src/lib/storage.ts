@@ -20,8 +20,18 @@
 
 const DB_NAME = 'trip-planner';
 const STORE = 'docs';
-const DOC_KEY = 'trip';
-const MIRROR_KEY = 'trip-planner:v2';
+
+/**
+ * A device can hold several trips, so each one gets its own slot in both
+ * stores. The un-suffixed keys below are what a single-trip device wrote
+ * before the picker existed; `migrateLegacyTrip` moves that plan into the slot
+ * of the trip it belonged to.
+ */
+const LEGACY_DOC_KEY = 'trip';
+const LEGACY_MIRROR_KEY = 'trip-planner:v2';
+
+const docKey = (code: string) => `trip:${code}`;
+const mirrorKey = (code: string) => `trip-planner:v2:${code}`;
 
 /**
  * A saved record. `rev` counts writes within a session and `savedAt` breaks
@@ -79,13 +89,13 @@ function openDb(): Promise<IDBDatabase | null> {
   });
 }
 
-async function idbGet<T>(): Promise<T | null> {
+async function idbGet<T>(key: string): Promise<T | null> {
   const db = await openDb();
   if (!db) return null;
   return new Promise((resolve) => {
     try {
       const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).get(DOC_KEY);
+      const req = tx.objectStore(STORE).get(key);
       req.onsuccess = () => resolve((req.result as T) ?? null);
       req.onerror = () => resolve(null);
     } catch {
@@ -94,13 +104,13 @@ async function idbGet<T>(): Promise<T | null> {
   });
 }
 
-async function idbPut(value: unknown): Promise<boolean> {
+async function idbPut(key: string, value: unknown): Promise<boolean> {
   const db = await openDb();
   if (!db) return false;
   return new Promise((resolve) => {
     try {
       const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(value, DOC_KEY);
+      tx.objectStore(STORE).put(value, key);
       tx.oncomplete = () => resolve(true);
       tx.onerror = () => resolve(false);
       tx.onabort = () => resolve(false);
@@ -110,18 +120,18 @@ async function idbPut(value: unknown): Promise<boolean> {
   });
 }
 
-function mirrorRead<T>(): T | null {
+function mirrorRead<T>(key: string): T | null {
   try {
-    const raw = window.localStorage.getItem(MIRROR_KEY);
+    const raw = window.localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
   }
 }
 
-function mirrorWrite(value: unknown): void {
+function mirrorWrite(key: string, value: unknown): void {
   try {
-    window.localStorage.setItem(MIRROR_KEY, JSON.stringify(value));
+    window.localStorage.setItem(key, JSON.stringify(value));
   } catch {
     /* quota or private mode — IndexedDB is the store of record anyway */
   }
@@ -136,9 +146,9 @@ function mirrorWrite(value: unknown): void {
  * stopping there would hand back the stale copy and then save it over the
  * rescued one, losing the edit for good.
  */
-export async function loadDoc<T>(): Promise<T | null> {
-  const fromIdb = unwrap(await idbGet<unknown>());
-  const fromMirror = unwrap(mirrorRead<unknown>());
+export async function loadDoc<T>(code: string): Promise<T | null> {
+  const fromIdb = unwrap(await idbGet<unknown>(docKey(code)));
+  const fromMirror = unwrap(mirrorRead<unknown>(mirrorKey(code)));
   const best = newer(fromIdb, fromMirror);
   if (!best) return null;
 
@@ -149,8 +159,9 @@ export async function loadDoc<T>(): Promise<T | null> {
   // Bring the store that lost back up to date: either the mirror rescued an
   // edit IndexedDB never got, or this is the first run after the upgrade and
   // the old bare copy needs moving in.
-  if (best !== fromIdb) void idbPut({ rev: best.rev, savedAt: best.savedAt, doc: best.doc });
-  else if (best !== fromMirror) mirrorWrite({ rev: best.rev, savedAt: best.savedAt, doc: best.doc });
+  const healed = { rev: best.rev, savedAt: best.savedAt, doc: best.doc };
+  if (best !== fromIdb) void idbPut(docKey(code), healed);
+  else if (best !== fromMirror) mirrorWrite(mirrorKey(code), healed);
 
   return (best.doc ?? null) as T | null;
 }
@@ -163,12 +174,59 @@ export async function loadDoc<T>(): Promise<T | null> {
  * the same counter: what makes one revision newer than another has to mean the
  * same thing on the device and on the server.
  */
-export async function saveDoc(value: unknown): Promise<{ ok: boolean; rev: number }> {
+export async function saveDoc(code: string, value: unknown): Promise<{ ok: boolean; rev: number }> {
   rev += 1;
   const at = rev;
   const record: Envelope = { rev: at, savedAt: Date.now(), doc: value };
-  mirrorWrite(record);
-  return { ok: await idbPut(record), rev: at };
+  mirrorWrite(mirrorKey(code), record);
+  return { ok: await idbPut(docKey(code), record), rev: at };
+}
+
+/**
+ * Move the plan written before the picker existed into the slot of the trip it
+ * belonged to, once. Called with the code that device was on; any other trip
+ * must not inherit it, or creating a new trip would swallow the old plan.
+ *
+ * The legacy records are left where they are. They cost one plan's worth of
+ * space and mean an upgrade that has to be rolled back still finds them.
+ */
+export async function migrateLegacyTrip(code: string): Promise<void> {
+  const already = newer(
+    unwrap(await idbGet<unknown>(docKey(code))),
+    unwrap(mirrorRead<unknown>(mirrorKey(code))),
+  );
+  if (already) return; // this trip already has its own records
+
+  const legacy = newer(
+    unwrap(await idbGet<unknown>(LEGACY_DOC_KEY)),
+    unwrap(mirrorRead<unknown>(LEGACY_MIRROR_KEY)),
+  );
+  if (!legacy) return;
+
+  const record: Envelope = { rev: legacy.rev, savedAt: legacy.savedAt, doc: legacy.doc };
+  mirrorWrite(mirrorKey(code), record);
+  await idbPut(docKey(code), record);
+}
+
+/** Forget a trip's plan on this device. The shared copy is untouched. */
+export async function dropDoc(code: string): Promise<void> {
+  try {
+    window.localStorage.removeItem(mirrorKey(code));
+  } catch {
+    /* storage blocked — nothing was written to remove */
+  }
+  const db = await openDb();
+  if (!db) return;
+  try {
+    db.transaction(STORE, 'readwrite').objectStore(STORE).delete(docKey(code));
+  } catch {
+    /* nothing to delete */
+  }
+}
+
+/** Start the revision count over, for a trip this session has not loaded yet. */
+export function resetRev(): void {
+  rev = 0;
 }
 
 /** The revision this device last wrote. */
