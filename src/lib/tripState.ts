@@ -50,13 +50,31 @@ export function dayKey(cityId: string, n: number): string {
   return `${cityId}:${n}`;
 }
 
+/**
+ * Saves written before a field existed are missing it. Fill the hotel gaps so
+ * the inputs bound to them stay controlled and the map card has something
+ * defined to read.
+ */
+function fillCity(city: City): City {
+  if (!Array.isArray(city?.hotels)) return { ...city, hotels: [] };
+  return {
+    ...city,
+    hotels: city.hotels.map((h) => ({
+      ...blankHotel(),
+      ...h,
+      overview: typeof h?.overview === 'string' ? h.overview : '',
+      images: Array.isArray(h?.images) ? h.images.filter((s) => typeof s === 'string') : [],
+    })),
+  };
+}
+
 /** Accept anything shaped roughly like a plan; fill the gaps with blanks. */
 export function normalize(input: unknown): TripDoc {
   const base = emptyDoc();
   const p = (input ?? {}) as Partial<TripDoc>;
   return {
     trip: { ...base.trip, ...(p.trip ?? {}) },
-    cities: Array.isArray(p.cities) ? p.cities : [],
+    cities: Array.isArray(p.cities) ? p.cities.map(fillCity) : [],
     days: p.days ?? {},
     checklist: Array.isArray(p.checklist) ? p.checklist : [],
     comments: Array.isArray(p.comments) ? p.comments : [],

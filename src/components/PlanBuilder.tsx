@@ -30,8 +30,6 @@ export interface PlanBuilderProps {
   back: PlanLeg | null;
   backLoading: boolean;
   preview: Preview | null;
-  /** Pixels of screen the bottom sheet already takes. */
-  bottomPx: number;
   onSetStart: (mins: number) => void;
   onAddPreview: () => void;
   onClosePreview: () => void;
@@ -41,7 +39,7 @@ export interface PlanBuilderProps {
 }
 
 /**
- * The plan being built, floating above the sheet so the map stays tappable.
+ * The plan being built, floating over the map so it stays tappable underneath.
  *
  * It is deliberately one surface: the stops so far, the hop you are being
  * offered, and the way home — which is always shown, because a plan you cannot
@@ -49,7 +47,7 @@ export interface PlanBuilderProps {
  */
 export default function PlanBuilder({
   draft, cityName, homeName, dayLabel, travelers, back, backLoading, preview,
-  bottomPx, onSetStart, onAddPreview, onClosePreview, onRemoveStop, onSave, onDiscard,
+  onSetStart, onAddPreview, onClosePreview, onRemoveStop, onSave, onDiscard,
 }: PlanBuilderProps) {
   if (!draft && !preview) return null;
   const line = draft ? timeline(draft, back, homeName) : null;
@@ -57,7 +55,7 @@ export default function PlanBuilder({
   return (
     <div
       style={{
-        position: 'absolute', left: 8, right: 8, bottom: bottomPx + 10, zIndex: 11,
+        position: 'absolute', left: 8, right: 8, bottom: 'calc(var(--safe-bottom) + 10px)', zIndex: 7,
         borderRadius: 'var(--radius-md)', overflow: 'hidden',
         background: 'rgba(27,30,46,.97)', backdropFilter: 'blur(16px)',
         border: '1px solid var(--color-accent-700)',

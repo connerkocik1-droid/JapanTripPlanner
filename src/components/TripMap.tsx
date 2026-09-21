@@ -1,14 +1,30 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import maplibregl, { LngLatBoundsLike, Map as MlMap, Marker } from 'maplibre-gl';
 import { LatLng } from '@/lib/data';
+import { money } from '@/lib/format';
 import { RouteStop, boundsOf, routeSegments, toLngLat } from '@/lib/geo';
 import { LEG_STYLE, LegKind } from '@/lib/legKind';
 
 // Point this at your own tiles to run without the public OpenFreeMap instance.
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
 const PLACE_LAYER = /city|town|village|suburb|quarter|hamlet|neighbourhood|country|state|province|region/i;
+
+/** What the hotel mini-card shows, carried on the pin that opens it. */
+export interface HotelDetail {
+  city: string;
+  /** Rate for one night; 0 when nothing has been entered yet. */
+  nightly: number;
+  nights: number;
+  /** Nightly times the nights of this city's stay. */
+  total: number;
+  overview: string;
+  images: string[];
+  url: string;
+  /** True for the option currently feeding the budget. */
+  pick: boolean;
+}
 
 export interface MapPin {
   id: string;
@@ -22,6 +38,8 @@ export interface MapPin {
   stopNumber?: number;
   /** Place category, for the marker glyph. */
   icon?: string;
+  /** Present on hotel pins — hovering or tapping one opens this card. */
+  hotel?: HotelDetail;
 }
 
 /** One routed hop of the planned day, drawn on the map in its own colour. */
@@ -63,6 +81,69 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
 
   const latest = useRef({ pins, route, legs, sheetPx, onSelect });
   latest.current = { pins, route, legs, sheetPx, onSelect };
+
+  // The hotel mini-card. `sticky` is set by a tap and survives the pointer
+  // leaving; a hover-opened card closes again as soon as the pointer does.
+  const [card, setCard] = useState<{ id: string; sticky: boolean } | null>(null);
+  const cardBox = useRef<HTMLDivElement | null>(null);
+  const cardId = useRef<string | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  cardId.current = card?.id ?? null;
+  const cardPin = card ? pins.find((p) => p.id === card.id) ?? null : null;
+
+  const holdCard = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  };
+  /** Hover opens; a tap on the same pin closes what the tap opened. */
+  const hoverCard = (id: string) => {
+    holdCard();
+    setCard((cur) => (cur && cur.id === id ? cur : { id, sticky: false }));
+  };
+  const tapCard = (id: string) => {
+    holdCard();
+    setCard((cur) => (cur && cur.id === id && cur.sticky ? null : { id, sticky: true }));
+  };
+  const closeCard = () => {
+    holdCard();
+    setCard(null);
+  };
+  /** A short grace period so the pointer can travel from the pin to the card. */
+  const closeSoon = () => {
+    holdCard();
+    hideTimer.current = setTimeout(() => setCard((cur) => (cur?.sticky ? cur : null)), 160);
+  };
+
+  /**
+   * Park the card over its pin: above it by preference, below it when the
+   * header would cover it, and clamped into the band of map the header and the
+   * bottom sheet leave uncovered so it is never half-hidden behind the chrome.
+   */
+  const placeCard = () => {
+    const m = map.current;
+    const el = cardBox.current;
+    const id = cardId.current;
+    if (!m || !el || !id) return;
+    const pin = latest.current.pins.find((p) => p.id === id);
+    if (!pin) return;
+    const pt = m.project(toLngLat(pin.ll));
+    const w = holder.current?.clientWidth ?? 0;
+    const h = holder.current?.clientHeight ?? 0;
+    const cardW = el.offsetWidth;
+    const cardH = el.offsetHeight;
+    const ceiling = Math.min(150, Math.round(h * 0.17)) + 8;
+    const floor = h - Math.min(latest.current.sheetPx, Math.round(h * 0.6)) - 8;
+
+    let top = pt.y - 22 - cardH;
+    if (top < ceiling) top = pt.y + 30;
+    top = Math.min(top, Math.max(ceiling, floor - cardH));
+    top = Math.max(top, ceiling);
+
+    el.style.left = Math.round(Math.max(cardW / 2 + 10, Math.min(pt.x, w - cardW / 2 - 10))) + 'px';
+    el.style.top = Math.round(top) + 'px';
+  };
+  const reposition = useRef(placeCard);
+  reposition.current = placeCard;
 
   /** Frame the whole route, leaving the header and the sheet uncovered. */
   const frameTrip = (duration = 800) => {
@@ -168,12 +249,15 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
       }, 110);
       m.once('remove', () => clearInterval(pulse));
 
+      m.on('move', () => reposition.current());
+
       sync();
       frameTrip(0);
     });
 
     return () => {
       if (stepTimer.current) clearTimeout(stepTimer.current);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
       map.current?.remove();
       map.current = null;
       ready.current = false;
@@ -214,6 +298,7 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
     });
 
     const seen = new Set(ps.map((p) => p.id));
+    if (cardId.current && !seen.has(cardId.current)) setCard(null);
     Object.keys(markers.current).forEach((id) => {
       if (!seen.has(id)) {
         markers.current[id].remove();
@@ -230,7 +315,18 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
         el.style.textAlign = 'center';
         el.addEventListener('click', (ev) => {
           ev.stopPropagation();
+          // A hotel pin opens its card instead of steering the bottom sheet.
+          if (latest.current.pins.find((q) => q.id === p.id)?.hotel) {
+            tapCard(p.id);
+            return;
+          }
           latest.current.onSelect(p.id);
+        });
+        el.addEventListener('mouseenter', () => {
+          if (latest.current.pins.find((q) => q.id === p.id)?.hotel) hoverCard(p.id);
+        });
+        el.addEventListener('mouseleave', () => {
+          if (latest.current.pins.find((q) => q.id === p.id)?.hotel) closeSoon();
         });
         mk = new maplibregl.Marker({ element: el, anchor: 'top', offset: [0, -7] })
           .setLngLat(toLngLat(p.ll))
@@ -245,10 +341,15 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
       el.classList.toggle('is-sub', p.kind !== 'city');
       el.style.zIndex = p.selected ? '500' : p.kind === 'city' ? '400' : '300';
       el.classList.toggle('is-stop', p.stopNumber !== undefined);
+      el.classList.toggle('is-hotel', p.kind === 'hotel');
+      el.classList.toggle('is-open', cardId.current === p.id);
+      // Hotels are purple whatever else they are, so the lodging options read
+      // as one set at a glance; the budgeted one is the brighter of them.
+      const hotelDot = p.kind === 'hotel' ? ' tp-hotel' + (p.hotel?.pick ? ' is-pick' : '') : '';
       const dot = p.stopNumber !== undefined
-        ? `<span class="tp-dot tp-num">${p.stopNumber}</span>`
+        ? `<span class="tp-dot tp-num${hotelDot}">${p.stopNumber}</span>`
         : p.icon
-          ? `<span class="tp-dot tp-icon"><i class="ph ${p.icon}"></i></span>`
+          ? `<span class="tp-dot tp-icon${hotelDot}"><i class="ph ${p.icon}"></i></span>`
           : '<span class="tp-dot"></span>';
       el.innerHTML =
         '<span class="tp-ret"></span>' + dot +
@@ -319,6 +420,14 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.nonce, focus === null]);
 
+  useLayoutEffect(() => {
+    Object.entries(markers.current).forEach(([id, mk]) => {
+      mk.getElement().classList.toggle('is-open', id === card?.id);
+    });
+    placeCard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card?.id, cardPin?.ll[0], cardPin?.ll[1], cardPin?.hotel?.images.length, sheetPx]);
+
   // Resize only on a real box change — an unconditional resize cancels
   // any in-flight camera animation.
   useEffect(() => {
@@ -341,7 +450,93 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
       <div className="map-tint" />
       <div className="map-glow" />
       <div className="map-sweep" />
+      {cardPin?.hotel ? (
+        <HotelMiniCard
+          ref={cardBox}
+          pin={cardPin}
+          hotel={cardPin.hotel}
+          onHold={holdCard}
+          onLeave={closeSoon}
+          onClose={closeCard}
+        />
+      ) : null}
       <div className="map-attrib">© OpenStreetMap contributors</div>
     </div>
   );
 }
+
+/**
+ * The hotel mini-card: what an option costs, what it is, and what it looks
+ * like, without leaving the map. Missing photos or a missing price just drop
+ * their row rather than leaving a gap.
+ */
+const HotelMiniCard = forwardRef<
+  HTMLDivElement,
+  {
+    pin: MapPin;
+    hotel: HotelDetail;
+    onHold: () => void;
+    onLeave: () => void;
+    onClose: () => void;
+  }
+>(function HotelMiniCard({ pin, hotel, onHold, onLeave, onClose }, ref) {
+  const shots = hotel.images.filter((src) => src.trim());
+  return (
+    <div
+      ref={ref}
+      className="hotel-card"
+      role="dialog"
+      aria-label={pin.name + ' details'}
+      onMouseEnter={onHold}
+      onMouseLeave={onLeave}
+    >
+      <div className="hc-head">
+        <span className="hc-title">
+          {pin.name}
+          {hotel.pick ? <span className="mono hc-tag">Budgeted</span> : null}
+        </span>
+        <button className="tap hc-x" onClick={onClose} aria-label="Close">
+          <i className="ph ph-x" />
+        </button>
+      </div>
+      <div className="mono hc-where">{hotel.city}</div>
+
+      <div className="hc-rates">
+        <div>
+          <div className="mono hc-k">Per night</div>
+          <div className="num hc-v">{money(hotel.nightly)}</div>
+        </div>
+        <div>
+          <div className="mono hc-k">{hotel.nights} {hotel.nights === 1 ? 'night' : 'nights'}</div>
+          <div className="num hc-v hc-total">{money(hotel.total)}</div>
+        </div>
+      </div>
+
+      {shots.length ? (
+        <div className="hc-shots">
+          {shots.map((src, i) => (
+            // A dead URL shouldn't leave a broken-image box on the map.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={src + i}
+              src={src}
+              alt=""
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      <p className="hc-note">{hotel.overview.trim() || 'No overview yet.'}</p>
+
+      {hotel.url ? (
+        <a className="mono hc-link" href={hotel.url} target="_blank" rel="noopener noreferrer">
+          Open listing ↗
+        </a>
+      ) : null}
+    </div>
+  );
+});
