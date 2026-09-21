@@ -296,7 +296,20 @@ export function useTripStore(): TripStore {
     // Coming back to the app goes straight to where you left off. Signing in
     // is the moment you get asked which trip, and that is handled in signIn.
     const start = linked ?? activeCode();
-    if (start && isPersonId(saved)) openTrip(start);
+    if (start && isPersonId(saved)) {
+      openTrip(start);
+    } else if (start) {
+      // Signed out, but this device is on a trip. Put it in the list before the
+      // picker is shown, or the picker says there is nothing here — which is
+      // what a device upgraded from the single-trip version always looked like,
+      // since the list is new and it had only ever had the one code.
+      void (async () => {
+        await migrateLegacyTrip(start);
+        const stored = await loadDoc<unknown>(start);
+        rememberTrip(start, stored ? normalize(stored).trip.name : '');
+        setTrips(knownTrips());
+      })();
+    }
     // Opening a trip is this effect's whole job; it must not re-run on state
     // it sets itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
