@@ -1,28 +1,21 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { City, Hotel, LatLng, MAX_NIGHTS, PLACE_KINDS, Place } from '@/lib/data';
+import { useState } from 'react';
+import { City, LatLng, MAX_NIGHTS, PLACE_KINDS, Place } from '@/lib/data';
 import { fmtUsd, walkLabel } from '@/lib/format';
 import { CitySpend } from '@/lib/derive';
-import { geocode, hitToLatLng } from '@/lib/geocode';
 import { isFlightLeg } from '@/lib/legKind';
 import { Touch } from '@/lib/tripState';
 import TouchMark, { touchStyle } from './TouchMark';
-
-const label = { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const;
-const boxed = {
-  borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--color-neutral-800)',
-  background: 'var(--color-surface)',
-} as const;
+import { GeoStatus, NumField, boxed, ghostBtn, label, useGeocodedAddress } from './fields';
 
 export interface CityPanelProps {
   city: City;
   spend: CitySpend;
   travelers: number;
   onCity: <K extends keyof City>(key: K, val: City[K]) => void;
-  onHotel: <K extends keyof Hotel>(hotelId: string, key: K, val: Hotel[K]) => void;
-  onAddHotel: () => void;
+  /** Switches to the Stay tab, where the lodging options live. */
+  onOpenStay: () => void;
   onAddPlace: () => void;
   onPlace: <K extends keyof Place>(placeId: string, key: K, val: Place[K]) => void;
   onRemovePlace: (placeId: string) => void;
@@ -31,10 +24,11 @@ export interface CityPanelProps {
 }
 
 export default function CityPanel({
-  city, spend, travelers, onCity, onHotel, onAddHotel,
+  city, spend, travelers, onCity, onOpenStay,
   onAddPlace, onPlace, onRemovePlace, onZoom, touch,
 }: CityPanelProps) {
-  const chosen = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
+  const active = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
+  const options = city.hotels.filter((h) => h.name.trim()).length;
   // A flown leg carries a flight number and an arrival time instead of a route.
   const flight = isFlightLeg(city.transitName);
 
@@ -78,34 +72,37 @@ export default function CityPanel({
         </div>
       </div>
 
-      {/* Hotels — one of these feeds the budget */}
+      {/* Lodging is compared and chosen on the Stay tab — this is just the tally. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', margin: '12px 0 7px' }}>
-        <div className="mono" style={label}>
-          Hotel · {city.hotelSel ? 'selected one counts' : 'pick one to budget'}
-        </div>
+        <div className="mono" style={label}>Stay</div>
         <div className="mono num" style={{ ...label, fontSize: 9 }}>
-          {chosen ? fmtUsd((Number(chosen.cost) || 0) * city.nights) + ' total' : '—'}
+          {active ? fmtUsd((Number(active.cost) || 0) * city.nights) + ' total' : '—'}
         </div>
       </div>
-      <div style={{ display: 'grid', gap: 6 }}>
-        {city.hotels.map((h, i) => (
-          <HotelCard
-            key={h.id}
-            index={i}
-            hotel={h}
-            nights={city.nights}
-            selected={city.hotelSel === h.id}
-            onSelect={() => {
-              onCity('hotelSel', h.id);
-              if (h.ll) onZoom(h.ll, 16);
-            }}
-            onField={(key, val) => onHotel(h.id, key, val)}
-            touch={touch('hotel/' + h.id) ?? (city.hotelSel === h.id ? touch('hotelSel') : undefined)}
-          />
-        ))}
-      </div>
-      <button className="tap" onClick={onAddHotel} style={ghostBtn}>
-        <i className="ph ph-plus" style={{ fontSize: 12 }} /> Another option
+      <button
+        className="tap"
+        onClick={onOpenStay}
+        style={{
+          ...boxed, width: '100%', minHeight: 48, padding: '8px 10px', textAlign: 'left',
+          color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9,
+        }}
+      >
+        <i
+          className="ph ph-bed"
+          style={{ flex: 'none', fontSize: 15, color: 'var(--color-accent-300)' }}
+        />
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500 }}>
+            {active ? active.name || 'Untitled option' : 'No option active yet'}
+          </span>
+          <span className="mono" style={{ ...label, fontSize: 8.5 }}>
+            {options
+              ? `${options} ${options === 1 ? 'option' : 'options'} on the Stay tab`
+              : 'add options on the Stay tab'}
+          </span>
+          <TouchMark touch={touch('hotelSel')} />
+        </span>
+        <i className="ph ph-caret-right" style={{ flex: 'none', fontSize: 12, color: 'var(--color-neutral-600)' }} />
       </button>
 
       {/* Transit */}
@@ -222,7 +219,7 @@ export default function CityPanel({
             <PlaceCard
               key={p.id}
               place={p}
-              from={chosen?.ll ?? city.ll}
+              from={active?.ll ?? city.ll}
               onField={(key, val) => onPlace(p.id, key, val)}
               onRemove={() => onRemovePlace(p.id)}
               onZoom={() => p.ll && onZoom(p.ll, 16.5)}
@@ -289,21 +286,6 @@ const emptyNote = {
   textAlign: 'center' as const,
 };
 
-const ghostBtn = {
-  width: '100%',
-  minHeight: 40,
-  marginTop: 6,
-  borderRadius: 'var(--radius-sm)',
-  border: '1px dashed var(--color-neutral-700)',
-  background: 'transparent',
-  color: 'var(--color-accent-200)',
-  fontSize: 11.5,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 6,
-  cursor: 'pointer',
-};
 
 function stepper(border: string, color: string) {
   return {
@@ -313,192 +295,6 @@ function stepper(border: string, color: string) {
   } as const;
 }
 
-/** A number input that can be cleared instead of snapping back to 0. */
-function NumField({
-  value, onChange, aria, width = 92,
-}: { value: number; onChange: (v: number) => void; aria: string; width?: number }) {
-  const [text, setText] = useState(value ? String(value) : '');
-  const last = useRef(value);
-  useEffect(() => {
-    if (value !== last.current) {
-      last.current = value;
-      setText(value ? String(value) : '');
-    }
-  }, [value]);
-  return (
-    <input
-      type="number"
-      min={0}
-      inputMode="decimal"
-      aria-label={aria}
-      value={text}
-      placeholder="0"
-      onChange={(e) => {
-        setText(e.target.value);
-        const n = Number(e.target.value);
-        last.current = Number.isFinite(n) ? n : 0;
-        onChange(Number.isFinite(n) ? n : 0);
-      }}
-      className="num"
-      style={{ width, fontSize: 13, fontWeight: 500 }}
-    />
-  );
-}
-
-/** Resolves a typed address to coordinates so the pin and walk times are real. */
-function useGeocodedAddress(addr: string, onResolved: (ll: LatLng) => void) {
-  const [status, setStatus] = useState<'idle' | 'looking' | 'found' | 'missing'>('idle');
-  const typed = useRef(addr);
-  // Held in a ref: the caller passes a fresh closure every render, and putting
-  // that in the dependency list would clear the debounce timer before it fires.
-  const cb = useRef(onResolved);
-  cb.current = onResolved;
-  useEffect(() => {
-    if (addr === typed.current) return;
-    typed.current = addr;
-    const q = addr.trim();
-    if (q.length < 6) {
-      setStatus('idle');
-      return;
-    }
-    let live = true;
-    setStatus('looking');
-    const t = setTimeout(async () => {
-      const hit = await geocode(q);
-      if (!live) return;
-      if (hit) {
-        cb.current(hitToLatLng(hit));
-        setStatus('found');
-      } else {
-        setStatus('missing');
-      }
-    }, 700);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [addr]);
-  return status;
-}
-
-function GeoStatus({ status }: { status: 'idle' | 'looking' | 'found' | 'missing' }) {
-  return (
-    <div className="mono" style={{ fontSize: 9, minHeight: 12, color: 'var(--color-neutral-600)' }}>
-      {status === 'looking' ? 'Locating…' : null}
-      {status === 'found' ? 'Pinned from address' : null}
-      {status === 'missing' ? 'No match — pin unchanged' : null}
-    </div>
-  );
-}
-
-function HotelCard({
-  index, hotel, nights, selected, onSelect, onField, touch,
-}: {
-  index: number;
-  hotel: Hotel;
-  nights: number;
-  selected: boolean;
-  onSelect: () => void;
-  onField: <K extends keyof Hotel>(key: K, val: Hotel[K]) => void;
-  touch?: Touch;
-}) {
-  const status = useGeocodedAddress(hotel.addr, (ll) => onField('ll', ll));
-  return (
-    <div
-      style={{
-        borderRadius: 'var(--radius-sm)',
-        border: '1px solid ' + (selected ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
-        background: selected ? 'rgba(145,132,217,.10)' : 'var(--color-bg)',
-        transition: 'background-color .16s ease, border-color .16s ease',
-        ...(touchStyle(touch) ?? {}),
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 8px' }}>
-        <button
-          className="tap"
-          role="radio"
-          aria-checked={selected}
-          aria-label={'Use option ' + (index + 1) + ' in the budget'}
-          onClick={onSelect}
-          style={{
-            flex: 'none', width: 44, height: 44, background: 'none', border: 'none',
-            padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <span
-            style={{
-              width: 15, height: 15, borderRadius: 9999,
-              border: '1px solid ' + (selected ? 'var(--color-accent-400)' : 'var(--color-neutral-600)'),
-              background: selected ? 'var(--color-accent-400)' : 'transparent',
-            }}
-          />
-        </button>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <input
-            type="text"
-            value={hotel.name}
-            placeholder={'Option ' + (index + 1)}
-            onChange={(e) => onField('name', e.target.value)}
-            style={{ width: '100%', height: 30, fontSize: 13, fontWeight: 500 }}
-          />
-          <TouchMark touch={touch} />
-        </span>
-        <span className="num" style={{ fontSize: 11, color: 'var(--color-neutral-500)', flex: 'none' }}>
-          {hotel.cost ? fmtUsd(hotel.cost) + '/night' : ''}
-        </span>
-        {hotel.url ? (
-          <a
-            className="mono tap"
-            href={hotel.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Open booking link"
-            style={{
-              flex: 'none', width: 44, height: 44, display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: 13, color: 'var(--color-accent-300)', textDecoration: 'none',
-            }}
-          >
-            ↗
-          </a>
-        ) : null}
-      </div>
-
-      {selected ? (
-        <div style={{ padding: '0 8px 8px' }}>
-          <input
-            type="url"
-            value={hotel.url}
-            placeholder="Booking link"
-            onChange={(e) => onField('url', e.target.value)}
-            style={{
-              width: '100%', height: 38, fontSize: 11,
-              fontFamily: 'var(--font-mono)', color: 'var(--color-accent-300)',
-            }}
-          />
-          <input
-            type="text"
-            value={hotel.addr}
-            placeholder="Address"
-            onChange={(e) => onField('addr', e.target.value)}
-            style={{ width: '100%', height: 38, fontSize: 12 }}
-          />
-          <GeoStatus status={status} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 44 }}>
-            <div className="mono" style={{ ...label, flex: 'none' }}>$ / night</div>
-            <NumField
-              value={hotel.cost}
-              onChange={(v) => onField('cost', v)}
-              aria="Cost per night"
-            />
-            <div className="mono num" style={{ ...label, marginLeft: 'auto' }}>
-              {fmtUsd((Number(hotel.cost) || 0) * nights)} total
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function PlaceCard({
   place, from, onField, onRemove, onZoom, touch,

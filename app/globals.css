@@ -276,3 +276,157 @@ input::placeholder { color: var(--color-neutral-600); }
 }
 .trip-pin.is-stop .tp-name { color: #e9e9ed; }
 .trip-pin.is-sub .tp-name { font-size: 10px; }
+
+/* --- hotels ------------------------------------------------------------- */
+/* Lodging is purple: every option in a city reads as one set. */
+.trip-pin .tp-dot.tp-hotel {
+  background: var(--color-accent-600);
+  color: var(--color-accent-100);
+  border-color: var(--color-accent-300);
+  box-shadow: 0 2px 10px rgba(145, 132, 217, 0.5);
+}
+/* The option feeding the budget is the brighter of them. */
+.trip-pin .tp-dot.tp-hotel.is-pick {
+  background: var(--color-accent-400);
+  color: #241f3d;
+  border-color: var(--color-neutral-100);
+}
+.trip-pin.is-hotel .tp-name { color: var(--color-accent-200); }
+.trip-pin.is-hotel:hover .tp-dot.tp-hotel,
+.trip-pin.is-hotel.is-open .tp-dot.tp-hotel {
+  transform: scale(1.14);
+  border-color: var(--color-neutral-100);
+}
+.trip-pin .tp-dot.tp-hotel { transition: transform 0.14s ease, border-color 0.14s ease; }
+
+/* Above the tint layers and the pins themselves (which run to 500), but still
+   inside the map holder, so the header and the sheet stay on top. */
+.hotel-card {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 700;
+  width: 232px;
+  transform: translateX(-50%);
+  padding: 9px 10px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-accent-700);
+  background: rgba(27, 29, 45, 0.97);
+  box-shadow: 0 12px 30px rgba(8, 9, 18, 0.66);
+  animation: fadeIn 0.16s ease both;
+  pointer-events: auto;
+}
+.hc-head { display: flex; align-items: flex-start; gap: 6px; }
+.hc-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text);
+}
+.hc-tag {
+  margin-left: 5px;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 8px;
+  color: #241f3d;
+  background: var(--color-accent-400);
+  white-space: nowrap;
+}
+.hc-x {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: -3px -3px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9999px;
+  background: none;
+  color: var(--color-neutral-500);
+  font-size: 12px;
+  cursor: pointer;
+}
+.hc-x:hover { color: var(--color-text); background: rgba(233, 233, 237, 0.08); }
+.hc-where { margin-top: 1px; font-size: 8.5px; color: var(--color-neutral-600); }
+.hc-rates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+.hc-rates > div {
+  padding: 5px 7px;
+  border-radius: var(--radius-sm);
+  background: rgba(145, 132, 217, 0.1);
+  border: 1px solid var(--color-accent-800);
+}
+.hc-k { font-size: 8px; color: var(--color-neutral-500); }
+.hc-v { margin-top: 2px; font-size: 13px; font-weight: 600; color: var(--color-text); }
+.hc-total { color: var(--color-accent-300); }
+.hc-shots {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+.hc-shots img {
+  flex: none;
+  width: 92px;
+  height: 62px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-900);
+  scroll-snap-align: start;
+}
+.hc-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-neutral-400);
+  /* Long write-ups are clamped — the card is a glance, not a page. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hc-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 9px;
+  color: var(--color-accent-300);
+  text-decoration: none;
+}
+
+/* --- stay tab ----------------------------------------------------------- */
+.stay-shots {
+  display: flex;
+  gap: 5px;
+  padding: 2px 8px 0;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+.stay-shots img {
+  flex: none;
+  width: 104px;
+  height: 66px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-900);
+  scroll-snap-align: start;
+}
+.stay-note {
+  margin: 7px 0 0;
+  padding: 0 9px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--color-neutral-400);
+  /* A glance in the list; the full text is in the editor below. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
