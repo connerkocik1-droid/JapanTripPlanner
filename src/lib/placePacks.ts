@@ -118,8 +118,17 @@ export function packPlaceToPlace(entry: PackPlace): Place {
   };
 }
 
+/**
+ * A city's own name, without whatever was typed after it. People write "Seoul",
+ * "Seoul, SK" and "Seoul, South Korea" for the same place, and a shortlist that
+ * only answered to the first would look missing to everyone else.
+ */
+function cityHead(name: string): string {
+  return name.split(',')[0].trim().toLowerCase();
+}
+
 /** Packs offered for a city, matched on its name. An unlabelled pack fits any. */
 export function packsFor(list: PackListing[], cityName: string): PackListing[] {
-  const name = cityName.trim().toLowerCase();
-  return list.filter((p) => !p.city || p.city.trim().toLowerCase() === name);
+  const name = cityHead(cityName);
+  return list.filter((p) => !p.city || cityHead(p.city) === name);
 }

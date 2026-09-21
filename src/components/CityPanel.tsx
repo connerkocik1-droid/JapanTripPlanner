@@ -35,6 +35,8 @@ export default function CityPanel({
   const options = city.hotels.filter((h) => h.name.trim()).length;
   // A flown leg carries a flight number and an arrival time instead of a route.
   const flight = isFlightLeg(city.transitName);
+  // Nothing pinned yet, so the shortlists are worth opening rather than offering.
+  const bare = city.places.length === 0;
 
   return (
     <div
@@ -75,6 +77,21 @@ export default function CityPanel({
           </button>
         </div>
       </div>
+
+      {/*
+        The shortlists sit here, above the stay, and stay here. Down in the
+        places section they were a screen and a half below the fold, under the
+        hotel, the airport and the way in, which is where they went unnoticed.
+        They keep this one spot whatever the city holds: moving them once the
+        first place lands would unmount the import mid-run and cancel the queue
+        still resolving its addresses. A city with places gets them folded away.
+      */}
+      <PlacePacks
+        cityName={city.name}
+        startOpen={bare}
+        onAdd={onAddPlaces}
+        onLocate={(placeId, ll) => onPlace(placeId, 'll', ll)}
+      />
 
       {/* Lodging is compared and chosen on the Stay tab — this is just the tally. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', margin: '12px 0 7px' }}>
@@ -238,11 +255,6 @@ export default function CityPanel({
       <button className="tap" onClick={onAddPlace} style={ghostBtn}>
         <i className="ph ph-plus" style={{ fontSize: 12 }} /> Add a place
       </button>
-      <PlacePacks
-        cityName={city.name}
-        onAdd={onAddPlaces}
-        onLocate={(placeId, ll) => onPlace(placeId, 'll', ll)}
-      />
 
       {/* Food slider */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 4px' }}>

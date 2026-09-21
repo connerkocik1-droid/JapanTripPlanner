@@ -8,6 +8,8 @@ import { ghostBtn, label } from './fields';
 
 export interface PlacePacksProps {
   cityName: string;
+  /** Show the lists straight away, for a city that has nothing pinned yet. */
+  startOpen?: boolean;
   /** Pins the lot, skipping names already there, and says what it actually added. */
   onAdd: (places: Place[]) => Place[];
   onLocate: (placeId: string, ll: LatLng) => void;
@@ -39,9 +41,9 @@ interface Progress {
  * pin, so a restaurant whose address only matches its district is reported as
  * such instead of quietly landing in the middle of Mapo.
  */
-export default function PlacePacks({ cityName, onAdd, onLocate }: PlacePacksProps) {
+export default function PlacePacks({ cityName, startOpen = false, onAdd, onLocate }: PlacePacksProps) {
   const [index, setIndex] = useState<PackListing[]>([]);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState('');
   const [progress, setProgress] = useState<Progress | null>(null);

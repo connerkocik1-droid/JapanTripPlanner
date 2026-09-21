@@ -181,7 +181,9 @@ builder just says there are none yet.
 somewhere's restaurants, its museums, its coffee. Nothing is ordered and nothing is
 scheduled — importing one pins every entry on the map, and you decide afterwards
 which of them a day is built out of. The city panel offers the packs that match the
-city by name, under *Places here*.
+city by name, near the top: open for a city with nothing pinned yet, folded away once
+it has places. A city is matched on its own name, so "Seoul", "Seoul, SK" and "Seoul,
+South Korea" are all offered the same lists.
 
 Packs carry addresses rather than coordinates on purpose: an address is something
 you can check against a listing, and resolving it in the app means every pin comes
