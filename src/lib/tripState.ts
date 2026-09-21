@@ -178,22 +178,33 @@ export function useTripStore(): TripStore {
     const t = setTimeout(async () => {
       const ok = await saveDoc(doc);
       if (pending.current !== doc) return; // a newer edit is already queued
+      // Landed, so there is nothing for the unload flush to rescue.
+      if (ok) pending.current = null;
       setSaveState(ok ? 'saved' : 'error');
       if (ok) setLastSaved(Date.now());
     }, 400);
     return () => clearTimeout(t);
   }, [doc, ready]);
 
-  // A save may still be queued when the app is backgrounded or closed.
+  // A save may still be queued when the app is backgrounded or closed. Only
+  // the localStorage half of it is sure to land — the IndexedDB write is
+  // asynchronous and the page may be gone before it completes — which is why
+  // loadDoc compares the two stores rather than trusting IndexedDB.
   useEffect(() => {
     const flush = () => {
       if (pending.current) void saveDoc(pending.current);
     };
-    window.addEventListener('pagehide', flush);
-    document.addEventListener('visibilitychange', () => {
+    // 'hidden' is the last event a backgrounded phone reliably delivers;
+    // 'pagehide' covers a tab being closed or navigated away from.
+    const onHidden = () => {
       if (document.visibilityState === 'hidden') flush();
-    });
-    return () => window.removeEventListener('pagehide', flush);
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
   }, []);
 
   const signIn = useCallback((id: PersonId) => {
