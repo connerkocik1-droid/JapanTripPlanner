@@ -349,20 +349,22 @@ input::placeholder { color: var(--color-neutral-600); }
 .trip-pin.is-sub .tp-name { font-size: 10px; }
 
 /* --- hotels ------------------------------------------------------------- */
-/* Lodging is purple: every option in a city reads as one set. */
+/* Purple is reserved for the option feeding the budget; the rest of the
+   shortlist sits back in grey so the choice is obvious at a glance. */
 .trip-pin .tp-dot.tp-hotel {
-  background: var(--color-accent-600);
-  color: var(--color-accent-100);
-  border-color: var(--color-accent-300);
-  box-shadow: 0 2px 10px rgba(145, 132, 217, 0.5);
+  background: var(--color-neutral-700);
+  color: var(--color-neutral-200);
+  border-color: var(--color-neutral-500);
+  box-shadow: 0 2px 8px rgba(8, 9, 18, 0.55);
 }
-/* The option feeding the budget is the brighter of them. */
 .trip-pin .tp-dot.tp-hotel.is-pick {
   background: var(--color-accent-400);
   color: #241f3d;
   border-color: var(--color-neutral-100);
+  box-shadow: 0 2px 10px rgba(145, 132, 217, 0.55);
 }
-.trip-pin.is-hotel .tp-name { color: var(--color-accent-200); }
+.trip-pin.is-hotel .tp-name { color: var(--color-neutral-400); }
+.trip-pin.is-hotel.is-pick .tp-name { color: var(--color-accent-200); }
 .trip-pin.is-hotel:hover .tp-dot.tp-hotel,
 .trip-pin.is-hotel.is-open .tp-dot.tp-hotel {
   transform: scale(1.14);
@@ -464,9 +466,36 @@ input::placeholder { color: var(--color-neutral-600); }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.hc-actions { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+.hc-pick {
+  flex: 1;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--color-neutral-300);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hc-pick i { font-size: 13px; }
+.hc-pick.is-on {
+  border-color: var(--color-accent-400);
+  background: var(--color-accent-400);
+  color: #241f3d;
+}
 .hc-link {
-  display: inline-block;
-  margin-top: 8px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-neutral-800);
   font-size: 9px;
   color: var(--color-accent-300);
   text-decoration: none;

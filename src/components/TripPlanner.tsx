@@ -463,6 +463,7 @@ export default function TripPlanner() {
             // Only the budgeted option is ever a stop in the planned day.
             stopNumber: pick ? stopIndex.get(h.ll.join(',')) : undefined,
             hotel: {
+              cityId: c.id,
               city: c.name,
               nightly,
               nights: c.nights,
@@ -734,6 +735,7 @@ export default function TripPlanner() {
           sheetPx={mapInset}
           focus={focus}
           onSelect={onPin}
+          onActivateHotel={(cid, hid) => store.setCity(cid, 'hotelSel', hid)}
         />
 
         {tab === 'map' && d.cities.length === 0 ? (

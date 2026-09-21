@@ -13,6 +13,8 @@ const PLACE_LAYER = /city|town|village|suburb|quarter|hamlet|neighbourhood|count
 
 /** What the hotel mini-card shows, carried on the pin that opens it. */
 export interface HotelDetail {
+  /** The city this option is in — what an activation is applied to. */
+  cityId: string;
   city: string;
   /** Rate for one night; 0 when nothing has been entered yet. */
   nightly: number;
@@ -68,9 +70,13 @@ export interface TripMapProps {
   sheetPx: number;
   focus: MapFocus | null;
   onSelect: (id: string) => void;
+  /** Make this option the one the budget counts, or clear it with null. */
+  onActivateHotel: (cityId: string, hotelId: string | null) => void;
 }
 
-export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSelect }: TripMapProps) {
+export default function TripMap({
+  pins, route, legs, fit, sheetPx, focus, onSelect, onActivateHotel,
+}: TripMapProps) {
   const holder = useRef<HTMLDivElement | null>(null);
   const map = useRef<MlMap | null>(null);
   const markers = useRef<Record<string, Marker>>({});
@@ -79,8 +85,8 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
   const stepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const box = useRef({ w: 0, h: 0 });
 
-  const latest = useRef({ pins, route, legs, sheetPx, onSelect });
-  latest.current = { pins, route, legs, sheetPx, onSelect };
+  const latest = useRef({ pins, route, legs, sheetPx, onSelect, onActivateHotel });
+  latest.current = { pins, route, legs, sheetPx, onSelect, onActivateHotel };
 
   // The hotel mini-card. `sticky` is set by a tap and survives the pointer
   // leaving; a hover-opened card closes again as soon as the pointer does.
@@ -90,6 +96,8 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   cardId.current = card?.id ?? null;
   const cardPin = card ? pins.find((p) => p.id === card.id) ?? null : null;
+  // Narrowed once, so the card's callbacks can reach the hotel payload.
+  const cardHotel = cardPin?.hotel ? { pin: cardPin, hotel: cardPin.hotel } : null;
 
   const holdCard = () => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -342,6 +350,7 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
       el.style.zIndex = p.selected ? '500' : p.kind === 'city' ? '400' : '300';
       el.classList.toggle('is-stop', p.stopNumber !== undefined);
       el.classList.toggle('is-hotel', p.kind === 'hotel');
+      el.classList.toggle('is-pick', p.kind === 'hotel' && !!p.hotel?.pick);
       el.classList.toggle('is-open', cardId.current === p.id);
       // Hotels are purple whatever else they are, so the lodging options read
       // as one set at a glance; the budgeted one is the brighter of them.
@@ -450,14 +459,20 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
       <div className="map-tint" />
       <div className="map-glow" />
       <div className="map-sweep" />
-      {cardPin?.hotel ? (
+      {cardHotel ? (
         <HotelMiniCard
           ref={cardBox}
-          pin={cardPin}
-          hotel={cardPin.hotel}
+          pin={cardHotel.pin}
+          hotel={cardHotel.hotel}
           onHold={holdCard}
           onLeave={closeSoon}
           onClose={closeCard}
+          onActivate={() =>
+            onActivateHotel(
+              cardHotel.hotel.cityId,
+              cardHotel.hotel.pick ? null : cardHotel.pin.id,
+            )
+          }
         />
       ) : null}
       <div className="map-attrib">© OpenStreetMap contributors</div>
@@ -478,8 +493,9 @@ const HotelMiniCard = forwardRef<
     onHold: () => void;
     onLeave: () => void;
     onClose: () => void;
+    onActivate: () => void;
   }
->(function HotelMiniCard({ pin, hotel, onHold, onLeave, onClose }, ref) {
+>(function HotelMiniCard({ pin, hotel, onHold, onLeave, onClose, onActivate }, ref) {
   const shots = hotel.images.filter((src) => src.trim());
   return (
     <div
@@ -532,11 +548,21 @@ const HotelMiniCard = forwardRef<
 
       <p className="hc-note">{hotel.overview.trim() || 'No overview yet.'}</p>
 
-      {hotel.url ? (
-        <a className="mono hc-link" href={hotel.url} target="_blank" rel="noopener noreferrer">
-          Open listing ↗
-        </a>
-      ) : null}
+      <div className="hc-actions">
+        <button
+          className={'tap hc-pick' + (hotel.pick ? ' is-on' : '')}
+          aria-pressed={hotel.pick}
+          onClick={onActivate}
+        >
+          <i className={hotel.pick ? 'ph-fill ph-check-circle' : 'ph ph-circle'} />
+          {hotel.pick ? 'Active' : 'Set active'}
+        </button>
+        {hotel.url ? (
+          <a className="mono hc-link" href={hotel.url} target="_blank" rel="noopener noreferrer">
+            Listing ↗
+          </a>
+        ) : null}
+      </div>
     </div>
   );
 });

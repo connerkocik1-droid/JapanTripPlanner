@@ -133,8 +133,9 @@ function StayCard({
           style={{
             flex: 'none', width: 26, height: 26, borderRadius: 9999,
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13,
-            color: active ? '#241f3d' : 'var(--color-accent-200)',
-            background: active ? 'var(--color-accent-400)' : 'var(--color-accent-800)',
+            // Grey until it is the active option, matching the map's pins.
+            color: active ? '#241f3d' : 'var(--color-neutral-400)',
+            background: active ? 'var(--color-accent-400)' : 'var(--color-neutral-800)',
           }}
         >
           <i className="ph ph-bed" />
