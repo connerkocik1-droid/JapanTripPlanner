@@ -78,9 +78,10 @@ you attach to itinerary items are tracked separately as "planned items".
 **Airport → hotel.** Every city with a pinned hotel shows how you get in from the
 airport, for **each** option rather than only the selected one — total door-to-door
 time, the metro portion and the walking portion separately, and the fare for
-everyone travelling. The airport is the nearest one to the city by default (a
-built-in list of Japanese airports plus the nearby regional hubs), and the picker
-switches it where that guess is wrong — Haneda rather than Narita, say. The fare
+everyone travelling. The airport is the nearest *international* gateway to the city
+by default (a built-in list of Japanese airports plus the nearby regional hubs) —
+an arrival into Seoul lands at Incheon rather than the closer Gimpo — and the picker
+switches it where that guess is wrong: Narita rather than Haneda, say. The fare
 starts from that airport's typical published rail fare into town and is editable per
 city, because the express and the ordinary train are not the same money. When a hotel
 is close enough that walking beats riding, the row says so and costs nothing. With
@@ -100,6 +101,13 @@ to start a plan there. The **Build** tab opens the same flow.
 **The way home is always shown.** Every day, planned or hand-built, routes its last
 stop back to the hotel and prices it, so a day that ends an hour from your bed says
 so before you commit to it. It counts in the day's moving time and its fares.
+
+**The airport is on the map.** Each city's arrival airport is pinned in blue — the
+same blue a flight leg is drawn in — and the run in from it to every hotel option is
+drawn in the colour of what it rides, so the arrival you are comparing in the city
+panel is the line you see on the map. The default is the nearest *international*
+gateway rather than the nearest airport of any kind: an arrival into Seoul lands at
+Incheon, not Gimpo. Any city can override it from the picker.
 
 **Colour-coded legs.** Every routed line, on the map and in the text beside it, uses
 one scheme: high-speed and long-distance rail **green**, metro **yellow**, walking a

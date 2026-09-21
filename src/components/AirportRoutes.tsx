@@ -1,18 +1,14 @@
 'use client';
 
+import { useMemo } from 'react';
 import { City, Hotel, LatLng } from '@/lib/data';
-import { Airport, airportByCode, airportsNear, nearestAirport } from '@/lib/airports';
-import { RouteState, useAirportRoutes } from '@/lib/airportRoute';
+import { airportsNear, nearestAirport } from '@/lib/airports';
+import { RouteState, airportFareFor, airportFor, useAirportRoutes } from '@/lib/airportRoute';
 import { fmtUsd } from '@/lib/format';
 import { LEG_STYLE } from '@/lib/legKind';
 import { fmtDistance, fmtDuration } from '@/lib/routing';
 
 const label = { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const;
-
-/** The airport this city arrives at: whichever was picked, else the nearest. */
-export function airportFor(city: City): Airport | null {
-  return (city.airportCode ? airportByCode(city.airportCode) : null) ?? nearestAirport(city.ll);
-}
 
 export interface AirportRoutesProps {
   city: City;
@@ -32,8 +28,10 @@ export interface AirportRoutesProps {
  */
 export default function AirportRoutes({ city, travelers, onCity, onZoom }: AirportRoutesProps) {
   const airport = airportFor(city);
-  const fare = Number(city.airportFare) || airport?.fare || Number(city.metroFare) || 0;
-  const routes = useAirportRoutes(airport, city.hotels, { fare, travelers });
+  const fare = airportFareFor(city, airport);
+  // The map asks for the same hops, and `routeLeg` caches them, so this is one
+  // set of requests shared rather than a second set.
+  const { routes } = useAirportRoutes(useMemo(() => [city], [city]), travelers);
   const pinned = city.hotels.filter((h) => h.ll);
 
   if (!airport || !pinned.length) return null;
