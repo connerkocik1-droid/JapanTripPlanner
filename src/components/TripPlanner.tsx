@@ -18,6 +18,7 @@ import BuilderTab from './BuilderTab';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
 import NotesTab from './NotesTab';
+import StayTab from './StayTab';
 import PrintSheet from './PrintSheet';
 import TouchMark, { touchStyle } from './TouchMark';
 import TripSettings from './TripSettings';
@@ -25,7 +26,7 @@ import TripSettings from './TripSettings';
 // MapLibre touches window on import — keep it off the server render.
 const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
 
-type Tab = 'map' | 'days' | 'build' | 'list' | 'notes';
+type Tab = 'map' | 'stay' | 'days' | 'build' | 'list' | 'notes';
 
 const SEG_FILL: Record<string, string> = {
   Lodging: 'var(--color-accent-400)',
@@ -102,6 +103,12 @@ export default function TripPlanner() {
       if (same) setFocus(null);
     },
     [cityId, expanded, snap, doc.cities, zoomTo],
+  );
+
+  /** How many cities have an option made active — the Stay tab's tally. */
+  const stayPicked = useMemo(
+    () => doc.cities.filter((c) => c.hotels.some((h) => h.id === c.hotelSel)).length,
+    [doc.cities],
   );
 
   const dayEntry = d.schedule[Math.min(Math.max(1, day), Math.max(1, d.schedule.length)) - 1] ?? null;
@@ -202,17 +209,34 @@ export default function TripPlanner() {
           kind: 'city',
         });
       }
-      const hotel = selectedHotel(c);
-      if (hotel?.ll && hotel.name && (focused || plotAll)) {
-        out.push({
-          id: hotel.id,
-          name: hotel.name,
-          sub: 'stay',
-          ll: hotel.ll,
-          selected: false,
-          kind: 'hotel',
-          icon: 'ph-bed',
-          stopNumber: stopIndex.get(hotel.ll.join(',')),
+      // Every located option is pinned, not just the budgeted one — the whole
+      // shortlist is what you are comparing on the map.
+      if (focused || plotAll) {
+        c.hotels.forEach((h) => {
+          if (!h.ll || !h.name) return;
+          const nightly = Number(h.cost) || 0;
+          const pick = h.id === c.hotelSel;
+          out.push({
+            id: h.id,
+            name: h.name,
+            sub: nightly ? fmtUsd(nightly) + '/night' : 'stay',
+            ll: h.ll,
+            selected: false,
+            kind: 'hotel',
+            icon: 'ph-bed',
+            // Only the budgeted option is ever a stop in the planned day.
+            stopNumber: pick ? stopIndex.get(h.ll.join(',')) : undefined,
+            hotel: {
+              city: c.name,
+              nightly,
+              nights: c.nights,
+              total: nightly * c.nights,
+              overview: h.overview ?? '',
+              images: h.images ?? [],
+              url: h.url,
+              pick,
+            },
+          });
         });
       }
       // Every pinned place is plotted — they are only routed once scheduled.
@@ -530,26 +554,32 @@ export default function TripPlanner() {
             <div style={{ fontSize: 14, fontWeight: 500 }}>
               {tab === 'map'
                 ? 'Route'
-                : tab === 'days'
-                  ? 'Days'
-                  : tab === 'build'
-                    ? 'Itinerary builder'
-                    : tab === 'list'
-                      ? 'Checklist'
-                      : 'Notes'}
+                : tab === 'stay'
+                  ? 'Stay'
+                  : tab === 'days'
+                    ? 'Days'
+                    : tab === 'build'
+                      ? 'Itinerary builder'
+                      : tab === 'list'
+                        ? 'Checklist'
+                        : 'Notes'}
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
               {tab === 'map'
                 ? d.cities.length
                   ? `${d.cities.length} ${d.cities.length === 1 ? 'city' : 'cities'}`
                   : 'add your first city'
-                : tab === 'days' || tab === 'build'
-                  ? d.schedule.length
-                    ? `Day ${day} of ${d.schedule.length}`
-                    : 'no days yet'
-                  : tab === 'list'
-                    ? `${d.checkedCount}/${doc.checklist.length}`
-                    : `${d.openNotes} open`}
+                : tab === 'stay'
+                  ? d.cities.length
+                    ? `${stayPicked} of ${d.cities.length} chosen`
+                    : 'no cities yet'
+                  : tab === 'days' || tab === 'build'
+                    ? d.schedule.length
+                      ? `Day ${day} of ${d.schedule.length}`
+                      : 'no days yet'
+                    : tab === 'list'
+                      ? `${d.checkedCount}/${doc.checklist.length}`
+                      : `${d.openNotes} open`}
             </div>
           </div>
         </div>
@@ -628,8 +658,7 @@ export default function TripPlanner() {
                     spend={d.spend[c.id]}
                     travelers={doc.trip.travelers}
                     onCity={(key, val) => store.setCity(c.id, key, val)}
-                    onHotel={(hid, key, val) => store.setHotel(c.id, hid, key, val)}
-                    onAddHotel={() => store.addHotelSlot(c.id)}
+                    onOpenStay={() => setTab('stay')}
                     onAddPlace={() => store.addPlace(c.id)}
                     onPlace={(pid, key, val) => store.setPlace(c.id, pid, key, val)}
                     onRemovePlace={(pid) => store.removePlace(c.id, pid)}
@@ -710,6 +739,17 @@ export default function TripPlanner() {
             </>
           ) : null}
 
+          {tab === 'stay' ? (
+            <StayTab
+              cities={doc.cities}
+              onSetActive={(cid, hid) => store.setCity(cid, 'hotelSel', hid)}
+              onHotel={(cid, hid, key, val) => store.setHotel(cid, hid, key, val)}
+              onAddHotel={(cid) => store.addHotelSlot(cid)}
+              onZoom={zoomTo}
+              touch={store.touch}
+            />
+          ) : null}
+
           {tab === 'days' ? (
             <DaysTab
               schedule={d.schedule}
@@ -780,10 +820,13 @@ export default function TripPlanner() {
           zIndex: 12, display: 'flex', gap: 2, padding: 3, borderRadius: 9999,
           background: 'rgba(35,37,50,.94)', border: '1px solid var(--color-neutral-800)',
           backdropFilter: 'blur(12px)',
+          // Six tabs overflow a narrow phone — the row scrolls rather than wraps.
+          overflowX: 'auto',
         }}
       >
         {([
           ['map', 'Map', 'ph-map-trifold'],
+          ['stay', 'Stay', 'ph-bed'],
           ['days', 'Days', 'ph-calendar-blank'],
           ['build', 'Build', 'ph-squares-four'],
           ['list', 'Checklist', 'ph-check-square'],
@@ -799,6 +842,7 @@ export default function TripPlanner() {
                 if (id !== 'map') setFocus(null);
               }}
               style={{
+                flex: 'none', whiteSpace: 'nowrap',
                 minHeight: 44, padding: '0 10px', borderRadius: 9999, border: 'none',
                 background: on ? 'var(--color-accent-800)' : 'transparent',
                 color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-400)',

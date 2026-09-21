@@ -10,7 +10,12 @@ export interface Hotel {
   name: string;
   url: string;
   addr: string;
+  /** Nightly rate, per the booking listing. The total is this times the nights. */
   cost: number;
+  /** A few lines about the place, shown on the map card. */
+  overview: string;
+  /** Photo URLs, shown as a strip on the map card. Blank lines are ignored. */
+  images: string[];
   /** Resolved from `addr` by the geocoder. */
   ll: LatLng | null;
 }
@@ -118,7 +123,7 @@ export function uid(): string {
 }
 
 export function blankHotel(): Hotel {
-  return { id: uid(), name: '', url: '', addr: '', cost: 0, ll: null };
+  return { id: uid(), name: '', url: '', addr: '', cost: 0, overview: '', images: [], ll: null };
 }
 
 export function blankCity(name: string, ll: LatLng | null = null): City {
