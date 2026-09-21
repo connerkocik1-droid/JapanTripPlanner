@@ -50,6 +50,9 @@ coordinates:
   whenever you reorder, add, or delete one.
 - Segments are densified along the **great circle** rather than drawn as straight
   screen lines, so the path between cities is geographically honest at trip zoom.
+- Longitudes run continuously across the **dateline**, so a Pacific crossing is
+  drawn over the Pacific and framed there, instead of doubling back across
+  Eurasia. Legs you fly are drawn as their own chopped blue line.
 - Map labels are forced to English (`name:en` → `name:latin` → `name`).
 - Selecting a city, hotel, or place runs a two-stage camera descent (out-and-in
   arc, then a step down to block level).

@@ -50,6 +50,8 @@ export default function PrintSheet({ d, doc }: { d: Derived; doc: TripDoc }) {
               {c.transitName ? (
                 <div>
                   Getting there: {c.transitName}
+                  {c.flightNo ? ` · ${c.flightNo}` : ''}
+                  {c.arriveAt ? ` · arrives ${c.arriveAt}` : ''}
                   {c.transitCost ? ` · ${fmtUsd(c.transitCost * trip.travelers)}` : ''}
                 </div>
               ) : null}

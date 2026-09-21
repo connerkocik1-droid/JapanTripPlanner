@@ -51,6 +51,10 @@ export interface City {
   transitName: string;
   transitUrl: string;
   transitCost: number;
+  /** Flight legs only: the flight you are on, and when it gets in. */
+  flightNo: string;
+  /** HH:MM local, as printed on the ticket. */
+  arriveAt: string;
   /**
    * IATA code of the airport you arrive at. Blank means "the nearest one",
    * which is what almost every city wants, so nothing has to be set up.
@@ -139,6 +143,8 @@ export function blankCity(name: string, ll: LatLng | null = null): City {
     transitName: '',
     transitUrl: '',
     transitCost: 0,
+    flightNo: '',
+    arriveAt: '',
     airportCode: '',
     airportFare: 0,
     metroFare: 0,
