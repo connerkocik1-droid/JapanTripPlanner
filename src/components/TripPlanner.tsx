@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { City, LatLng, PLACE_KINDS } from '@/lib/data';
+import { City, DEFAULT_DWELL, LatLng, PLACE_KINDS, Place, uid } from '@/lib/data';
+import { planDay } from '@/lib/dayPlan';
+import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import { geocode, hitToLatLng } from '@/lib/geocode';
@@ -12,6 +14,7 @@ import type { MapFocus, MapLeg, MapPin } from './TripMap';
 import { useDayRoute, type Stop } from '@/lib/useDayRoute';
 import CityPanel from './CityPanel';
 import DaysTab from './DaysTab';
+import BuilderTab from './BuilderTab';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
 import NotesTab from './NotesTab';
@@ -22,7 +25,7 @@ import TripSettings from './TripSettings';
 // MapLibre touches window on import — keep it off the server render.
 const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
 
-type Tab = 'map' | 'days' | 'list' | 'notes';
+type Tab = 'map' | 'days' | 'build' | 'list' | 'notes';
 
 const SEG_FILL: Record<string, string> = {
   Lodging: 'var(--color-accent-400)',
@@ -124,10 +127,10 @@ export default function TripPlanner() {
     return out;
   }, [dayEntry]);
 
-  const hops = useDayRoute(tab === 'days' ? stops : []);
+  const hops = useDayRoute(tab === 'days' || tab === 'build' ? stops : []);
 
   const legs = useMemo<MapLeg[]>(() => {
-    if (tab !== 'days') return [];
+    if (tab !== 'days' && tab !== 'build') return [];
     return hops
       .map((h) => {
         const leg = h.options[h.to.mode] ?? h.options.walk;
@@ -137,12 +140,53 @@ export default function TripPlanner() {
       .filter((l): l is MapLeg => !!l);
   }, [hops, tab]);
 
+  const dayCity = dayEntry?.city ?? null;
+
+  const plan = useMemo(
+    () =>
+      dayEntry
+        ? planDay(dayEntry.items, hops, {
+            metroFare: dayCity?.metroFare ?? 0,
+            travelers: doc.trip.travelers,
+          })
+        : null,
+    [dayEntry, hops, dayCity?.metroFare, doc.trip.travelers],
+  );
+
+  /** Where the day currently ends — what the builder routes new stops from. */
+  const buildAnchor = useMemo(() => {
+    const last = stops[stops.length - 1];
+    return last ? { ll: last.ll, label: last.label } : null;
+  }, [stops]);
+
+  /** Add a pinned place to the end of the day being built. */
+  const addStopFromPlace = useCallback(
+    (place: Place) => {
+      if (!dayEntry) return;
+      const id = store.addDayItem(dayEntry.key);
+      store.setDayItem(dayEntry.key, id, 'title', place.name);
+      store.setDayItem(dayEntry.key, id, 'placeId', place.id);
+      store.setDayItem(dayEntry.key, id, 'dwell', DEFAULT_DWELL[place.kind] ?? 60);
+      void uid;
+    },
+    [dayEntry, store],
+  );
+
+  const applyPreset = useCallback(
+    (preset: Preset, replace: boolean) => {
+      if (!dayEntry || !dayCity) return;
+      store.applyPreset(dayCity.id, dayEntry.key, preset, replace);
+      setTab('days');
+    },
+    [dayEntry, dayCity, store],
+  );
+
   /** Map pins: every city, plus the selected city's hotel and places. */
   const pins = useMemo<MapPin[]>(() => {
     const out: MapPin[] = [];
     // Stop numbers come from the day being planned, if any.
     const stopIndex = new Map<string, number>();
-    if (tab === 'days') {
+    if (tab === 'days' || tab === 'build') {
       stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
     }
 
@@ -484,14 +528,22 @@ export default function TripPlanner() {
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <div style={{ fontSize: 14, fontWeight: 500 }}>
-              {tab === 'map' ? 'Route' : tab === 'days' ? 'Days' : tab === 'list' ? 'Checklist' : 'Notes'}
+              {tab === 'map'
+                ? 'Route'
+                : tab === 'days'
+                  ? 'Days'
+                  : tab === 'build'
+                    ? 'Itinerary builder'
+                    : tab === 'list'
+                      ? 'Checklist'
+                      : 'Notes'}
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
               {tab === 'map'
                 ? d.cities.length
                   ? `${d.cities.length} ${d.cities.length === 1 ? 'city' : 'cities'}`
                   : 'add your first city'
-                : tab === 'days'
+                : tab === 'days' || tab === 'build'
                   ? d.schedule.length
                     ? `Day ${day} of ${d.schedule.length}`
                     : 'no days yet'
@@ -664,6 +716,9 @@ export default function TripPlanner() {
               start={doc.trip.start}
               selected={day}
               hops={hops}
+              plan={plan}
+              fare={dayCity?.metroFare ?? 0}
+              travelers={doc.trip.travelers}
               onSelectDay={(n) => {
                 setDay(n);
                 const c = d.schedule[n - 1]?.city;
@@ -676,6 +731,20 @@ export default function TripPlanner() {
               onMoveItem={store.moveDayItem}
               onZoomDay={() => zoomToPoints(stops.map((s) => s.ll))}
               onZoomStop={(ll) => zoomTo(ll, 16.5)}
+            />
+          ) : null}
+
+          {tab === 'build' ? (
+            <BuilderTab
+              day={dayEntry}
+              city={dayCity}
+              anchor={buildAnchor}
+              metroFare={dayCity?.metroFare ?? 0}
+              travelers={doc.trip.travelers}
+              onApplyPreset={applyPreset}
+              onAddStop={addStopFromPlace}
+              onSetFare={(f) => dayCity && store.setCity(dayCity.id, 'metroFare', f)}
+              onZoom={(ll) => zoomTo(ll, 16)}
             />
           ) : null}
 
@@ -716,6 +785,7 @@ export default function TripPlanner() {
         {([
           ['map', 'Map', 'ph-map-trifold'],
           ['days', 'Days', 'ph-calendar-blank'],
+          ['build', 'Build', 'ph-squares-four'],
           ['list', 'Checklist', 'ph-check-square'],
           ['notes', 'Notes', 'ph-chat-teardrop-text'],
         ] as [Tab, string, string][]).map(([id, labelText, icon]) => {
@@ -729,11 +799,11 @@ export default function TripPlanner() {
                 if (id !== 'map') setFocus(null);
               }}
               style={{
-                minHeight: 44, padding: '0 12px', borderRadius: 9999, border: 'none',
+                minHeight: 44, padding: '0 10px', borderRadius: 9999, border: 'none',
                 background: on ? 'var(--color-accent-800)' : 'transparent',
                 color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-400)',
-                fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 5,
               }}
             >
               <i className={'ph ' + icon} style={{ fontSize: 14 }} />

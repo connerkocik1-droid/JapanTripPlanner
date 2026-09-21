@@ -6,6 +6,7 @@ import {
   blankCity, blankHotel, newTrip, uid,
 } from './data';
 import { PersonId, isPersonId } from './people';
+import { Preset, dwellFor, stopToPlace } from './presets';
 import { downloadDoc, loadDoc, requestPersistence, saveDoc } from './storage';
 
 export interface Touch {
@@ -102,6 +103,8 @@ export interface TripStore {
   toggleCheck: (id: string) => void;
   removeCheck: (id: string) => void;
 
+  /** Drop a ready-made day into a city: pins its places, schedules its stops. */
+  applyPreset: (cityId: string, dayKey: string, preset: Preset, replace: boolean) => void;
   addComment: (text: string, city: string | null) => void;
   toggleComment: (id: string) => void;
   removeComment: (id: string) => void;
@@ -320,7 +323,10 @@ export function useTripStore(): TripStore {
           ...d.days,
           [key]: [
             ...(d.days[key] ?? []),
-            { id, time: '', title: '', note: '', cost: 0, done: false, placeId: null, mode: 'walk' as const },
+            {
+              id, time: '', title: '', note: '', cost: 0, done: false,
+              placeId: null, mode: 'walk' as const, dwell: 60,
+            },
           ],
         },
       }));
@@ -418,6 +424,44 @@ export function useTripStore(): TripStore {
     [edit],
   );
 
+  const applyPreset = useCallback(
+    (cityId: string, key: string, preset: Preset, replace: boolean) => {
+      edit(`${cityId}/preset`, (d) => {
+        const city = d.cities.find((c) => c.id === cityId);
+        if (!city) return d;
+
+        const places = city.places.slice();
+        const items = preset.stops.map((stop) => {
+          // Reuse a place already pinned here rather than pinning it twice.
+          const existing = places.find(
+            (p) => p.name.trim().toLowerCase() === stop.place.trim().toLowerCase(),
+          );
+          const place = existing ?? stopToPlace(stop);
+          if (!existing) places.push(place);
+          else if (!existing.ll && stop.ll) existing.ll = stop.ll;
+          return {
+            id: uid(),
+            time: stop.time ?? '',
+            title: stop.title,
+            note: stop.note ?? '',
+            cost: Number(stop.cost) || 0,
+            done: false,
+            placeId: place.id,
+            mode: stop.mode ?? ('walk' as const),
+            dwell: dwellFor(stop),
+          };
+        });
+
+        return {
+          ...d,
+          cities: d.cities.map((c) => (c.id === cityId ? { ...c, places } : c)),
+          days: { ...d.days, [key]: replace ? items : [...(d.days[key] ?? []), ...items] },
+        };
+      });
+    },
+    [edit],
+  );
+
   const addComment = useCallback((text: string, city: string | null) => {
     const body = text.trim();
     const by = userRef.current;
@@ -464,14 +508,15 @@ export function useTripStore(): TripStore {
       addPlace, setPlace, removePlace,
       addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck,
-      addComment, toggleComment, removeComment, reset,
+      applyPreset, addComment, toggleComment, removeComment, reset,
     }),
     [
       doc, ready, saveState, lastSaved, persisted, exportDoc, importDoc,
       user, signIn, signOut, touch, setTrip,
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
       addPlace, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
-      addCheck, setCheck, toggleCheck, removeCheck, addComment, toggleComment, removeComment, reset,
+      addCheck, setCheck, toggleCheck, removeCheck, applyPreset,
+      addComment, toggleComment, removeComment, reset,
     ],
   );
 }

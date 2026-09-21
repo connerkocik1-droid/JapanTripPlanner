@@ -51,6 +51,8 @@ export interface City {
   transitName: string;
   transitUrl: string;
   transitCost: number;
+  /** A single metro/bus fare here, per person — prices the day's transit legs. */
+  metroFare: number;
   foodPer: number;
   places: Place[];
 }
@@ -69,6 +71,8 @@ export interface DayItem {
   placeId: string | null;
   /** Chosen way of getting here from the previous stop. */
   mode: TravelMode;
+  /** Minutes you expect to spend here, for the day's time allotment. */
+  dwell: number;
 }
 
 export interface CheckItem {
@@ -85,6 +89,14 @@ export interface Trip {
   /** What you plan to spend in total. 0 means no target set. */
   planned: number;
 }
+
+/** Default minutes at a stop, by what kind of place it is. */
+export const DEFAULT_DWELL: Record<PlaceKind, number> = {
+  eat: 75,
+  do: 90,
+  stay: 30,
+  other: 45,
+};
 
 export const HOTEL_SLOTS = 3;
 export const MAX_NIGHTS = 30;
@@ -120,6 +132,7 @@ export function blankCity(name: string, ll: LatLng | null = null): City {
     transitName: '',
     transitUrl: '',
     transitCost: 0,
+    metroFare: 0,
     foodPer: 0,
     places: [],
   };

@@ -5,12 +5,17 @@ import { DayEntry, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtDow, fmtUsd } from '@/lib/format';
 import { HopResult } from '@/lib/useDayRoute';
 import { fmtDistance, fmtDuration } from '@/lib/routing';
+import { DayPlan, fmtClock, fmtSpan } from '@/lib/dayPlan';
 
 export interface DaysTabProps {
   schedule: DayEntry[];
   start: string;
   selected: number;
   hops: HopResult[];
+  plan: DayPlan | null;
+  /** Metro fare per person in this city, for pricing transit legs. */
+  fare: number;
+  travelers: number;
   onSelectDay: (n: number) => void;
   onAddItem: (key: string) => void;
   onSetItem: <K extends keyof DayItem>(key: string, id: string, field: K, val: DayItem[K]) => void;
@@ -22,7 +27,7 @@ export interface DaysTabProps {
 }
 
 export default function DaysTab({
-  schedule, start, selected, hops, onSelectDay, onAddItem, onSetItem,
+  schedule, start, selected, hops, plan, fare, travelers, onSelectDay, onAddItem, onSetItem,
   onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop,
 }: DaysTabProps) {
   if (!schedule.length) {
@@ -36,10 +41,7 @@ export default function DaysTab({
   const hotel = selectedHotel(day.city);
   const hopFor = (id: string) => hops.find((h) => h.toId === id);
 
-  const moving = hops.reduce((a, h) => {
-    const leg = h.options[h.to.mode] ?? h.options.walk;
-    return a + (leg?.seconds ?? 0);
-  }, 0);
+  const moving = plan ? plan.movingMins * 60 : 0;
 
   return (
     <div>
@@ -103,6 +105,18 @@ export default function DaysTab({
         </button>
       </div>
 
+      {plan && plan.stops.length ? (
+        <div style={summary}>
+          <Stat label="Out" value={`${fmtClock(plan.startMins)} – ${fmtClock(plan.startMins + plan.totalMins)}`} />
+          <Stat label="Day" value={fmtSpan(plan.totalMins)} />
+          <Stat label="Moving" value={fmtSpan(plan.movingMins)} />
+          <Stat
+            label="Fares"
+            value={plan.transitCost ? fmtUsd(plan.transitCost) : fare ? '—' : 'set fare'}
+          />
+        </div>
+      ) : null}
+
       {hotel?.ll ? (
         <div style={{ ...anchorRow }}>
           <i className="ph ph-bed" style={{ fontSize: 13, color: 'var(--color-accent-300)' }} />
@@ -135,12 +149,15 @@ export default function DaysTab({
                 <HopStrip
                   hop={hop}
                   mode={it.mode}
+                  fare={fare * Math.max(1, travelers)}
                   onMode={(m) => onSetItem(day.key, it.id, 'mode', m)}
                 />
               ) : null}
               <StopCard
                 index={i}
                 item={it}
+                arrive={plan?.stops[i]?.arrive ?? null}
+                depart={plan?.stops[i]?.depart ?? null}
                 place={place}
                 places={places}
                 first={i === 0}
@@ -175,10 +192,12 @@ export default function DaysTab({
 
 /** The travel strip between two stops: walk vs metro, with the better one marked. */
 function HopStrip({
-  hop, mode, onMode,
+  hop, mode, fare, onMode,
 }: {
   hop: HopResult;
   mode: TravelMode;
+  /** Fare for the whole party, already multiplied. */
+  fare: number;
   onMode: (m: TravelMode) => void;
 }) {
   const { walk, transit } = hop.options;
@@ -233,7 +252,7 @@ function HopStrip({
               <i className={'ph ' + icon} style={{ fontSize: 12 }} />
               <span className="num">{fmtDuration(leg.seconds)}</span>
               <span className="mono num" style={{ fontSize: 8.5, opacity: 0.75 }}>
-                {fmtDistance(leg.meters)}
+                {id === 'transit' ? (fare ? fmtUsd(fare) : 'fare?') : fmtDistance(leg.meters)}
               </span>
               {leg.estimated ? (
                 <span className="mono" style={{ fontSize: 7.5, opacity: 0.7 }} title="Estimated, not routed">
@@ -255,11 +274,22 @@ function HopStrip({
   );
 }
 
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="mono" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>{label}</div>
+      <div className="num" style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>{value}</div>
+    </div>
+  );
+}
+
 function StopCard({
-  index, item, place, places, first, last, onSet, onToggle, onRemove, onMove, onZoom,
+  index, item, place, places, first, last, arrive, depart, onSet, onToggle, onRemove, onMove, onZoom,
 }: {
   index: number;
   item: DayItem;
+  arrive: number | null;
+  depart: number | null;
   place: Place | null;
   places: Place[];
   first: boolean;
@@ -294,17 +324,25 @@ function StopCard({
         >
           {item.done ? <i className="ph-fill ph-check" /> : <span className="num" style={{ color: 'var(--color-neutral-500)', fontSize: 10 }}>{index + 1}</span>}
         </button>
-        <input
-          type="time"
-          value={item.time}
-          aria-label="Time"
-          onChange={(e) => onSet('time', e.target.value)}
-          className="mono num"
-          style={{
-            flex: 'none', width: 66, fontSize: 10, color: 'var(--color-neutral-400)',
-            background: 'transparent', border: 'none',
-          }}
-        />
+        <span style={{ flex: 'none', width: 62 }}>
+          <input
+            type="time"
+            value={item.time}
+            aria-label="Time"
+            placeholder={arrive !== null ? fmtClock(arrive) : ''}
+            onChange={(e) => onSet('time', e.target.value)}
+            className="mono num"
+            style={{
+              width: '100%', fontSize: 10, background: 'transparent', border: 'none',
+              color: item.time ? 'var(--color-accent-200)' : 'var(--color-neutral-500)',
+            }}
+          />
+          {!item.time && arrive !== null ? (
+            <span className="mono num" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>
+              ~{fmtClock(arrive)}
+            </span>
+          ) : null}
+        </span>
         <input
           type="text"
           value={item.title}
@@ -387,11 +425,41 @@ function StopCard({
         value={item.note}
         placeholder="Note"
         onChange={(e) => onSet('note', e.target.value)}
-        style={{ width: '100%', fontSize: 11, height: 24, color: 'var(--color-neutral-500)' }}
+        style={{ width: '100%', fontSize: 11, height: 28, color: 'var(--color-neutral-500)' }}
       />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span className="mono" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)', flex: 1 }}>
+          stay
+        </span>
+        <input
+          type="number"
+          min={0}
+          step={15}
+          inputMode="numeric"
+          value={item.dwell || ''}
+          placeholder="60"
+          aria-label="Minutes at this stop"
+          onChange={(e) => onSet('dwell', Number(e.target.value) || 0)}
+          className="num"
+          style={{ flex: 'none', width: 40, fontSize: 11, textAlign: 'right' }}
+        />
+        <span className="mono" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>
+          min{depart !== null ? ` · till ${fmtClock(depart)}` : ''}
+        </span>
+      </div>
     </div>
   );
 }
+
+const summary = {
+  display: 'flex',
+  gap: 10,
+  padding: '9px 11px',
+  marginBottom: 10,
+  borderRadius: 'var(--radius-md)',
+  border: '1px solid var(--color-neutral-800)',
+  background: 'var(--color-surface)',
+};
 
 const empty = {
   padding: 18,

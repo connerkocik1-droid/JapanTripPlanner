@@ -92,6 +92,29 @@ so reordering or switching modes doesn't re-hit the router.
 
 Items stay attached to their city when you reorder the trip.
 
+**Itinerary builder.** A separate tab for filling a day, two ways:
+
+- *Build your own* — every place you've pinned in that city, filterable by kind,
+  each showing what it costs in time and money to add from wherever the day
+  currently ends: walking time and distance (free), metro time and fare, and how
+  long you'd typically spend there. Tap *Add* and it becomes the next stop.
+- *Presets* — ready-made days loaded from `public/presets/`. Add one to the current
+  day or replace it; its places are pinned automatically, reusing any you already
+  have rather than duplicating them. You can also import a preset from a file.
+
+Presets are plain JSON — see `public/presets/EXAMPLE.json` for the shape. List the
+ones you want offered in `public/presets/index.json`; an empty list is fine, and the
+builder just says there are none yet.
+
+**Time allotment.** Each stop carries how long you'll spend there (defaulted by kind
+— 75 min for a meal, 90 for a sight). The day planner lays that out on a clock with
+the routed travel between stops, so you get arrival times, a finish time, total time
+out, moving time, and the day's fares. Give a stop an explicit time and the schedule
+pins there, so a booked dinner stays put and everything before it reads back from it.
+
+**Fares.** Set the local metro fare per person once per city; every transit leg you
+choose is priced at that × travelers, and totalled for the day.
+
 **Checklist.** Yours to write: add, rename, tick and delete items. "Print the
 itinerary" produces a letter-paper sheet of every city, its hotel, transit, food,
 each day's items, and the checklist.

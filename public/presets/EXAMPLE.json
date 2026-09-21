@@ -1,0 +1,40 @@
+{
+  "id": "kyoto-east-day",
+  "name": "Example — East Kyoto on foot",
+  "city": "Kyoto",
+  "summary": "Delete this file, or copy its shape for your own days.",
+  "stops": [
+    {
+      "title": "Morning at Kiyomizu-dera",
+      "place": "Kiyomizu-dera",
+      "kind": "do",
+      "addr": "1-294 Kiyomizu, Higashiyama Ward, Kyoto",
+      "ll": [34.9949, 135.785],
+      "time": "08:30",
+      "dwell": 75,
+      "cost": 4,
+      "mode": "walk",
+      "note": "Go early, before the lane fills up"
+    },
+    {
+      "title": "Lunch in Gion",
+      "place": "Gion lunch",
+      "kind": "eat",
+      "ll": [35.0037, 135.7788],
+      "dwell": 60,
+      "cost": 18,
+      "band": "$$",
+      "mode": "walk"
+    },
+    {
+      "title": "Fushimi Inari before sunset",
+      "place": "Fushimi Inari Taisha",
+      "kind": "do",
+      "ll": [34.9671, 135.7727],
+      "dwell": 120,
+      "cost": 0,
+      "mode": "transit",
+      "note": "Keep climbing past the crowds"
+    }
+  ]
+}
