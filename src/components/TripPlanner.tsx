@@ -7,6 +7,8 @@ import { planDay } from '@/lib/dayPlan';
 import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
+import type { RouteStop } from '@/lib/geo';
+import { isFlightLeg } from '@/lib/legKind';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
@@ -241,8 +243,12 @@ export default function TripPlanner() {
     setFit({ points, nonce: fitNonce.current });
   }, []);
 
-  const route = useMemo(
-    () => doc.cities.map((c) => c.ll).filter((ll): ll is LatLng => !!ll),
+  // Each city carries how you got there, so the map can draw flown legs as flights.
+  const route = useMemo<RouteStop[]>(
+    () =>
+      doc.cities
+        .filter((c) => !!c.ll)
+        .map((c) => ({ ll: c.ll as LatLng, flight: isFlightLeg(c.transitName) })),
     [doc.cities],
   );
 
