@@ -1,5 +1,5 @@
 import { DayItem, TravelMode } from './data';
-import { HopResult } from './useDayRoute';
+import { HopResult, legOf } from './useDayRoute';
 
 export interface PlannedStop {
   item: DayItem;
@@ -14,8 +14,23 @@ export interface PlannedStop {
   estimated: boolean;
 }
 
+/** Getting back to where the day started, which every day ends with. */
+export interface ReturnLeg {
+  mins: number;
+  mode: TravelMode;
+  /** True when the ride is a train rather than a city metro. */
+  rail: boolean;
+  cost: number;
+  estimated: boolean;
+  /** Metro time and walking time within the hop. */
+  rideMins: number;
+  walkMins: number;
+}
+
 export interface DayPlan {
   stops: PlannedStop[];
+  /** The way home, once the day has somewhere to come home from. */
+  back: ReturnLeg | null;
   /** Minutes the whole day takes, door to last stop. */
   totalMins: number;
   movingMins: number;
@@ -60,7 +75,7 @@ export function fmtSpan(mins: number): string {
 export function planDay(
   items: DayItem[],
   hops: HopResult[],
-  opts: { metroFare: number; travelers: number },
+  opts: { metroFare: number; travelers: number; back?: HopResult | null },
 ): DayPlan {
   const hopFor = (id: string) => hops.find((h) => h.toId === id);
   const first = items.find((it) => parseClock(it.time) !== null);
@@ -79,8 +94,10 @@ export function planDay(
     const isTransit = !!leg && leg.mode === 'transit';
     const travelCost = isTransit ? opts.metroFare * Math.max(1, opts.travelers) : 0;
 
-    if (i > 0 && travelMins) {
-      clock += travelMins;
+    if (travelMins) {
+      // The day's clock starts at the first stop, but getting there is still
+      // time on your feet — and its fare is already counted below.
+      if (i > 0) clock += travelMins;
       movingMins += travelMins;
     }
     transitCost += travelCost;
@@ -103,8 +120,33 @@ export function planDay(
     });
   });
 
+  // The return to the hotel is part of the day: it is what makes a late last
+  // stop expensive in time rather than free.
+  let back: ReturnLeg | null = null;
+  const backLeg = opts.back ? legOf(opts.back) : null;
+  if (backLeg) {
+    const mins = Math.round(backLeg.seconds / 60);
+    const cost = backLeg.mode === 'transit' ? opts.metroFare * Math.max(1, opts.travelers) : 0;
+    const parts = backLeg.parts ?? [];
+    const rideSecs = parts.filter((x) => x.kind === 'ride').reduce((a, x) => a + x.seconds, 0);
+    const walkSecs = parts.filter((x) => x.kind === 'walk').reduce((a, x) => a + x.seconds, 0);
+    back = {
+      mins,
+      mode: backLeg.mode,
+      rail: !!backLeg.rail,
+      cost,
+      estimated: backLeg.estimated,
+      rideMins: Math.round((rideSecs || (backLeg.mode === 'transit' ? backLeg.seconds : 0)) / 60),
+      walkMins: Math.round((walkSecs || (backLeg.mode === 'walk' ? backLeg.seconds : 0)) / 60),
+    };
+    clock += mins;
+    movingMins += mins;
+    transitCost += cost;
+  }
+
   return {
     stops,
+    back,
     totalMins: Math.max(0, clock - startMins),
     movingMins,
     transitCost,

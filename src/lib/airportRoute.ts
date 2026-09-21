@@ -21,6 +21,8 @@ export interface AirportRoute {
   summary: string;
   /** True when nothing rides — walking beat the metro outright. */
   walkOnly: boolean;
+  /** True when the ride is a train rather than a city metro. */
+  rail: boolean;
   /** True when the numbers are modelled rather than routed by a real service. */
   estimated: boolean;
   provider: string;
@@ -55,6 +57,7 @@ export function toAirportRoute(hotelId: string, leg: RouteLeg, opts: FareOpts): 
     // EST badge already covers; keep the line for the lines you actually ride.
     summary: walkOnly ? 'on foot the whole way' : leg.estimated ? '' : leg.summary ?? '',
     walkOnly,
+    rail: !walkOnly && !!leg.rail,
     estimated: leg.estimated,
     provider: leg.provider,
   };

@@ -4,8 +4,10 @@ import { useEffect, useRef } from 'react';
 import maplibregl, { LngLatBoundsLike, Map as MlMap, Marker } from 'maplibre-gl';
 import { LatLng } from '@/lib/data';
 import { RouteStop, boundsOf, routeSegments, toLngLat } from '@/lib/geo';
+import { LEG_STYLE, LegKind } from '@/lib/legKind';
 
-const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
+// Point this at your own tiles to run without the public OpenFreeMap instance.
+const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
 const PLACE_LAYER = /city|town|village|suburb|quarter|hamlet|neighbourhood|country|state|province|region/i;
 
 export interface MapPin {
@@ -22,10 +24,10 @@ export interface MapPin {
   icon?: string;
 }
 
-/** One routed hop of the planned day, drawn on the map. */
+/** One routed hop of the planned day, drawn on the map in its own colour. */
 export interface MapLeg {
   id: string;
-  mode: 'walk' | 'transit' | 'bike';
+  kind: LegKind;
   geometry: [number, number][];
 }
 
@@ -38,7 +40,7 @@ export interface MapFocus {
 
 export interface TripMapProps {
   pins: MapPin[];
-  /** Cities in trip order — the route is drawn through these, leg by leg. */
+  /** Cities in trip order, each carrying how the leg into it is travelled. */
   route: RouteStop[];
   /** Routed legs of the day being planned; empty on the other tabs. */
   legs: MapLeg[];
@@ -108,52 +110,53 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
         }
       });
 
-      const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
-      (['route-main', 'route-pulse'] as const).forEach((id, i) => {
-        m.addSource(id, { type: 'geojson', data: empty });
+      const blank: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+      /*
+       * Both the trip route and the day's legs are drawn the same way: one
+       * source of coloured features, a solid layer and a dashed one filtered
+       * apart, because `line-dasharray` cannot be driven by the data the way
+       * `line-color` can. A pale casing underneath keeps every colour legible
+       * on a light basemap.
+       */
+      ([
+        ['route', 2.4, 5.4],
+        ['day', 3.6, 7],
+      ] as const).forEach(([group, width, casing]) => {
+        m.addSource(group + '-legs', { type: 'geojson', data: blank });
         m.addLayer({
-          id,
+          id: group + '-casing',
           type: 'line',
-          source: id,
-          // Flights are their own layer below; this is everything on the ground.
-          filter: ['!=', ['get', 'flight'], true],
+          source: group + '-legs',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: {
-            'line-color': i ? '#d2cefd' : '#9184d9',
-            'line-width': 2.2,
-            ...(i ? { 'line-dasharray': [0, 4] } : {}),
-          },
+          paint: { 'line-color': '#ffffff', 'line-width': casing, 'line-opacity': 0.75 },
+        });
+        m.addLayer({
+          id: group + '-solid',
+          type: 'line',
+          source: group + '-legs',
+          filter: ['!=', ['get', 'dashed'], true],
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': ['get', 'color'], 'line-width': width },
+        });
+        m.addLayer({
+          id: group + '-dash',
+          type: 'line',
+          source: group + '-legs',
+          // Flights and walks are chopped: neither follows anything on the ground.
+          filter: ['==', ['get', 'dashed'], true],
+          layout: { 'line-cap': 'butt', 'line-join': 'round' },
+          paint: { 'line-color': ['get', 'color'], 'line-width': width, 'line-dasharray': [2.2, 2] },
         });
       });
 
-      // Flights don't follow anything on the ground, so they are drawn as a
-      // chopped blue line rather than as a route you could take.
+      m.addSource('route-pulse', { type: 'geojson', data: blank });
       m.addLayer({
-        id: 'route-flight',
+        id: 'route-pulse',
         type: 'line',
-        source: 'route-main',
-        filter: ['==', ['get', 'flight'], true],
-        layout: { 'line-cap': 'butt', 'line-join': 'round' },
-        paint: { 'line-color': '#4f9dfd', 'line-width': 2.6, 'line-dasharray': [2.4, 2.2] },
-      });
-
-      // Planned-day legs: walking dashed, transit solid, drawn above the route.
-      m.addSource('day-legs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      m.addLayer({
-        id: 'day-walk',
-        type: 'line',
-        source: 'day-legs',
-        filter: ['!=', ['get', 'mode'], 'transit'],
+        source: 'route-pulse',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#b5abfc', 'line-width': 3.2, 'line-dasharray': [1.6, 1.6] },
-      });
-      m.addLayer({
-        id: 'day-transit',
-        type: 'line',
-        source: 'day-legs',
-        filter: ['==', ['get', 'mode'], 'transit'],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': '#58c8d8', 'line-width': 3.6 },
+        paint: { 'line-color': '#ffffff', 'line-width': 2.2, 'line-dasharray': [0, 4], 'line-opacity': 0.9 },
       });
 
       // A light dash crawling the route.
@@ -184,15 +187,16 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
     if (!m || !ready.current) return;
     const { pins: ps, route: rt } = latest.current;
 
+    // City to city, densified along the great circle and coloured by how you travel.
     const routeData: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
       features: routeSegments(rt).map((seg) => ({
         type: 'Feature' as const,
-        properties: { flight: seg.flight },
+        properties: { color: LEG_STYLE[seg.kind].color, dashed: LEG_STYLE[seg.kind].dashed },
         geometry: { type: 'LineString' as const, coordinates: seg.line },
       })),
     };
-    (['route-main', 'route-pulse'] as const).forEach((id) => {
+    (['route-legs', 'route-pulse'] as const).forEach((id) => {
       const src = m.getSource(id) as maplibregl.GeoJSONSource | undefined;
       src?.setData(routeData);
     });
@@ -204,7 +208,7 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
         .filter((l) => l.geometry.length > 1)
         .map((l) => ({
           type: 'Feature' as const,
-          properties: { mode: l.mode },
+          properties: { color: LEG_STYLE[l.kind].color, dashed: LEG_STYLE[l.kind].dashed },
           geometry: { type: 'LineString' as const, coordinates: l.geometry },
         })),
     });
@@ -263,7 +267,7 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
     sync();
     if (!focus) frameTrip();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(pins), JSON.stringify(route), JSON.stringify(legs.map((l) => l.id + l.mode + l.geometry.length))]);
+  }, [JSON.stringify(pins), JSON.stringify(route), JSON.stringify(legs.map((l) => l.id + l.kind + l.geometry.length))]);
 
   /** Fit a specific set of points — "zoom to day". */
   useEffect(() => {

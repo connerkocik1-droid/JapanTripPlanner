@@ -23,6 +23,12 @@ export interface HopResult {
   loading: boolean;
 }
 
+/** The leg a hop would be taken by: the chosen mode, else what the app suggests. */
+export function legOf(hop: HopResult, mode?: TravelMode) {
+  const want = mode ?? hop.suggested ?? 'walk';
+  return hop.options[want] ?? hop.options.walk ?? hop.options.transit;
+}
+
 /**
  * Routes each consecutive pair of located stops in a day. Nothing is requested
  * for places that are merely pinned — a place is only routed once it is a stop.

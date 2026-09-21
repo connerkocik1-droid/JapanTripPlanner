@@ -4,6 +4,7 @@ import { City, Hotel, LatLng } from '@/lib/data';
 import { Airport, airportByCode, airportsNear, nearestAirport } from '@/lib/airports';
 import { RouteState, useAirportRoutes } from '@/lib/airportRoute';
 import { fmtUsd } from '@/lib/format';
+import { LEG_STYLE } from '@/lib/legKind';
 import { fmtDistance, fmtDuration } from '@/lib/routing';
 
 const label = { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const;
@@ -44,7 +45,7 @@ export default function AirportRoutes({ city, travelers, onCity, onZoom }: Airpo
     <div style={{ marginTop: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
         <div className="mono" style={label}>
-          Airport → hotel · metro + walking
+          Airport → hotel · train or metro + walking
         </div>
         <select
           value={city.airportCode}
@@ -171,13 +172,18 @@ function RouteRow({
         {route ? (
           <>
             {route.rideSeconds ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <i className="ph ph-train-simple" style={{ fontSize: 11 }} />
-                <span className="num">{fmtDuration(route.rideSeconds)}</span> metro
+              <span
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  color: LEG_STYLE[route.rail ? 'rail' : 'metro'].color,
+                }}
+              >
+                <i className={'ph ' + (route.rail ? 'ph-train' : 'ph-train-simple')} style={{ fontSize: 11 }} />
+                <span className="num">{fmtDuration(route.rideSeconds)}</span> {route.rail ? 'train' : 'metro'}
               </span>
             ) : null}
             {route.walkSeconds ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: LEG_STYLE.walk.color }}>
                 <i className="ph ph-person-simple-walk" style={{ fontSize: 11 }} />
                 <span className="num">{fmtDuration(route.walkSeconds)}</span> walking
               </span>

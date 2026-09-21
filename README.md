@@ -25,6 +25,7 @@ No environment variables are required. Two optional ones tune the geocoder:
 | `GEOCODER_CONTACT` | `japan-trip-planner` | Sent in the `User-Agent`, per Nominatim's usage policy |
 | `OSRM_URL` | `https://routing.openstreetmap.de` | Walking/cycling router |
 | `TRANSIT_URL` | *(unset)* | A MOTIS `/api/v1/plan` endpoint for real metro routing |
+| `NEXT_PUBLIC_MAP_STYLE` | OpenFreeMap `positron` | A MapLibre style URL, to self-host the basemap |
 
 Without `TRANSIT_URL` the metro option is a clearly-labelled estimate: the walking
 distance less the walks either side, ridden at 27 km/h for a short hop and up to
@@ -85,6 +86,27 @@ city, because the express and the ordinary train are not the same money. When a 
 is close enough that walking beats riding, the row says so and costs nothing. With
 `TRANSIT_URL` set these are real routed journeys with the lines named; without it they
 are modelled and marked `EST`.
+
+**Make a plan on the map.** Hit **Make a plan**, set the time you want to be out
+the door, then tap places on the map. Each tap previews the hop from where you
+would actually be — your selected hotel for the first stop, the last stop after
+that — with the metro time, the walking time, the fare for everyone travelling and
+the time you would arrive. **Add to plan** keeps it and its route stays drawn;
+carry on tapping, then save the plan into one of that city's days, where it becomes
+an ordinary itinerary you can edit stop by stop. Tapping a place outside a plan does
+the same thing, minus the commitment: you get the route from the hotel and the option
+to start a plan there. The **Build** tab opens the same flow.
+
+**The way home is always shown.** Every day, planned or hand-built, routes its last
+stop back to the hotel and prices it, so a day that ends an hour from your bed says
+so before you commit to it. It counts in the day's moving time and its fares.
+
+**Colour-coded legs.** Every routed line, on the map and in the text beside it, uses
+one scheme: high-speed and long-distance rail **green**, metro **yellow**, walking a
+chopped **red**, flights a chopped **blue**. City-to-city hops are coloured from
+whatever you typed for them — "Nozomi 21" draws as rail, "ANA 857" as a flight —
+and a hop you have not described yet stays the app's own accent rather than being
+guessed at.
 
 **Plot first, route later.** Every place you pin shows on the map immediately, with
 a glyph for its kind (eat / do / stay / other) — across all cities, or just the open
