@@ -35,7 +35,7 @@ export interface MapPin {
   sub: string;
   ll: LatLng;
   selected: boolean;
-  kind: 'city' | 'hotel' | 'place';
+  kind: 'city' | 'hotel' | 'place' | 'airport';
   /** Position in the planned day, when this pin is a stop. */
   stopNumber?: number;
   /** Place category, for the marker glyph. */
@@ -350,15 +350,18 @@ export default function TripMap({
       el.style.zIndex = p.selected ? '500' : p.kind === 'city' ? '400' : '300';
       el.classList.toggle('is-stop', p.stopNumber !== undefined);
       el.classList.toggle('is-hotel', p.kind === 'hotel');
+      el.classList.toggle('is-airport', p.kind === 'airport');
       el.classList.toggle('is-pick', p.kind === 'hotel' && !!p.hotel?.pick);
       el.classList.toggle('is-open', cardId.current === p.id);
       // Hotels are purple whatever else they are, so the lodging options read
       // as one set at a glance; the budgeted one is the brighter of them.
       const hotelDot = p.kind === 'hotel' ? ' tp-hotel' + (p.hotel?.pick ? ' is-pick' : '') : '';
+      // Airports are the blue of a flight leg — the same colour arrives twice.
+      const airportDot = p.kind === 'airport' ? ' tp-airport' : '';
       const dot = p.stopNumber !== undefined
-        ? `<span class="tp-dot tp-num${hotelDot}">${p.stopNumber}</span>`
+        ? `<span class="tp-dot tp-num${hotelDot}${airportDot}">${p.stopNumber}</span>`
         : p.icon
-          ? `<span class="tp-dot tp-icon${hotelDot}"><i class="ph ${p.icon}"></i></span>`
+          ? `<span class="tp-dot tp-icon${hotelDot}${airportDot}"><i class="ph ${p.icon}"></i></span>`
           : '<span class="tp-dot"></span>';
       el.innerHTML =
         '<span class="tp-ret"></span>' + dot +

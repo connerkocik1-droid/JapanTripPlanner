@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Airport } from './airports';
-import { Hotel, LatLng } from './data';
+import { Airport, airportByCode, nearestAirport } from './airports';
+import { City, Hotel, LatLng, TravelMode } from './data';
 import { RouteLeg, betterMode, routeLeg, splitLeg } from './routing';
 
 /** The arrival trip for one hotel option: how long it takes and what it costs. */
@@ -26,6 +26,9 @@ export interface AirportRoute {
   /** True when the numbers are modelled rather than routed by a real service. */
   estimated: boolean;
   provider: string;
+  /** How you travel it, and the line the map draws for it. */
+  mode: TravelMode;
+  geometry: [number, number][];
 }
 
 export interface RouteState {
@@ -60,7 +63,22 @@ export function toAirportRoute(hotelId: string, leg: RouteLeg, opts: FareOpts): 
     rail: !walkOnly && !!leg.rail,
     estimated: leg.estimated,
     provider: leg.provider,
+    mode: leg.mode,
+    geometry: leg.geometry,
   };
+}
+
+/**
+ * The airport a city arrives at: whatever it has been set to, else the nearest
+ * international gateway. Pure, so the map and the city panel can both ask.
+ */
+export function airportFor(city: City): Airport | null {
+  return airportByCode(city.airportCode) ?? nearestAirport(city.ll);
+}
+
+/** What one person pays to get in from the airport: the city's figure, else the airport's. */
+export function airportFareFor(city: City, airport: Airport | null): number {
+  return Number(city.airportFare) || airport?.fare || Number(city.metroFare) || 0;
 }
 
 /**
@@ -85,39 +103,63 @@ export function routableHotels(hotels: Hotel[]): { id: string; ll: LatLng }[] {
   return hotels.filter((h): h is Hotel & { ll: LatLng } => !!h.ll).map((h) => ({ id: h.id, ll: h.ll }));
 }
 
+/** A city's arrival: the airport it lands at, and the run to each option. */
+export interface CityArrival {
+  cityId: string;
+  airport: Airport;
+}
+
+export interface AirportPlan {
+  /** One entry per city that has an airport, for the map's pins. */
+  arrivals: CityArrival[];
+  /** Airport → hotel for every located option, keyed by hotel id. */
+  routes: Record<string, RouteState>;
+}
+
 /**
- * Airport → hotel for every option in a city, keyed by hotel id. Requests are
- * cached per hop by `routeLeg`, so re-rendering or switching cities re-uses
- * what has already been fetched.
+ * Airport → hotel for every option in the cities given. Hotel ids are unique
+ * across a trip, so one flat map serves both the city panel, which asks about
+ * one city, and the map, which draws several. Requests are cached per hop by
+ * `routeLeg`, so the two callers share the same fetches rather than doubling
+ * them.
  */
-export function useAirportRoutes(
-  airport: Airport | null,
-  hotels: Hotel[],
-  opts: FareOpts,
-): Record<string, RouteState> {
-  const [state, setState] = useState<Record<string, RouteState>>({});
-  const targets = routableHotels(hotels);
+export function useAirportRoutes(cities: City[], travelers: number): AirportPlan {
+  const [routes, setRoutes] = useState<Record<string, RouteState>>({});
+
+  const jobs = cities.flatMap((city) => {
+    const airport = airportFor(city);
+    if (!airport) return [];
+    const fare = airportFareFor(city, airport);
+    return routableHotels(city.hotels).map((hotel) => ({ cityId: city.id, airport, hotel, fare }));
+  });
+  const arrivals: CityArrival[] = [];
+  cities.forEach((city) => {
+    const airport = airportFor(city);
+    if (airport) arrivals.push({ cityId: city.id, airport });
+  });
+
   const signature = [
-    airport?.code ?? '',
-    opts.fare,
-    opts.travelers,
-    ...targets.map((t) => `${t.id}@${t.ll[0].toFixed(5)},${t.ll[1].toFixed(5)}`),
+    travelers,
+    ...jobs.map((j) => `${j.airport.code}:${j.fare}>${j.hotel.id}@${j.hotel.ll[0].toFixed(5)},${j.hotel.ll[1].toFixed(5)}`),
   ].join('|');
 
   useEffect(() => {
-    if (!airport || !targets.length) {
-      setState({});
+    if (!jobs.length) {
+      setRoutes({});
       return;
     }
     let live = true;
-    setState(Object.fromEntries(targets.map((t) => [t.id, { loading: true, route: null }])));
+    setRoutes(Object.fromEntries(jobs.map((j) => [j.hotel.id, { loading: true, route: null }])));
 
     (async () => {
       const results = await Promise.all(
-        targets.map(async (t) => [t.id, await routeFromAirport(airport, t, opts)] as const),
+        jobs.map(
+          async (j) =>
+            [j.hotel.id, await routeFromAirport(j.airport, j.hotel, { fare: j.fare, travelers })] as const,
+        ),
       );
       if (!live) return;
-      setState(Object.fromEntries(results.map(([id, route]) => [id, { loading: false, route }])));
+      setRoutes(Object.fromEntries(results.map(([id, route]) => [id, { loading: false, route }])));
     })();
 
     return () => {
@@ -126,5 +168,5 @@ export function useAirportRoutes(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature]);
 
-  return state;
+  return { arrivals, routes };
 }
