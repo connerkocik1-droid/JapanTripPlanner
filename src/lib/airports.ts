@@ -55,8 +55,11 @@ export const AIRPORTS: Airport[] = [
 /** Beyond this, an airport is not the one you flew into — it is another trip. */
 const MAX_KM = 160;
 
+const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
 export function airportByCode(code: string): Airport | null {
-  const want = code.trim().toUpperCase();
+  // Called with whatever a saved plan holds, which on an old save is nothing.
+  const want = str(code).trim().toUpperCase();
   return AIRPORTS.find((a) => a.code === want) ?? null;
 }
 

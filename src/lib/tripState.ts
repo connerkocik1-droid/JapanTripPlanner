@@ -53,21 +53,34 @@ export function dayKey(cityId: string, n: number): string {
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
 
+const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
 /**
- * Saves written before a field existed are missing it. Fill the hotel and place
- * gaps so the inputs bound to them stay controlled and the map cards have
- * something defined to read.
+ * Saves written before a field existed are missing it. Fill the city, hotel and
+ * place gaps so the inputs bound to them stay controlled, the map cards have
+ * something defined to read, and nothing is handed an undefined where it
+ * expects a string.
  */
-function fillCity(city: City): City {
+function fillCity(raw: City): City {
+  // Start from a blank city so a save written before a field existed still
+  // comes back with that field. Without this the airport lookup is handed an
+  // undefined code and throws on the first render, taking the whole page down.
+  const city = { ...blankCity(''), ...(raw ?? ({} as City)) };
   return {
     ...city,
-    hotels: (Array.isArray(city?.hotels) ? city.hotels : []).map((h) => ({
+    name: str(city.name),
+    transitName: str(city.transitName),
+    transitUrl: str(city.transitUrl),
+    flightNo: str(city.flightNo),
+    arriveAt: str(city.arriveAt),
+    airportCode: str(city.airportCode),
+    hotels: (Array.isArray(city.hotels) ? city.hotels : []).map((h) => ({
       ...blankHotel(),
       ...h,
       overview: typeof h?.overview === 'string' ? h.overview : '',
       images: strings(h?.images),
     })),
-    places: (Array.isArray(city?.places) ? city.places : []).map((p) => ({
+    places: (Array.isArray(city.places) ? city.places : []).map((p) => ({
       ...blankPlace(),
       ...p,
       images: strings(p?.images),
