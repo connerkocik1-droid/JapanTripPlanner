@@ -2,15 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { City, LatLng } from '@/lib/data';
+import { City, DEFAULT_DWELL, LatLng, PLACE_KINDS, Place, uid } from '@/lib/data';
+import { planDay } from '@/lib/dayPlan';
+import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
-import type { MapFocus, MapPin } from './TripMap';
+import type { MapFocus, MapLeg, MapPin } from './TripMap';
+import { useDayRoute, type Stop } from '@/lib/useDayRoute';
 import CityPanel from './CityPanel';
 import DaysTab from './DaysTab';
+import BuilderTab from './BuilderTab';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
 import NotesTab from './NotesTab';
@@ -21,7 +25,7 @@ import TripSettings from './TripSettings';
 // MapLibre touches window on import — keep it off the server render.
 const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
 
-type Tab = 'map' | 'days' | 'list' | 'notes';
+type Tab = 'map' | 'days' | 'build' | 'list' | 'notes';
 
 const SEG_FILL: Record<string, string> = {
   Lodging: 'var(--color-accent-400)',
@@ -45,11 +49,26 @@ export default function TripPlanner() {
   const [newCity, setNewCity] = useState('');
   const [locating, setLocating] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [online, setOnline] = useState(true);
+  const [plotAll, setPlotAll] = useState(true);
+  const [fit, setFit] = useState<{ points: LatLng[]; nonce: number } | null>(null);
+  const fitNonce = useRef(0);
   const shell = useRef<HTMLDivElement | null>(null);
   const dragMoved = useRef(false);
   const focusNonce = useRef(0);
 
   const d = useMemo(() => derive(doc), [doc]);
+
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    return () => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    };
+  }, []);
 
   useEffect(() => {
     if (cityId && !doc.cities.some((c) => c.id === cityId)) setCityId(null);
@@ -60,7 +79,9 @@ export default function TripPlanner() {
 
   const snapPx = useCallback((i: number) => {
     const h = shell.current?.clientHeight ?? 874;
-    return [238, Math.round(h * 0.56), Math.round(h * 0.88)][i];
+    // The peek has to clear the floating tab pill and the home indicator.
+    const peek = Math.min(268, Math.round(h * 0.3));
+    return [peek, Math.round(h * 0.58), Math.round(h * 0.9)][i];
   }, []);
 
   const sheetH = dragH ?? (tab === 'map' ? snapPx(expanded ? snap : 0) : snapPx(2));
@@ -83,33 +104,142 @@ export default function TripPlanner() {
     [cityId, expanded, snap, doc.cities, zoomTo],
   );
 
+  const dayEntry = d.schedule[Math.min(Math.max(1, day), Math.max(1, d.schedule.length)) - 1] ?? null;
+
+  /**
+   * The planned day as an ordered list of located stops. Only stops get routed —
+   * a place that is merely pinned costs nothing.
+   */
+  const stops = useMemo<Stop[]>(() => {
+    if (!dayEntry) return [];
+    const city = dayEntry.city;
+    const out: Stop[] = [];
+    const hotel = selectedHotel(city);
+    if (hotel?.ll) {
+      out.push({ id: 'hotel:' + hotel.id, label: hotel.name || 'Hotel', ll: hotel.ll, mode: 'walk' });
+    }
+    dayEntry.items.forEach((it) => {
+      const place = city.places.find((p) => p.id === it.placeId);
+      if (place?.ll) {
+        out.push({ id: it.id, label: it.title || place.name, ll: place.ll, mode: it.mode });
+      }
+    });
+    return out;
+  }, [dayEntry]);
+
+  const hops = useDayRoute(tab === 'days' || tab === 'build' ? stops : []);
+
+  const legs = useMemo<MapLeg[]>(() => {
+    if (tab !== 'days' && tab !== 'build') return [];
+    return hops
+      .map((h) => {
+        const leg = h.options[h.to.mode] ?? h.options.walk;
+        if (!leg) return null;
+        return { id: h.toId, mode: leg.mode, geometry: leg.geometry };
+      })
+      .filter((l): l is MapLeg => !!l);
+  }, [hops, tab]);
+
+  const dayCity = dayEntry?.city ?? null;
+
+  const plan = useMemo(
+    () =>
+      dayEntry
+        ? planDay(dayEntry.items, hops, {
+            metroFare: dayCity?.metroFare ?? 0,
+            travelers: doc.trip.travelers,
+          })
+        : null,
+    [dayEntry, hops, dayCity?.metroFare, doc.trip.travelers],
+  );
+
+  /** Where the day currently ends — what the builder routes new stops from. */
+  const buildAnchor = useMemo(() => {
+    const last = stops[stops.length - 1];
+    return last ? { ll: last.ll, label: last.label } : null;
+  }, [stops]);
+
+  /** Add a pinned place to the end of the day being built. */
+  const addStopFromPlace = useCallback(
+    (place: Place) => {
+      if (!dayEntry) return;
+      const id = store.addDayItem(dayEntry.key);
+      store.setDayItem(dayEntry.key, id, 'title', place.name);
+      store.setDayItem(dayEntry.key, id, 'placeId', place.id);
+      store.setDayItem(dayEntry.key, id, 'dwell', DEFAULT_DWELL[place.kind] ?? 60);
+      void uid;
+    },
+    [dayEntry, store],
+  );
+
+  const applyPreset = useCallback(
+    (preset: Preset, replace: boolean) => {
+      if (!dayEntry || !dayCity) return;
+      store.applyPreset(dayCity.id, dayEntry.key, preset, replace);
+      setTab('days');
+    },
+    [dayEntry, dayCity, store],
+  );
+
   /** Map pins: every city, plus the selected city's hotel and places. */
   const pins = useMemo<MapPin[]>(() => {
     const out: MapPin[] = [];
+    // Stop numbers come from the day being planned, if any.
+    const stopIndex = new Map<string, number>();
+    if (tab === 'days' || tab === 'build') {
+      stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
+    }
+
     doc.cities.forEach((c) => {
+      const focused = c.id === cityId;
       if (c.ll) {
         out.push({
           id: c.id,
           name: c.name,
           sub: `${c.nights} ${c.nights === 1 ? 'night' : 'nights'}`,
           ll: c.ll,
-          selected: c.id === cityId,
+          selected: focused,
           kind: 'city',
         });
       }
-      if (c.id !== cityId) return;
       const hotel = selectedHotel(c);
-      if (hotel?.ll && hotel.name) {
-        out.push({ id: hotel.id, name: hotel.name, sub: 'stay', ll: hotel.ll, selected: false, kind: 'hotel' });
+      if (hotel?.ll && hotel.name && (focused || plotAll)) {
+        out.push({
+          id: hotel.id,
+          name: hotel.name,
+          sub: 'stay',
+          ll: hotel.ll,
+          selected: false,
+          kind: 'hotel',
+          icon: 'ph-bed',
+          stopNumber: stopIndex.get(hotel.ll.join(',')),
+        });
       }
+      // Every pinned place is plotted — they are only routed once scheduled.
+      if (!focused && !plotAll) return;
       c.places.forEach((p) => {
-        if (p.ll && p.name) {
-          out.push({ id: p.id, name: p.name, sub: p.band, ll: p.ll, selected: false, kind: 'place' });
-        }
+        if (!p.ll || !p.name) return;
+        out.push({
+          id: p.id,
+          name: p.name,
+          sub: p.band || p.note,
+          ll: p.ll,
+          selected: false,
+          kind: 'place',
+          icon: PLACE_KINDS.find((k) => k.id === p.kind)?.icon ?? 'ph-map-pin',
+          stopNumber: stopIndex.get(p.ll.join(',')),
+        });
       });
     });
     return out;
-  }, [doc.cities, cityId]);
+  }, [doc.cities, cityId, plotAll, stops, tab]);
+
+  const zoomToPoints = useCallback((points: LatLng[]) => {
+    if (!points.length) return;
+    fitNonce.current += 1;
+    setFocus(null);
+    setFit({ points, nonce: fitNonce.current });
+  }, []);
 
   const route = useMemo(
     () => doc.cities.map((c) => c.ll).filter((ll): ll is LatLng => !!ll),
@@ -206,13 +336,22 @@ export default function TripPlanner() {
 
   return (
     <div ref={shell} style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: 'var(--color-bg)' }}>
-      <TripMap pins={pins} route={route} sheetPx={sheetH} focus={focus} onSelect={selectCity} />
+      <TripMap
+        pins={pins}
+        route={route}
+        legs={legs}
+        fit={fit}
+        sheetPx={sheetH}
+        focus={focus}
+        onSelect={selectCity}
+      />
 
       {/* Header */}
       <div
         style={{
           position: 'absolute', top: 0, left: 0, right: 0, zIndex: 6,
-          padding: '54px 16px 14px', pointerEvents: 'none',
+          padding: 'calc(var(--safe-top) + 14px) calc(var(--safe-right) + 16px) 14px calc(var(--safe-left) + 16px)',
+          pointerEvents: 'none',
           background:
             'linear-gradient(180deg, rgba(16,18,32,.94) 0%, rgba(16,18,32,.72) 62%, transparent 100%)',
         }}
@@ -229,6 +368,20 @@ export default function TripPlanner() {
           />
           {doc.trip.travelers} {doc.trip.travelers === 1 ? 'traveler' : 'travelers'}
           {d.schedule.length ? ` · ${d.schedule.length} days` : ' · nothing planned yet'}
+          <span style={{ flex: 1 }} />
+          {!online ? (
+            <span
+              className="mono"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5,
+                color: 'var(--color-neutral-400)',
+              }}
+            >
+              <i className="ph ph-cloud-slash" style={{ fontSize: 11 }} />
+              Offline
+            </span>
+          ) : null}
+          <SaveChip state={store.saveState} error={store.saveState === 'error'} />
         </div>
 
         <div
@@ -375,14 +528,22 @@ export default function TripPlanner() {
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <div style={{ fontSize: 14, fontWeight: 500 }}>
-              {tab === 'map' ? 'Route' : tab === 'days' ? 'Days' : tab === 'list' ? 'Checklist' : 'Notes'}
+              {tab === 'map'
+                ? 'Route'
+                : tab === 'days'
+                  ? 'Days'
+                  : tab === 'build'
+                    ? 'Itinerary builder'
+                    : tab === 'list'
+                      ? 'Checklist'
+                      : 'Notes'}
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
               {tab === 'map'
                 ? d.cities.length
                   ? `${d.cities.length} ${d.cities.length === 1 ? 'city' : 'cities'}`
                   : 'add your first city'
-                : tab === 'days'
+                : tab === 'days' || tab === 'build'
                   ? d.schedule.length
                     ? `Day ${day} of ${d.schedule.length}`
                     : 'no days yet'
@@ -393,7 +554,13 @@ export default function TripPlanner() {
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 11px 96px' }}>
+        <div
+          className="scroll-pane"
+          style={{
+            flex: 1,
+            padding: '0 calc(var(--safe-right) + 11px) calc(var(--safe-bottom) + 108px) calc(var(--safe-left) + 11px)',
+          }}
+        >
           {tab === 'map' ? (
             <>
               {settings ? (
@@ -403,7 +570,27 @@ export default function TripPlanner() {
                   onChange={store.setTrip}
                   touch={store.touch}
                   onClose={() => setSettings(false)}
+                  onExport={store.exportDoc}
+                  onImport={store.importDoc}
+                  persisted={store.persisted}
                 />
+              ) : null}
+
+              {d.cities.length > 1 ? (
+                <button
+                  className="tap"
+                  onClick={() => setPlotAll((v) => !v)}
+                  style={{
+                    width: '100%', minHeight: 36, marginBottom: 8, borderRadius: 9999,
+                    border: '1px solid var(--color-neutral-800)', background: 'transparent',
+                    color: plotAll ? 'var(--color-accent-200)' : 'var(--color-neutral-500)',
+                    fontSize: 11.5, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  <i className={plotAll ? 'ph-fill ph-map-pin' : 'ph ph-map-pin'} style={{ fontSize: 12 }} />
+                  {plotAll ? 'Showing every place on the map' : 'Showing only the open city'}
+                </button>
               ) : null}
 
               {d.cities.length === 0 && !adding ? (
@@ -528,6 +715,10 @@ export default function TripPlanner() {
               schedule={d.schedule}
               start={doc.trip.start}
               selected={day}
+              hops={hops}
+              plan={plan}
+              fare={dayCity?.metroFare ?? 0}
+              travelers={doc.trip.travelers}
               onSelectDay={(n) => {
                 setDay(n);
                 const c = d.schedule[n - 1]?.city;
@@ -537,6 +728,23 @@ export default function TripPlanner() {
               onSetItem={store.setDayItem}
               onToggleItem={store.toggleDayItem}
               onRemoveItem={store.removeDayItem}
+              onMoveItem={store.moveDayItem}
+              onZoomDay={() => zoomToPoints(stops.map((s) => s.ll))}
+              onZoomStop={(ll) => zoomTo(ll, 16.5)}
+            />
+          ) : null}
+
+          {tab === 'build' ? (
+            <BuilderTab
+              day={dayEntry}
+              city={dayCity}
+              anchor={buildAnchor}
+              metroFare={dayCity?.metroFare ?? 0}
+              travelers={doc.trip.travelers}
+              onApplyPreset={applyPreset}
+              onAddStop={addStopFromPlace}
+              onSetFare={(f) => dayCity && store.setCity(dayCity.id, 'metroFare', f)}
+              onZoom={(ll) => zoomTo(ll, 16)}
             />
           ) : null}
 
@@ -567,8 +775,9 @@ export default function TripPlanner() {
       {/* Tab pill */}
       <div
         style={{
-          position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 12, display: 'flex', gap: 3, padding: 3, borderRadius: 9999,
+          position: 'absolute', bottom: 'calc(var(--safe-bottom) + 14px)',
+          left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 24px)',
+          zIndex: 12, display: 'flex', gap: 2, padding: 3, borderRadius: 9999,
           background: 'rgba(35,37,50,.94)', border: '1px solid var(--color-neutral-800)',
           backdropFilter: 'blur(12px)',
         }}
@@ -576,6 +785,7 @@ export default function TripPlanner() {
         {([
           ['map', 'Map', 'ph-map-trifold'],
           ['days', 'Days', 'ph-calendar-blank'],
+          ['build', 'Build', 'ph-squares-four'],
           ['list', 'Checklist', 'ph-check-square'],
           ['notes', 'Notes', 'ph-chat-teardrop-text'],
         ] as [Tab, string, string][]).map(([id, labelText, icon]) => {
@@ -589,11 +799,11 @@ export default function TripPlanner() {
                 if (id !== 'map') setFocus(null);
               }}
               style={{
-                minHeight: 44, padding: '0 12px', borderRadius: 9999, border: 'none',
+                minHeight: 44, padding: '0 10px', borderRadius: 9999, border: 'none',
                 background: on ? 'var(--color-accent-800)' : 'transparent',
                 color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-400)',
-                fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 5,
               }}
             >
               <i className={'ph ' + icon} style={{ fontSize: 14 }} />
@@ -682,6 +892,39 @@ function CityRow({
         </>
       ) : null}
     </div>
+  );
+}
+
+/** Quiet unless something is wrong — travelers shouldn't have to wonder. */
+function SaveChip({ state, error }: { state: string; error: boolean }) {
+  if (error) {
+    return (
+      <span
+        className="mono"
+        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, color: '#ff8fae' }}
+        title="This device refused to store the plan. Export a backup from the trip panel."
+      >
+        <i className="ph ph-warning" style={{ fontSize: 11 }} />
+        Not saved
+      </span>
+    );
+  }
+  return (
+    <span
+      className="mono"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5,
+        color: 'var(--color-neutral-600)',
+        opacity: state === 'saving' ? 1 : 0.65,
+        transition: 'opacity .2s ease',
+      }}
+    >
+      <i
+        className={state === 'saving' ? 'ph ph-cloud-arrow-up' : 'ph ph-check-circle'}
+        style={{ fontSize: 11 }}
+      />
+      {state === 'saving' ? 'Saving' : 'Saved'}
+    </span>
   );
 }
 

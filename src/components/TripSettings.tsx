@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import { Trip } from '@/lib/data';
 import { fmtUsd } from '@/lib/format';
 import { Touch } from '@/lib/tripState';
@@ -11,6 +12,10 @@ export interface TripSettingsProps {
   onChange: <K extends keyof Trip>(key: K, val: Trip[K]) => void;
   touch: (path: string) => Touch | undefined;
   onClose: () => void;
+  onExport: () => void;
+  onImport: (input: unknown) => void;
+  /** Whether the browser promised to keep this origin's storage. */
+  persisted: boolean;
 }
 
 const label = { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const;
@@ -22,8 +27,12 @@ const row = {
   borderTop: '1px solid var(--color-neutral-900)',
 } as const;
 
-export default function TripSettings({ trip, spent, onChange, touch, onClose }: TripSettingsProps) {
+export default function TripSettings({
+  trip, spent, onChange, touch, onClose, onExport, onImport, persisted,
+}: TripSettingsProps) {
   const left = trip.planned ? trip.planned - spent : 0;
+  const file = useRef<HTMLInputElement | null>(null);
+  const [problem, setProblem] = useState('');
   return (
     <div
       style={{
@@ -119,9 +128,63 @@ export default function TripSettings({ trip, spent, onChange, touch, onClose }: 
           {left >= 0 ? `${fmtUsd(left)} left` : `${fmtUsd(-left)} over`}
         </div>
       ) : null}
+
+      {/* The plan lives on this device, so it needs a way off it. */}
+      <div style={{ ...row, gap: 8 }}>
+        <button className="tap" onClick={onExport} style={backupBtn}>
+          <i className="ph ph-download-simple" style={{ fontSize: 13 }} />
+          Back up
+        </button>
+        <button className="tap" onClick={() => file.current?.click()} style={backupBtn}>
+          <i className="ph ph-upload-simple" style={{ fontSize: 13 }} />
+          Restore
+        </button>
+        <input
+          ref={file}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: 'none' }}
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            e.target.value = '';
+            if (!f) return;
+            try {
+              const { readFile } = await import('@/lib/storage');
+              onImport(await readFile(f));
+              setProblem('');
+            } catch (err) {
+              setProblem(err instanceof Error ? err.message : 'Could not read that file.');
+            }
+          }}
+        />
+      </div>
+      <div className="mono" style={{ ...label, fontSize: 8.5, lineHeight: 1.5 }}>
+        {problem ? (
+          <span style={{ color: '#ff8fae' }}>{problem}</span>
+        ) : persisted ? (
+          'Saved on this device · storage protected from cleanup'
+        ) : (
+          'Saved on this device · back up before you travel'
+        )}
+      </div>
     </div>
   );
 }
+
+const backupBtn = {
+  flex: 1,
+  minHeight: 40,
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--color-neutral-800)',
+  background: 'transparent',
+  color: 'var(--color-neutral-300)',
+  fontSize: 11.5,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+} as const;
 
 const mini = {
   width: 36, height: 36, borderRadius: 'var(--radius-sm)',

@@ -15,12 +15,26 @@ export interface Hotel {
   ll: LatLng | null;
 }
 
-/** Somewhere to eat, or anything else worth pinning near a city. */
+/** What a pinned place is, which decides its map marker. */
+export type PlaceKind = 'eat' | 'do' | 'stay' | 'other';
+
+export const PLACE_KINDS: { id: PlaceKind; label: string; icon: string }[] = [
+  { id: 'eat', label: 'Eat', icon: 'ph-fork-knife' },
+  { id: 'do', label: 'Do', icon: 'ph-camera' },
+  { id: 'stay', label: 'Stay', icon: 'ph-bed' },
+  { id: 'other', label: 'Other', icon: 'ph-map-pin' },
+];
+
+/**
+ * Somewhere pinned near a city — a restaurant, a sight, anything. Plotting one
+ * costs nothing; it is only routed once it goes into a day.
+ */
 export interface Place {
   id: string;
   name: string;
   addr: string;
   note: string;
+  kind: PlaceKind;
   /** Free text: "$", "$$", "reservation", whatever is useful. */
   band: string;
   ll: LatLng | null;
@@ -37,9 +51,14 @@ export interface City {
   transitName: string;
   transitUrl: string;
   transitCost: number;
+  /** A single metro/bus fare here, per person — prices the day's transit legs. */
+  metroFare: number;
   foodPer: number;
   places: Place[];
 }
+
+/** How you get to a stop from the one before it. */
+export type TravelMode = 'walk' | 'transit' | 'bike';
 
 export interface DayItem {
   id: string;
@@ -48,6 +67,12 @@ export interface DayItem {
   note: string;
   cost: number;
   done: boolean;
+  /** A pinned place this stop is at — what makes the day routable. */
+  placeId: string | null;
+  /** Chosen way of getting here from the previous stop. */
+  mode: TravelMode;
+  /** Minutes you expect to spend here, for the day's time allotment. */
+  dwell: number;
 }
 
 export interface CheckItem {
@@ -64,6 +89,14 @@ export interface Trip {
   /** What you plan to spend in total. 0 means no target set. */
   planned: number;
 }
+
+/** Default minutes at a stop, by what kind of place it is. */
+export const DEFAULT_DWELL: Record<PlaceKind, number> = {
+  eat: 75,
+  do: 90,
+  stay: 30,
+  other: 45,
+};
 
 export const HOTEL_SLOTS = 3;
 export const MAX_NIGHTS = 30;
@@ -99,6 +132,7 @@ export function blankCity(name: string, ll: LatLng | null = null): City {
     transitName: '',
     transitUrl: '',
     transitCost: 0,
+    metroFare: 0,
     foodPer: 0,
     places: [],
   };

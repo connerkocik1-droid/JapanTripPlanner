@@ -1,0 +1,89 @@
+'use client';
+
+import { LatLng, TravelMode } from './data';
+
+export interface RouteLeg {
+  mode: TravelMode;
+  meters: number;
+  seconds: number;
+  geometry: [number, number][];
+  /** True when the numbers are modelled rather than routed by a real service. */
+  estimated: boolean;
+  provider: string;
+  summary?: string;
+}
+
+/** Walk and transit for the same hop, so the day planner can compare them. */
+export interface LegOptions {
+  walk?: RouteLeg;
+  transit?: RouteLeg;
+  bike?: RouteLeg;
+}
+
+const cache = new Map<string, LegOptions>();
+const inflight = new Map<string, Promise<LegOptions>>();
+
+function key(from: LatLng, to: LatLng, modes: TravelMode[]): string {
+  const r = (n: number) => n.toFixed(5);
+  return `${r(from[0])},${r(from[1])}>${r(to[0])},${r(to[1])}|${modes.join(',')}`;
+}
+
+/** Route one hop. Repeat calls for the same hop are served from cache. */
+export async function routeLeg(
+  from: LatLng,
+  to: LatLng,
+  modes: TravelMode[] = ['walk', 'transit'],
+): Promise<LegOptions> {
+  const k = key(from, to, modes);
+  const hit = cache.get(k);
+  if (hit) return hit;
+  const pending = inflight.get(k);
+  if (pending) return pending;
+
+  const run = (async () => {
+    try {
+      const res = await fetch('/api/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to, modes }),
+      });
+      if (!res.ok) return {};
+      const body = (await res.json()) as { legs: RouteLeg[] };
+      const out: LegOptions = {};
+      body.legs.forEach((l) => {
+        out[l.mode] = l;
+      });
+      cache.set(k, out);
+      return out;
+    } catch {
+      return {};
+    } finally {
+      inflight.delete(k);
+    }
+  })();
+
+  inflight.set(k, run);
+  return run;
+}
+
+export function fmtDuration(seconds: number): string {
+  const mins = Math.max(1, Math.round(seconds / 60));
+  if (mins < 60) return mins + ' min';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+export function fmtDistance(meters: number): string {
+  return meters < 1000 ? Math.round(meters) + ' m' : (meters / 1000).toFixed(1) + ' km';
+}
+
+/** Which option to suggest: walking wins unless transit saves real time. */
+export function betterMode(opts: LegOptions): TravelMode | null {
+  const { walk, transit } = opts;
+  if (!walk) return transit ? 'transit' : null;
+  if (!transit) return 'walk';
+  // Short hops aren't worth a station, and transit has to beat walking clearly.
+  if (walk.meters < 1200) return 'walk';
+  return transit.seconds + 240 < walk.seconds ? 'transit' : 'walk';
+}

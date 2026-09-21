@@ -3,6 +3,12 @@
 
 /* Nocturne design tokens */
 :root {
+  /* Safe-area insets, so the app sits right when installed to a home screen. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
   --color-bg: #161826;
   --color-surface: #232532;
   --color-text: #e9e9ed;
@@ -48,7 +54,44 @@ html, body {
   color: var(--color-text);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  /* Standalone apps shouldn't rubber-band or offer text selection chrome. */
   overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+input,
+textarea,
+select {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/*
+ * In a browser tab iOS zooms the viewport when a field under 16px takes focus.
+ * Installed to the home screen it does not, so the dense type is only bumped
+ * for the tab case rather than compromising the layout everywhere.
+ */
+@media (display-mode: browser) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* Scrollable panes keep their momentum without dragging the page with them. */
+.scroll-pane {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 a { color: var(--color-accent); }
@@ -208,3 +251,28 @@ input::placeholder { color: var(--color-neutral-600); }
   }
   #trip-print .pc { break-inside: avoid; page-break-inside: avoid; }
 }
+
+/* stop and place markers */
+.trip-pin .tp-dot.tp-num,
+.trip-pin .tp-dot.tp-icon {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #161826;
+  background: var(--color-accent-400);
+  border: 1.5px solid #161826;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.trip-pin .tp-dot.tp-icon {
+  background: var(--color-surface);
+  color: var(--color-accent-300);
+  border-color: var(--color-accent-700);
+  font-size: 11px;
+}
+.trip-pin.is-stop .tp-name { color: #e9e9ed; }
+.trip-pin.is-sub .tp-name { font-size: 10px; }

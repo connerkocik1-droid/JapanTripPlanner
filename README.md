@@ -23,6 +23,12 @@ No environment variables are required. Two optional ones tune the geocoder:
 |---|---|---|
 | `NOMINATIM_URL` | `https://nominatim.openstreetmap.org/search` | Swap in a paid geocoder |
 | `GEOCODER_CONTACT` | `japan-trip-planner` | Sent in the `User-Agent`, per Nominatim's usage policy |
+| `OSRM_URL` | `https://routing.openstreetmap.de` | Walking/cycling router |
+| `TRANSIT_URL` | *(unset)* | A MOTIS `/api/v1/plan` endpoint for real metro routing |
+
+Without `TRANSIT_URL` the metro option is a clearly-labelled estimate (modelled from
+the walking distance at ~32 km/h plus 10 minutes of access and waiting), so "walk or
+metro?" still has an answer. Walking is routed either way.
 
 ## What's in it
 
@@ -61,9 +67,53 @@ instantly. Add the transit leg (× travelers) and a per-day food figure, and the
 header card sums Lodging / Transit / Food live against the budget you set. Costs
 you attach to itinerary items are tracked separately as "planned items".
 
-**Days.** Each city's nights become days, dated from the trip start. Add items with
-a time, title, note and cost; tap the dot to mark one done. Items stay attached to
-their city when you reorder the trip.
+**Plot first, route later.** Every place you pin shows on the map immediately, with
+a glyph for its kind (eat / do / stay / other) — across all cities, or just the open
+one. Nothing is routed at this stage: pinning costs no requests.
+
+**Day planner.** Each city's nights become days, dated from the trip start. A day is
+an ordered list of stops: give a stop a time, title, cost, and point it at one of the
+city's pinned places. The day then starts from your selected hotel and routes each
+consecutive pair:
+
+- **Walking** comes from a public OSRM instance — the line follows real streets and
+  the duration is a routed duration, not a straight line.
+- **Transit** comes from a MOTIS-compatible endpoint when `TRANSIT_URL` is set
+  (Transitous, or your own instance), including the lines you'd ride.
+- Each hop shows both options side by side with time and distance, a ★ on the faster
+  one, and `EST` on anything modelled rather than routed. Tap either to choose it.
+- The chosen legs are drawn on the map — walking dashed in blurple, transit solid in
+  cyan — with numbered stop markers. "Zoom to day" fits the whole day; the pin button
+  on any stop flies to it.
+- The day header totals your moving time.
+
+Reorder stops with the arrows and the routes recompute. Results are cached per hop,
+so reordering or switching modes doesn't re-hit the router.
+
+Items stay attached to their city when you reorder the trip.
+
+**Itinerary builder.** A separate tab for filling a day, two ways:
+
+- *Build your own* — every place you've pinned in that city, filterable by kind,
+  each showing what it costs in time and money to add from wherever the day
+  currently ends: walking time and distance (free), metro time and fare, and how
+  long you'd typically spend there. Tap *Add* and it becomes the next stop.
+- *Presets* — ready-made days loaded from `public/presets/`. Add one to the current
+  day or replace it; its places are pinned automatically, reusing any you already
+  have rather than duplicating them. You can also import a preset from a file.
+
+Presets are plain JSON — see `public/presets/EXAMPLE.json` for the shape. List the
+ones you want offered in `public/presets/index.json`; an empty list is fine, and the
+builder just says there are none yet.
+
+**Time allotment.** Each stop carries how long you'll spend there (defaulted by kind
+— 75 min for a meal, 90 for a sight). The day planner lays that out on a clock with
+the routed travel between stops, so you get arrival times, a finish time, total time
+out, moving time, and the day's fares. Give a stop an explicit time and the schedule
+pins there, so a booked dinner stays put and everything before it reads back from it.
+
+**Fares.** Set the local metro fare per person once per city; every transit leg you
+choose is priced at that × travelers, and totalled for the day.
 
 **Checklist.** Yours to write: add, rename, tick and delete items. "Print the
 itinerary" produces a letter-paper sheet of every city, its hotel, transit, food,
@@ -77,11 +127,34 @@ control picks up that person's outline color plus a `Conner · 4m ago` credit li
 **Notes** parks thoughts that aren't in the plan yet, scoped to a city or the whole
 trip, marked settled when they're decided. Cities with open notes show a count.
 
+## Installing it (PWA)
+
+It is a installable progressive web app: open the deployed URL on a phone and use
+*Add to Home Screen*. Installed, it runs standalone (no browser chrome), lays out
+against the safe-area insets, and keeps working on a bad signal:
+
+- a service worker caches the app shell, fonts and icons, and up to 600 map tiles,
+  so a place you have already looked at still draws offline;
+- routing and geocoding are never served from cache — they need the network, and
+  the header shows an **Offline** badge when there isn't one;
+- `viewport-fit=cover`, `display: standalone`, portrait orientation, no
+  rubber-band scrolling, and no zoom-on-focus.
+
 ## Where the data lives
 
 Everything you enter — the trip settings, cities, hotels, transit, places, day
-items, checklist, notes, and the attribution stamps — persists to `localStorage`
-under `trip-planner:v2`.
+items, checklist, notes, and the attribution stamps — is written to **IndexedDB**,
+with a `localStorage` copy as a backup. Writes are debounced and flushed when the
+app is backgrounded, and the header shows `Saving` / `Saved`, or **Not saved** if
+the browser refused to store it.
+
+On first run the app calls `navigator.storage.persist()`, which asks the browser
+not to evict the plan — Chrome grants this to installed apps, and Safari uses it to
+exempt the site from its 7-day cleanup of unused storage.
+
+**Back up before you travel.** The trip panel has *Back up* and *Restore*, which
+write and read a plain JSON file. On a local-only app that file is the only copy
+that survives a lost phone.
 
 **This is per-browser.** Two people on two devices each get their own copy and will
 not see each other's edits. Making the plan genuinely shared needs a backend
@@ -95,9 +168,12 @@ components.
 app/
   layout.tsx, page.tsx, globals.css   # shell + Nocturne design tokens
   api/geocode/route.ts                # address → coordinates
+  api/route/route.ts                  # walking (OSRM) and transit legs
 src/lib/
   data.ts        # the document's types and blank factories (no trip content)
   geo.ts         # great-circle route geometry, bounds
+  routing.ts     # client side of the router, per-hop cache, walk-vs-transit pick
+  useDayRoute.ts # routes the planned day's consecutive stops
   derive.ts      # schedule, budget and per-city totals
   tripState.ts   # persisted document + who-changed-what
   people.ts      # Conner / Anasophia
