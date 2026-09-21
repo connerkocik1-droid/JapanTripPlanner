@@ -2,6 +2,14 @@
 
 import { LatLng, TravelMode } from './data';
 
+/** One piece of a transit journey — a ride, or the walk either side of it. */
+export interface RoutePart {
+  kind: 'walk' | 'ride';
+  meters: number;
+  seconds: number;
+  label?: string;
+}
+
 export interface RouteLeg {
   mode: TravelMode;
   meters: number;
@@ -11,6 +19,19 @@ export interface RouteLeg {
   estimated: boolean;
   provider: string;
   summary?: string;
+  /** Transit only: what you ride and what you walk, in order. */
+  parts?: RoutePart[];
+}
+
+/** Seconds spent riding and seconds spent on foot within a transit leg. */
+export function splitLeg(leg: RouteLeg): { ride: number; walk: number } {
+  if (!leg.parts?.length) {
+    return leg.mode === 'walk' ? { ride: 0, walk: leg.seconds } : { ride: leg.seconds, walk: 0 };
+  }
+  return leg.parts.reduce(
+    (a, p) => (p.kind === 'ride' ? { ...a, ride: a.ride + p.seconds } : { ...a, walk: a.walk + p.seconds }),
+    { ride: 0, walk: 0 },
+  );
 }
 
 /** Walk and transit for the same hop, so the day planner can compare them. */

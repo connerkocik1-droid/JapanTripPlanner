@@ -6,6 +6,7 @@ import { fmtUsd, walkLabel } from '@/lib/format';
 import { CitySpend } from '@/lib/derive';
 import { isFlightLeg } from '@/lib/legKind';
 import { Touch } from '@/lib/tripState';
+import AirportRoutes from './AirportRoutes';
 import TouchMark, { touchStyle } from './TouchMark';
 import { GeoStatus, NumField, boxed, ghostBtn, label, useGeocodedAddress } from './fields';
 
@@ -104,6 +105,9 @@ export default function CityPanel({
         </span>
         <i className="ph ph-caret-right" style={{ flex: 'none', fontSize: 12, color: 'var(--color-neutral-600)' }} />
       </button>
+
+      {/* Arrival from the airport, per option. Renders nothing until one is pinned. */}
+      <AirportRoutes city={city} travelers={travelers} onCity={onCity} onZoom={onZoom} />
 
       {/* Transit */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 7px' }}>

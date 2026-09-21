@@ -60,6 +60,13 @@ export interface City {
   flightNo: string;
   /** HH:MM local, as printed on the ticket. */
   arriveAt: string;
+  /**
+   * IATA code of the airport you arrive at. Blank means "the nearest one",
+   * which is what almost every city wants, so nothing has to be set up.
+   */
+  airportCode: string;
+  /** One-way airport→hotel fare per person; 0 uses the airport's typical fare. */
+  airportFare: number;
   /** A single metro/bus fare here, per person — prices the day's transit legs. */
   metroFare: number;
   foodPer: number;
@@ -143,6 +150,8 @@ export function blankCity(name: string, ll: LatLng | null = null): City {
     transitCost: 0,
     flightNo: '',
     arriveAt: '',
+    airportCode: '',
+    airportFare: 0,
     metroFare: 0,
     foodPer: 0,
     places: [],
