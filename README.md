@@ -121,11 +121,15 @@ consecutive pair:
   the duration is a routed duration, not a straight line.
 - **Transit** comes from a MOTIS-compatible endpoint when `TRANSIT_URL` is set
   (Transitous, or your own instance), including the lines you'd ride.
+- Both routers are public services that throttle, so each request has a four-second
+  deadline. Past it the leg falls back to the modelled estimate rather than leaving
+  the hop with no route at all.
 - Each hop shows both options side by side with time and distance, a ★ on the faster
   one, and `EST` on anything modelled rather than routed. Tap either to choose it.
-- The chosen legs are drawn on the map — walking dashed in blurple, transit solid in
-  cyan — with numbered stop markers. "Zoom to day" fits the whole day; the pin button
-  on any stop flies to it.
+- The chosen legs are drawn on the map in the colours above, with numbered stop
+  markers, and they stay there whichever tab is open — the map is the thing you look
+  at, so switching to it does not empty it. "Zoom to day" fits the whole day; the pin
+  button on any stop flies to it.
 - The day header totals your moving time.
 
 Reorder stops with the arrows and the routes recompute. Results are cached per hop,
