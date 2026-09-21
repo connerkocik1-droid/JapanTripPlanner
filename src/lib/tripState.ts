@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckItem, City, DayItem, Hotel, LatLng, Place, Trip,
+  CheckItem, City, DayItem, Hotel, LatLng, Place, TravelMode, Trip,
   blankCity, blankHotel, newTrip, uid,
 } from './data';
+import { fmtClock } from './dayPlan';
 import { PersonId, isPersonId } from './people';
 import { Preset, dwellFor, stopToPlace } from './presets';
 import { downloadDoc, loadDoc, requestPersistence, saveDoc } from './storage';
@@ -81,6 +82,13 @@ export function normalize(input: unknown): TripDoc {
   };
 }
 
+/** A plan built on the map, ready to become day items. */
+export interface PlanCommit {
+  /** Minutes past midnight the day starts — it becomes the first stop's time. */
+  startMins: number;
+  stops: { placeId: string; title: string; mode: TravelMode; dwell: number }[];
+}
+
 export interface TripStore {
   doc: TripDoc;
   /** Hydrated from storage — false during the first (server-matching) render. */
@@ -123,6 +131,8 @@ export interface TripStore {
 
   /** Drop a ready-made day into a city: pins its places, schedules its stops. */
   applyPreset: (cityId: string, dayKey: string, preset: Preset, replace: boolean) => void;
+  /** Commit a plan built on the map into one of the city's days. */
+  applyPlan: (cityId: string, dayKey: string, plan: PlanCommit, replace: boolean) => void;
   addComment: (text: string, city: string | null) => void;
   toggleComment: (id: string) => void;
   removeComment: (id: string) => void;
@@ -480,6 +490,30 @@ export function useTripStore(): TripStore {
     [edit],
   );
 
+  const applyPlan = useCallback(
+    (cityId: string, key: string, plan: PlanCommit, replace: boolean) => {
+      if (!plan.stops.length) return;
+      edit(`day/${key}`, (d) => {
+        if (!d.cities.some((c) => c.id === cityId)) return d;
+        const items: DayItem[] = plan.stops.map((stop, i) => ({
+          id: uid(),
+          // Only the first stop is pinned to the clock; the rest follow from
+          // the routed travel and however long you linger.
+          time: i === 0 ? fmtClock(plan.startMins) : '',
+          title: stop.title,
+          note: '',
+          cost: 0,
+          done: false,
+          placeId: stop.placeId,
+          mode: stop.mode,
+          dwell: stop.dwell,
+        }));
+        return { ...d, days: { ...d.days, [key]: replace ? items : [...(d.days[key] ?? []), ...items] } };
+      });
+    },
+    [edit],
+  );
+
   const addComment = useCallback((text: string, city: string | null) => {
     const body = text.trim();
     const by = userRef.current;
@@ -526,14 +560,14 @@ export function useTripStore(): TripStore {
       addPlace, setPlace, removePlace,
       addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck,
-      applyPreset, addComment, toggleComment, removeComment, reset,
+      applyPreset, applyPlan, addComment, toggleComment, removeComment, reset,
     }),
     [
       doc, ready, saveState, lastSaved, persisted, exportDoc, importDoc,
       user, signIn, signOut, touch, setTrip,
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
       addPlace, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
-      addCheck, setCheck, toggleCheck, removeCheck, applyPreset,
+      addCheck, setCheck, toggleCheck, removeCheck, applyPreset, applyPlan,
       addComment, toggleComment, removeComment, reset,
     ],
   );

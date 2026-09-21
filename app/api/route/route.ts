@@ -41,6 +41,11 @@ export interface Leg {
   summary?: string;
   /** Transit only: the journey split into what you ride and what you walk. */
   parts?: LegPart[];
+  /**
+   * Transit only: true when the ride is long-distance or high-speed rail
+   * rather than a city metro. It decides the colour the leg is drawn in.
+   */
+  rail?: boolean;
 }
 
 /** One piece of a transit journey — a ride, or the walk either side of it. */
@@ -106,12 +111,21 @@ function rideSpeed(meters: number): number {
 }
 
 /** `streetMeters` is the walking distance for the same hop, when one is known. */
+/** Past this, a ride is a train rather than a metro — and is drawn as one. */
+const RAIL_METERS = 20000;
+
 function modelTransit(from: Pt, to: Pt, streetMeters: number): Leg {
   const rideMeters = Math.max(0, streetMeters - ACCESS_WALK.meters - EGRESS_WALK.meters);
   const rideSeconds = Math.round(rideMeters / rideSpeed(rideMeters));
+  const rail = rideMeters >= RAIL_METERS;
   const parts: LegPart[] = [
     { kind: 'walk', meters: ACCESS_WALK.meters, seconds: ACCESS_WALK.seconds, label: 'to the station' },
-    { kind: 'ride', meters: Math.round(rideMeters), seconds: rideSeconds + WAIT_SECONDS, label: 'metro' },
+    {
+      kind: 'ride',
+      meters: Math.round(rideMeters),
+      seconds: rideSeconds + WAIT_SECONDS,
+      label: rail ? 'train' : 'metro',
+    },
     { kind: 'walk', meters: EGRESS_WALK.meters, seconds: EGRESS_WALK.seconds, label: 'to the door' },
   ];
   return {
@@ -124,8 +138,9 @@ function modelTransit(from: Pt, to: Pt, streetMeters: number): Leg {
     ],
     estimated: true,
     provider: 'estimate',
-    summary: 'Metro, estimated',
+    summary: rail ? 'Train, estimated' : 'Metro, estimated',
     parts,
+    rail,
   };
 }
 
@@ -154,6 +169,9 @@ async function osrm(from: Pt, to: Pt, mode: Mode): Promise<Leg | null> {
     return null;
   }
 }
+
+/** MOTIS modes that mean a proper train rather than a city metro. */
+const RAIL_MODES = /^(RAIL|HIGHSPEED_RAIL|LONG_DISTANCE|NIGHT_RAIL|REGIONAL_FAST_RAIL|REGIONAL_RAIL|COACH)$/;
 
 interface MotisLeg {
   mode?: string;
@@ -218,6 +236,7 @@ async function motis(from: Pt, to: Pt): Promise<Leg | null> {
     let meters = 0;
     const rides: string[] = [];
     const parts: LegPart[] = [];
+    let rail = false;
     it.legs.forEach((leg) => {
       meters += leg.distance ?? 0;
       const pts = leg.legGeometry?.points ? decodePolyline(leg.legGeometry.points) : [];
@@ -225,7 +244,10 @@ async function motis(from: Pt, to: Pt): Promise<Leg | null> {
       else if (leg.from && leg.to) geometry.push([leg.from.lon, leg.from.lat], [leg.to.lon, leg.to.lat]);
       const m = (leg.mode ?? '').toUpperCase();
       const walking = !m || m === 'WALK';
-      if (!walking) rides.push(leg.routeShortName || m.toLowerCase());
+      if (!walking) {
+        rides.push(leg.routeShortName || m.toLowerCase());
+        if (RAIL_MODES.test(m)) rail = true;
+      }
       parts.push({
         kind: walking ? 'walk' : 'ride',
         meters: Math.round(leg.distance ?? 0),
@@ -243,6 +265,7 @@ async function motis(from: Pt, to: Pt): Promise<Leg | null> {
       provider: 'motis',
       summary: rides.length ? rides.join(' → ') : 'Walk only',
       parts,
+      rail,
     };
   } catch {
     return null;

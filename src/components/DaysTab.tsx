@@ -173,6 +173,55 @@ export default function DaysTab({
         })
       )}
 
+      {/* However the day ends, it ends back at the hotel — so it is always shown. */}
+      {plan?.back && hotel ? (
+        <div style={{ ...anchorRow, marginTop: 8 }}>
+          <i
+            className="ph ph-arrow-u-down-left"
+            style={{ fontSize: 13, color: 'var(--color-accent-300)' }}
+          />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span
+              style={{
+                display: 'block', fontSize: 12,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >
+              Back to {hotel.name || 'your hotel'}
+            </span>
+            <span
+              className="mono"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+                fontSize: 9, color: 'var(--color-neutral-500)',
+              }}
+            >
+              <i
+                className={
+                  'ph ' +
+                  (plan.back.mode !== 'transit'
+                    ? 'ph-person-simple-walk'
+                    : plan.back.rail
+                      ? 'ph-train'
+                      : 'ph-train-simple')
+                }
+                style={{ fontSize: 10 }}
+              />
+              <span className="num">{fmtSpan(plan.back.mins)}</span>
+              {plan.back.mode !== 'transit' ? 'on foot' : plan.back.rail ? 'by train' : 'by metro'}
+              {plan.back.mode === 'transit' && plan.back.walkMins ? (
+                <span className="num">{fmtSpan(plan.back.walkMins)} of it walking</span>
+              ) : null}
+              {plan.back.cost ? <span className="num">{fmtUsd(plan.back.cost)}</span> : null}
+              {plan.back.estimated ? <span style={{ fontSize: 7.5, opacity: 0.7 }}>EST</span> : null}
+            </span>
+          </span>
+          <span className="mono num" style={{ flex: 'none', fontSize: 9.5, color: 'var(--color-accent-300)' }}>
+            {fmtClock(plan.startMins + plan.totalMins)}
+          </span>
+        </div>
+      ) : null}
+
       <button
         className="tap"
         onClick={() => onAddItem(day.key)}

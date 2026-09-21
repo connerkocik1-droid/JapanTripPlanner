@@ -8,13 +8,17 @@ import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import type { RouteStop } from '@/lib/geo';
-import { isFlightLeg } from '@/lib/legKind';
+import { cityLegKind, hopKind } from '@/lib/legKind';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
 import type { MapFocus, MapLeg, MapPin } from './TripMap';
-import { useDayRoute, type Stop } from '@/lib/useDayRoute';
+import { legOf, useDayRoute, type Stop } from '@/lib/useDayRoute';
+import {
+  DEFAULT_START_MINS, Draft, PlanLeg, reroute, routeHop, stopFromPlace, timeline,
+} from '@/lib/planDraft';
 import CityPanel from './CityPanel';
+import PlanBuilder, { type Preview } from './PlanBuilder';
 import DaysTab from './DaysTab';
 import BuilderTab from './BuilderTab';
 import ChecklistTab from './ChecklistTab';
@@ -61,6 +65,11 @@ export default function TripPlanner() {
   const [settings, setSettings] = useState(false);
   const [online, setOnline] = useState(true);
   const [plotAll, setPlotAll] = useState(true);
+  // A plan being built on the map: the stops so far, and the hop on offer.
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [backLeg, setBackLeg] = useState<PlanLeg | null>(null);
+  const [backLoading, setBackLoading] = useState(false);
   const [fit, setFit] = useState<{ points: LatLng[]; nonce: number } | null>(null);
   const fitNonce = useRef(0);
   const shell = useRef<HTMLDivElement | null>(null);
@@ -155,18 +164,48 @@ export default function TripPlanner() {
     return out;
   }, [dayEntry]);
 
-  const hops = useDayRoute(tab === 'days' || tab === 'build' ? stops : []);
+  /** The same stops, plus the way home — every day ends back at the hotel. */
+  const routeStops = useMemo<Stop[]>(() => {
+    const home = dayEntry ? selectedHotel(dayEntry.city) : null;
+    if (stops.length < 2 || !home?.ll) return stops;
+    return [
+      ...stops,
+      { id: 'return:' + home.id, label: home.name || 'Hotel', ll: home.ll, mode: 'walk' as const },
+    ];
+  }, [stops, dayEntry]);
+
+  const hops = useDayRoute(tab === 'days' || tab === 'build' ? routeStops : []);
+  const returnHop = useMemo(() => hops.find((h) => h.toId.startsWith('return:')) ?? null, [hops]);
 
   const legs = useMemo<MapLeg[]>(() => {
+    // A plan being built owns the map: its hops, the way home, and the hop on offer.
+    if (draft || preview) {
+      const out: MapLeg[] = (draft?.stops ?? []).map((s, i) => ({
+        id: 'draft:' + i,
+        kind: hopKind(s.leg.mode, s.leg.rail),
+        geometry: s.leg.geometry,
+      }));
+      if (draft && backLeg) {
+        out.push({ id: 'draft:back', kind: hopKind(backLeg.mode, backLeg.rail), geometry: backLeg.geometry });
+      }
+      if (preview?.leg) {
+        out.push({
+          id: 'draft:preview',
+          kind: hopKind(preview.leg.mode, preview.leg.rail),
+          geometry: preview.leg.geometry,
+        });
+      }
+      return out;
+    }
     if (tab !== 'days' && tab !== 'build') return [];
     return hops
       .map((h) => {
-        const leg = h.options[h.to.mode] ?? h.options.walk;
+        const leg = h.toId.startsWith('return:') ? legOf(h) : legOf(h, h.to.mode);
         if (!leg) return null;
-        return { id: h.toId, mode: leg.mode, geometry: leg.geometry };
+        return { id: h.toId, kind: hopKind(leg.mode, leg.rail), geometry: leg.geometry };
       })
       .filter((l): l is MapLeg => !!l);
-  }, [hops, tab]);
+  }, [hops, tab, draft, preview, backLeg]);
 
   const dayCity = dayEntry?.city ?? null;
 
@@ -176,9 +215,10 @@ export default function TripPlanner() {
         ? planDay(dayEntry.items, hops, {
             metroFare: dayCity?.metroFare ?? 0,
             travelers: doc.trip.travelers,
+            back: returnHop,
           })
         : null,
-    [dayEntry, hops, dayCity?.metroFare, doc.trip.travelers],
+    [dayEntry, hops, returnHop, dayCity?.metroFare, doc.trip.travelers],
   );
 
   /** Where the day currently ends — what the builder routes new stops from. */
@@ -186,6 +226,179 @@ export default function TripPlanner() {
     const last = stops[stops.length - 1];
     return last ? { ll: last.ll, label: last.label } : null;
   }, [stops]);
+
+  /** The city a plan belongs to, and where it leaves from and comes back to. */
+  const planCity = useMemo(
+    () => (draft ? doc.cities.find((c) => c.id === draft.cityId) ?? null : null),
+    [draft, doc.cities],
+  );
+  const planHome = planCity ? selectedHotel(planCity) : null;
+
+  /** Which day a saved plan lands in: the open one when it fits, else the city's first. */
+  const planDayEntry = useMemo(() => {
+    if (!draft) return null;
+    const current = d.schedule[day - 1];
+    if (current && current.city.id === draft.cityId) return current;
+    return d.schedule.find((e) => e.city.id === draft.cityId) ?? null;
+  }, [draft, d.schedule, day]);
+
+  const startPlan = useCallback((cityId: string) => {
+    setDraft({ cityId, startMins: DEFAULT_START_MINS, stops: [] });
+    setPreview(null);
+    setBackLeg(null);
+    // A plan is built by tapping the map, so that is where it happens.
+    setTab('map');
+  }, []);
+
+  /**
+   * Tapping a place works the same whether a plan is open or not: it routes
+   * from where you would be — the active hotel, or wherever the plan has got to.
+   */
+  const openPreview = useCallback(
+    async (city: City, place: Place) => {
+      if (!place.ll) return;
+      const building = draft && draft.cityId === city.id ? draft : null;
+      const hotel = selectedHotel(city);
+      const last = building?.stops[building.stops.length - 1] ?? null;
+      const from = last ? last.ll : hotel?.ll ?? null;
+      const name = place.name || 'This place';
+      if (!from) {
+        setPreview({
+          placeId: place.id,
+          name,
+          fromName: city.name,
+          loading: false,
+          leg: null,
+          arrive: null,
+          problem: 'Make one of ' + city.name + "'s hotels active — the route starts there.",
+        });
+        return;
+      }
+      const fromName = last ? last.name : hotel?.name || 'your hotel';
+      setPreview({ placeId: place.id, name, fromName, loading: true, leg: null, arrive: null, problem: '' });
+      const leg = await routeHop(from, place.ll, city.metroFare, doc.trip.travelers);
+      const arrive =
+        building && leg ? timeline(building, null, '').endMins + Math.round(leg.seconds / 60) : null;
+      setPreview((prev) =>
+        prev && prev.placeId === place.id
+          ? { ...prev, loading: false, leg, arrive, problem: leg ? '' : 'No route found.' }
+          : prev,
+      );
+    },
+    [draft, doc.trip.travelers],
+  );
+
+  /** A tap on the map: a city opens its panel, a place offers its route. */
+  const onPin = useCallback(
+    (id: string) => {
+      if (doc.cities.some((c) => c.id === id)) {
+        selectCity(id);
+        return;
+      }
+      for (const c of doc.cities) {
+        const place = c.places.find((p) => p.id === id);
+        if (place) {
+          void openPreview(c, place);
+          return;
+        }
+        const hotel = c.hotels.find((h) => h.id === id);
+        if (hotel?.ll) {
+          showOnMap(hotel.ll, 16);
+          return;
+        }
+      }
+    },
+    [doc.cities, selectCity, openPreview, showOnMap],
+  );
+
+  /** Take the hop on offer: the plan grows by one stop and keeps its route. */
+  const addPreview = useCallback(() => {
+    const p = preview;
+    if (!p?.leg) return;
+    for (const c of doc.cities) {
+      const place = c.places.find((x) => x.id === p.placeId);
+      if (!place?.ll) continue;
+      const leg = p.leg;
+      setDraft((cur) => {
+        const base =
+          cur && cur.cityId === c.id ? cur : { cityId: c.id, startMins: DEFAULT_START_MINS, stops: [] };
+        return { ...base, stops: [...base.stops, stopFromPlace(place, place.ll as LatLng, leg)] };
+      });
+      break;
+    }
+    setPreview(null);
+  }, [preview, doc.cities]);
+
+  const removePlanStop = useCallback(
+    (index: number) => {
+      const cur = draft;
+      if (!cur) return;
+      const city = doc.cities.find((c) => c.id === cur.cityId);
+      const home = city ? selectedHotel(city)?.ll ?? null : null;
+      const stops = cur.stops.filter((_, i) => i !== index);
+      setDraft({ ...cur, stops });
+      if (!home || !city || !stops.length) return;
+      // Dropping a stop changes the hop into the next one, so re-route the rest.
+      void reroute(stops, home, city.metroFare, doc.trip.travelers).then((fixed) => {
+        setDraft((now) =>
+          now && now.cityId === cur.cityId && now.stops.length === fixed.length
+            ? { ...now, stops: fixed }
+            : now,
+        );
+      });
+    },
+    [draft, doc.cities, doc.trip.travelers],
+  );
+
+  const savePlan = useCallback(() => {
+    const cur = draft;
+    const entry = planDayEntry;
+    if (!cur || !entry || !cur.stops.length) return;
+    // The saved day is pinned to when you reach the first stop, not when you
+    // leave the hotel, so it reads back exactly as the plan previewed it.
+    const firstArrive = timeline(cur, null, '').rows[0]?.arrive ?? cur.startMins;
+    store.applyPlan(
+      cur.cityId,
+      entry.key,
+      {
+        startMins: firstArrive,
+        stops: cur.stops.map((s) => ({
+          placeId: s.placeId,
+          title: s.name,
+          mode: s.leg.mode,
+          dwell: s.dwell,
+        })),
+      },
+      false,
+    );
+    setDraft(null);
+    setPreview(null);
+    setDay(entry.n);
+    setCityId(cur.cityId);
+    setTab('days');
+  }, [draft, planDayEntry, store]);
+
+  /** The way home is routed as the plan grows, so it is never a surprise. */
+  useEffect(() => {
+    const cur = draft;
+    const last = cur?.stops[cur.stops.length - 1] ?? null;
+    const home = planHome?.ll ?? null;
+    if (!cur || !last || !home) {
+      setBackLeg(null);
+      setBackLoading(false);
+      return;
+    }
+    let live = true;
+    setBackLoading(true);
+    void routeHop(last.ll, home, planCity?.metroFare ?? 0, doc.trip.travelers).then((leg) => {
+      if (!live) return;
+      setBackLeg(leg);
+      setBackLoading(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, [draft, planHome?.ll, planCity?.metroFare, doc.trip.travelers]);
 
   /** Add a pinned place to the end of the day being built. */
   const addStopFromPlace = useCallback(
@@ -214,7 +427,9 @@ export default function TripPlanner() {
     const out: MapPin[] = [];
     // Stop numbers come from the day being planned, if any.
     const stopIndex = new Map<string, number>();
-    if (tab === 'days' || tab === 'build') {
+    if (draft) {
+      draft.stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
+    } else if (tab === 'days' || tab === 'build') {
       stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
     }
 
@@ -277,7 +492,7 @@ export default function TripPlanner() {
       });
     });
     return out;
-  }, [doc.cities, cityId, plotAll, stops, tab]);
+  }, [doc.cities, cityId, plotAll, stops, tab, draft]);
 
   const zoomToPoints = useCallback((points: LatLng[]) => {
     if (!points.length) return;
@@ -291,7 +506,7 @@ export default function TripPlanner() {
     () =>
       doc.cities
         .filter((c) => !!c.ll)
-        .map((c) => ({ ll: c.ll as LatLng, flight: isFlightLeg(c.transitName) })),
+        .map((c) => ({ ll: c.ll as LatLng, kind: cityLegKind(c.transitName) })),
     [doc.cities],
   );
 
@@ -331,6 +546,9 @@ export default function TripPlanner() {
   if (!store.user) return <Login onPick={store.signIn} />;
 
   const me = PEOPLE[store.user];
+  /** The city a new plan would be for: the open one, else the day's, else the first. */
+  const planTarget = doc.cities.find((c) => c.id === cityId) ?? dayCity ?? doc.cities[0] ?? null;
+
   const totalWithItems = d.totals.grand + d.totals.activities;
   const planned = doc.trip.planned;
   const segments = (['Lodging', 'Transit', 'Food'] as const).map((k) => {
@@ -515,7 +733,7 @@ export default function TripPlanner() {
           fit={fit}
           sheetPx={mapInset}
           focus={focus}
-          onSelect={selectCity}
+          onSelect={onPin}
         />
 
         {tab === 'map' && d.cities.length === 0 ? (
@@ -539,7 +757,44 @@ export default function TripPlanner() {
           </div>
         ) : null}
 
-        {tab === 'map' && d.cities.length > 1 ? (
+        <PlanBuilder
+          draft={draft}
+          cityName={planCity?.name ?? ''}
+          homeName={planHome?.name || 'your hotel'}
+          dayLabel={planDayEntry ? 'Day ' + planDayEntry.n : 'a day'}
+          travelers={doc.trip.travelers}
+          back={backLeg}
+          backLoading={backLoading}
+          preview={preview}
+          onSetStart={(mins) => setDraft((cur) => (cur ? { ...cur, startMins: mins } : cur))}
+          onAddPreview={addPreview}
+          onClosePreview={() => setPreview(null)}
+          onRemoveStop={removePlanStop}
+          onSave={savePlan}
+          onDiscard={() => {
+            setDraft(null);
+            setPreview(null);
+          }}
+        />
+
+        {tab === 'map' && !draft && !preview && planTarget ? (
+          <button
+            className="tap"
+            onClick={() => startPlan(planTarget.id)}
+            style={{
+              position: 'absolute', right: 12, bottom: 'calc(var(--safe-bottom) + 14px)', zIndex: 5,
+              minHeight: 38, padding: '0 14px', borderRadius: 9999, cursor: 'pointer',
+              background: 'rgba(35,37,50,.94)', backdropFilter: 'blur(12px)',
+              border: '1px solid var(--color-accent-700)', color: 'var(--color-accent-200)',
+              fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <i className="ph ph-path" style={{ fontSize: 14 }} />
+            Make a plan
+          </button>
+        ) : null}
+
+        {tab === 'map' && d.cities.length > 1 && !draft && !preview ? (
           <button className="map-toggle tap" onClick={() => setPlotAll((v) => !v)}>
             <i className={plotAll ? 'ph-fill ph-map-pin' : 'ph ph-map-pin'} />
             {plotAll ? 'Every place' : 'Open city only'}
@@ -785,6 +1040,7 @@ export default function TripPlanner() {
               onAddStop={addStopFromPlace}
               onSetFare={(f) => dayCity && store.setCity(dayCity.id, 'metroFare', f)}
               onZoom={(ll) => showOnMap(ll, 16)}
+              onStartPlan={() => dayCity && startPlan(dayCity.id)}
             />
           ) : null}
 

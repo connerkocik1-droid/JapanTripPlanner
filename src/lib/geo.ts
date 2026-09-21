@@ -1,4 +1,5 @@
 import { LatLng } from './data';
+import { LegKind } from './legKind';
 
 export type Lng2 = [number, number];
 
@@ -10,13 +11,13 @@ export function toLngLat(ll: LatLng): Lng2 {
 /** One city on the route, and how you arrived at it from the one before. */
 export interface RouteStop {
   ll: LatLng;
-  /** True when the leg into this city is flown, so it is drawn as a flight. */
-  flight?: boolean;
+  /** How the leg into this city is travelled, which decides how it is drawn. */
+  kind?: LegKind;
 }
 
 /** One city-to-city leg, densified and ready for the map. */
 export interface RouteSegment {
-  flight: boolean;
+  kind: LegKind;
   line: Lng2[];
 }
 
@@ -85,7 +86,7 @@ export function routeSegments(stops: RouteStop[]): RouteSegment[] {
     const end = prev ? prev[prev.length - 1][0] : seg[0][0];
     const shift = sameFrame(end, seg[0][0]) - seg[0][0];
     out.push({
-      flight: !!stops[i + 1].flight,
+      kind: stops[i + 1].kind ?? 'other',
       line: shift ? seg.map(([lng, lat]): Lng2 => [lng + shift, lat]) : seg,
     });
   }

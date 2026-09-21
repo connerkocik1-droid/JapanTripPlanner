@@ -21,6 +21,8 @@ export interface RouteLeg {
   summary?: string;
   /** Transit only: what you ride and what you walk, in order. */
   parts?: RoutePart[];
+  /** Transit only: long-distance or high-speed rail rather than a city metro. */
+  rail?: boolean;
 }
 
 /** Seconds spent riding and seconds spent on foot within a transit leg. */

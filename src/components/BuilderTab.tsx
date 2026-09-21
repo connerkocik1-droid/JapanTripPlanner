@@ -22,10 +22,12 @@ export interface BuilderTabProps {
   onAddStop: (place: Place) => void;
   onSetFare: (fare: number) => void;
   onZoom: (ll: LatLng) => void;
+  /** Hand the day over to the map, where stops are picked by tapping them. */
+  onStartPlan: () => void;
 }
 
 export default function BuilderTab({
-  day, city, anchor, metroFare, travelers, onApplyPreset, onAddStop, onSetFare, onZoom,
+  day, city, anchor, metroFare, travelers, onApplyPreset, onAddStop, onSetFare, onZoom, onStartPlan,
 }: BuilderTabProps) {
   const [source, setSource] = useState<Source>('custom');
   const [index, setIndex] = useState<{ id: string; name: string; city: string; summary?: string; file: string }[]>([]);
@@ -118,14 +120,30 @@ export default function BuilderTab({
       </div>
 
       {source === 'custom' ? (
-        <CustomPicker
-          city={city}
-          anchor={anchor}
-          metroFare={metroFare}
-          travelers={travelers}
-          onAddStop={onAddStop}
-          onZoom={onZoom}
-        />
+        <>
+          {/* The same day, built by tapping the map instead of this list. */}
+          <button
+            className="tap"
+            onClick={onStartPlan}
+            style={{
+              width: '100%', minHeight: 44, marginBottom: 10, borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-accent-700)', background: 'rgba(145,132,217,.10)',
+              color: 'var(--color-accent-200)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            }}
+          >
+            <i className="ph ph-path" style={{ fontSize: 14 }} />
+            Make a plan on the map
+          </button>
+          <CustomPicker
+            city={city}
+            anchor={anchor}
+            metroFare={metroFare}
+            travelers={travelers}
+            onAddStop={onAddStop}
+            onZoom={onZoom}
+          />
+        </>
       ) : (
         <div>
           {loading ? (
