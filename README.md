@@ -104,11 +104,34 @@ control picks up that person's outline color plus a `Conner · 4m ago` credit li
 **Notes** parks thoughts that aren't in the plan yet, scoped to a city or the whole
 trip, marked settled when they're decided. Cities with open notes show a count.
 
+## Installing it (PWA)
+
+It is a installable progressive web app: open the deployed URL on a phone and use
+*Add to Home Screen*. Installed, it runs standalone (no browser chrome), lays out
+against the safe-area insets, and keeps working on a bad signal:
+
+- a service worker caches the app shell, fonts and icons, and up to 600 map tiles,
+  so a place you have already looked at still draws offline;
+- routing and geocoding are never served from cache — they need the network, and
+  the header shows an **Offline** badge when there isn't one;
+- `viewport-fit=cover`, `display: standalone`, portrait orientation, no
+  rubber-band scrolling, and no zoom-on-focus.
+
 ## Where the data lives
 
 Everything you enter — the trip settings, cities, hotels, transit, places, day
-items, checklist, notes, and the attribution stamps — persists to `localStorage`
-under `trip-planner:v2`.
+items, checklist, notes, and the attribution stamps — is written to **IndexedDB**,
+with a `localStorage` copy as a backup. Writes are debounced and flushed when the
+app is backgrounded, and the header shows `Saving` / `Saved`, or **Not saved** if
+the browser refused to store it.
+
+On first run the app calls `navigator.storage.persist()`, which asks the browser
+not to evict the plan — Chrome grants this to installed apps, and Safari uses it to
+exempt the site from its 7-day cleanup of unused storage.
+
+**Back up before you travel.** The trip panel has *Back up* and *Restore*, which
+write and read a plain JSON file. On a local-only app that file is the only copy
+that survives a lost phone.
 
 **This is per-browser.** Two people on two devices each get their own copy and will
 not see each other's edits. Making the plan genuinely shared needs a backend

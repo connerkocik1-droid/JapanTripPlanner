@@ -6,6 +6,7 @@ import {
   blankCity, blankHotel, newTrip, uid,
 } from './data';
 import { PersonId, isPersonId } from './people';
+import { downloadDoc, loadDoc, requestPersistence, saveDoc } from './storage';
 
 export interface Touch {
   by: PersonId;
@@ -34,8 +35,10 @@ export interface TripDoc {
   touches: Record<string, Touch>;
 }
 
-const STORAGE_KEY = 'trip-planner:v2';
 const USER_KEY = 'trip-planner:user';
+
+/** What the save indicator shows. */
+export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export function emptyDoc(): TripDoc {
   return { trip: newTrip(), cities: [], days: {}, checklist: [], comments: [], touches: {} };
@@ -45,30 +48,30 @@ export function dayKey(cityId: string, n: number): string {
   return `${cityId}:${n}`;
 }
 
-function read(): TripDoc {
+/** Accept anything shaped roughly like a plan; fill the gaps with blanks. */
+export function normalize(input: unknown): TripDoc {
   const base = emptyDoc();
-  if (typeof window === 'undefined') return base;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return base;
-    const p = JSON.parse(raw) as Partial<TripDoc>;
-    return {
-      trip: { ...base.trip, ...(p.trip ?? {}) },
-      cities: Array.isArray(p.cities) ? p.cities : [],
-      days: p.days ?? {},
-      checklist: Array.isArray(p.checklist) ? p.checklist : [],
-      comments: Array.isArray(p.comments) ? p.comments : [],
-      touches: p.touches ?? {},
-    };
-  } catch {
-    return base;
-  }
+  const p = (input ?? {}) as Partial<TripDoc>;
+  return {
+    trip: { ...base.trip, ...(p.trip ?? {}) },
+    cities: Array.isArray(p.cities) ? p.cities : [],
+    days: p.days ?? {},
+    checklist: Array.isArray(p.checklist) ? p.checklist : [],
+    comments: Array.isArray(p.comments) ? p.comments : [],
+    touches: p.touches ?? {},
+  };
 }
 
 export interface TripStore {
   doc: TripDoc;
   /** Hydrated from storage — false during the first (server-matching) render. */
   ready: boolean;
+  saveState: SaveState;
+  lastSaved: number | null;
+  /** True when the browser promised not to evict this origin's storage. */
+  persisted: boolean;
+  exportDoc: () => void;
+  importDoc: (input: unknown) => void;
   user: PersonId | null;
   signIn: (id: PersonId) => void;
   signOut: () => void;
@@ -110,27 +113,57 @@ export function useTripStore(): TripStore {
   const [doc, setDoc] = useState<TripDoc>(emptyDoc);
   const [user, setUser] = useState<PersonId | null>(null);
   const [ready, setReady] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [lastSaved, setLastSaved] = useState<number | null>(null);
+  const [persisted, setPersisted] = useState(false);
 
   // Read after mount so the server and first client render agree.
   useEffect(() => {
-    setDoc(read());
-    try {
-      const saved = window.localStorage.getItem(USER_KEY);
-      if (isPersonId(saved)) setUser(saved);
-    } catch {
-      /* storage blocked — the login screen just shows every time */
-    }
-    setReady(true);
+    let live = true;
+    (async () => {
+      const stored = await loadDoc<unknown>();
+      if (!live) return;
+      if (stored) setDoc(normalize(stored));
+      try {
+        const saved = window.localStorage.getItem(USER_KEY);
+        if (isPersonId(saved)) setUser(saved);
+      } catch {
+        /* storage blocked — the login screen just shows every time */
+      }
+      setReady(true);
+      setPersisted(await requestPersistence());
+    })();
+    return () => {
+      live = false;
+    };
   }, []);
 
+  // Writes are debounced: typing a hotel name shouldn't hit the disk per key.
+  const pending = useRef<TripDoc | null>(null);
   useEffect(() => {
     if (!ready) return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
-    } catch {
-      /* private mode or quota — the session still works, it just won't persist */
-    }
+    pending.current = doc;
+    setSaveState('saving');
+    const t = setTimeout(async () => {
+      const ok = await saveDoc(doc);
+      if (pending.current !== doc) return; // a newer edit is already queued
+      setSaveState(ok ? 'saved' : 'error');
+      if (ok) setLastSaved(Date.now());
+    }, 400);
+    return () => clearTimeout(t);
   }, [doc, ready]);
+
+  // A save may still be queued when the app is backgrounded or closed.
+  useEffect(() => {
+    const flush = () => {
+      if (pending.current) void saveDoc(pending.current);
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flush();
+    });
+    return () => window.removeEventListener('pagehide', flush);
+  }, []);
 
   const signIn = useCallback((id: PersonId) => {
     setUser(id);
@@ -409,11 +442,23 @@ export function useTripStore(): TripStore {
     setDoc((d) => ({ ...d, comments: d.comments.filter((c) => c.id !== id) }));
   }, []);
 
+  const exportDoc = useCallback(() => {
+    setDoc((d) => {
+      downloadDoc(d, d.trip.name);
+      return d;
+    });
+  }, []);
+
+  const importDoc = useCallback((input: unknown) => {
+    setDoc(normalize(input));
+  }, []);
+
   const reset = useCallback(() => setDoc(emptyDoc()), []);
 
   return useMemo(
     () => ({
-      doc, ready, user, signIn, signOut, touch, setTrip,
+      doc, ready, saveState, lastSaved, persisted, exportDoc, importDoc,
+      user, signIn, signOut, touch, setTrip,
       addCity, removeCity, moveCity, setCity,
       setHotel, addHotelSlot,
       addPlace, setPlace, removePlace,
@@ -422,7 +467,8 @@ export function useTripStore(): TripStore {
       addComment, toggleComment, removeComment, reset,
     }),
     [
-      doc, ready, user, signIn, signOut, touch, setTrip,
+      doc, ready, saveState, lastSaved, persisted, exportDoc, importDoc,
+      user, signIn, signOut, touch, setTrip,
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
       addPlace, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck, addComment, toggleComment, removeComment, reset,

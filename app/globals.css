@@ -3,6 +3,12 @@
 
 /* Nocturne design tokens */
 :root {
+  /* Safe-area insets, so the app sits right when installed to a home screen. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
   --color-bg: #161826;
   --color-surface: #232532;
   --color-text: #e9e9ed;
@@ -48,7 +54,44 @@ html, body {
   color: var(--color-text);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  /* Standalone apps shouldn't rubber-band or offer text selection chrome. */
   overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+input,
+textarea,
+select {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/*
+ * In a browser tab iOS zooms the viewport when a field under 16px takes focus.
+ * Installed to the home screen it does not, so the dense type is only bumped
+ * for the tab case rather than compromising the layout everywhere.
+ */
+@media (display-mode: browser) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* Scrollable panes keep their momentum without dragging the page with them. */
+.scroll-pane {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 a { color: var(--color-accent); }

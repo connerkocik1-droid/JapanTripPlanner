@@ -46,6 +46,7 @@ export default function TripPlanner() {
   const [newCity, setNewCity] = useState('');
   const [locating, setLocating] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [online, setOnline] = useState(true);
   const [plotAll, setPlotAll] = useState(true);
   const [fit, setFit] = useState<{ points: LatLng[]; nonce: number } | null>(null);
   const fitNonce = useRef(0);
@@ -56,6 +57,17 @@ export default function TripPlanner() {
   const d = useMemo(() => derive(doc), [doc]);
 
   useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    return () => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    };
+  }, []);
+
+  useEffect(() => {
     if (cityId && !doc.cities.some((c) => c.id === cityId)) setCityId(null);
   }, [doc.cities, cityId]);
   useEffect(() => {
@@ -64,7 +76,9 @@ export default function TripPlanner() {
 
   const snapPx = useCallback((i: number) => {
     const h = shell.current?.clientHeight ?? 874;
-    return [238, Math.round(h * 0.56), Math.round(h * 0.88)][i];
+    // The peek has to clear the floating tab pill and the home indicator.
+    const peek = Math.min(268, Math.round(h * 0.3));
+    return [peek, Math.round(h * 0.58), Math.round(h * 0.9)][i];
   }, []);
 
   const sheetH = dragH ?? (tab === 'map' ? snapPx(expanded ? snap : 0) : snapPx(2));
@@ -292,7 +306,8 @@ export default function TripPlanner() {
       <div
         style={{
           position: 'absolute', top: 0, left: 0, right: 0, zIndex: 6,
-          padding: '54px 16px 14px', pointerEvents: 'none',
+          padding: 'calc(var(--safe-top) + 14px) calc(var(--safe-right) + 16px) 14px calc(var(--safe-left) + 16px)',
+          pointerEvents: 'none',
           background:
             'linear-gradient(180deg, rgba(16,18,32,.94) 0%, rgba(16,18,32,.72) 62%, transparent 100%)',
         }}
@@ -309,6 +324,20 @@ export default function TripPlanner() {
           />
           {doc.trip.travelers} {doc.trip.travelers === 1 ? 'traveler' : 'travelers'}
           {d.schedule.length ? ` · ${d.schedule.length} days` : ' · nothing planned yet'}
+          <span style={{ flex: 1 }} />
+          {!online ? (
+            <span
+              className="mono"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5,
+                color: 'var(--color-neutral-400)',
+              }}
+            >
+              <i className="ph ph-cloud-slash" style={{ fontSize: 11 }} />
+              Offline
+            </span>
+          ) : null}
+          <SaveChip state={store.saveState} error={store.saveState === 'error'} />
         </div>
 
         <div
@@ -473,7 +502,13 @@ export default function TripPlanner() {
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 11px 96px' }}>
+        <div
+          className="scroll-pane"
+          style={{
+            flex: 1,
+            padding: '0 calc(var(--safe-right) + 11px) calc(var(--safe-bottom) + 108px) calc(var(--safe-left) + 11px)',
+          }}
+        >
           {tab === 'map' ? (
             <>
               {settings ? (
@@ -483,6 +518,9 @@ export default function TripPlanner() {
                   onChange={store.setTrip}
                   touch={store.touch}
                   onClose={() => setSettings(false)}
+                  onExport={store.exportDoc}
+                  onImport={store.importDoc}
+                  persisted={store.persisted}
                 />
               ) : null}
 
@@ -668,8 +706,9 @@ export default function TripPlanner() {
       {/* Tab pill */}
       <div
         style={{
-          position: 'absolute', bottom: 26, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 12, display: 'flex', gap: 3, padding: 3, borderRadius: 9999,
+          position: 'absolute', bottom: 'calc(var(--safe-bottom) + 14px)',
+          left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 24px)',
+          zIndex: 12, display: 'flex', gap: 2, padding: 3, borderRadius: 9999,
           background: 'rgba(35,37,50,.94)', border: '1px solid var(--color-neutral-800)',
           backdropFilter: 'blur(12px)',
         }}
@@ -783,6 +822,39 @@ function CityRow({
         </>
       ) : null}
     </div>
+  );
+}
+
+/** Quiet unless something is wrong — travelers shouldn't have to wonder. */
+function SaveChip({ state, error }: { state: string; error: boolean }) {
+  if (error) {
+    return (
+      <span
+        className="mono"
+        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, color: '#ff8fae' }}
+        title="This device refused to store the plan. Export a backup from the trip panel."
+      >
+        <i className="ph ph-warning" style={{ fontSize: 11 }} />
+        Not saved
+      </span>
+    );
+  }
+  return (
+    <span
+      className="mono"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5,
+        color: 'var(--color-neutral-600)',
+        opacity: state === 'saving' ? 1 : 0.65,
+        transition: 'opacity .2s ease',
+      }}
+    >
+      <i
+        className={state === 'saving' ? 'ph ph-cloud-arrow-up' : 'ph ph-check-circle'}
+        style={{ fontSize: 11 }}
+      />
+      {state === 'saving' ? 'Saving' : 'Saved'}
+    </span>
   );
 }
 
