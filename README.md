@@ -209,11 +209,25 @@ exempt the site from its 7-day cleanup of unused storage.
 write and read a plain JSON file. On a local-only app that file is the only copy
 that survives a lost phone.
 
-**This is per-browser.** Two people on two devices each get their own copy and will
-not see each other's edits. Making the plan genuinely shared needs a backend
-(Supabase or Vercel Postgres); the state layer in `src/lib/tripState.ts` is written
-as a single document so it can be swapped for a server store without touching the
-components.
+**Sharing across devices.** With `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` set, the same document is also kept in Supabase so it
+follows you to another phone or laptop. There is no account and no password: a long
+random trip code is the key, it travels in the link under *Your other devices* in the
+trip panel, and each device remembers it after the first visit. Devices look for each
+other's edits every 20 seconds while the app is on screen.
+
+Without those two variables the app is local-only exactly as before — no trip code is
+made and no network call goes out. It also carries on unchanged when the shared copy
+cannot be reached, and sends the edit once it can.
+
+Two people editing at once is last-one-wins on the whole plan, not a field-by-field
+merge. Revisions stop an older copy from overwriting a newer one, so the two devices
+settle on the same plan rather than fighting, but an edit made on both at the same
+moment will keep only one of them.
+
+The schema lives in `supabase/migrations/`. The table itself is unreachable from the
+browser: row level security is on with no policies, and the only way in is the two
+functions, each of which needs the trip code.
 
 ## Layout
 
@@ -224,6 +238,7 @@ app/
   api/route/route.ts                  # walking (OSRM) and transit legs
 src/lib/
   data.ts        # the document's types and blank factories (no trip content)
+  remote.ts      # the shared copy: trip code, pull and push
   geo.ts         # great-circle route geometry, bounds
   routing.ts     # client side of the router, per-hop cache, walk-vs-transit pick
   useDayRoute.ts # routes the planned day's consecutive stops

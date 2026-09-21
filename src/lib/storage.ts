@@ -158,12 +158,30 @@ export async function loadDoc<T>(): Promise<T | null> {
 /**
  * Write the plan to both stores. The mirror goes first and synchronously, so
  * that a save racing the tab's close still leaves the edit somewhere.
+ *
+ * The revision it wrote comes back, because the shared copy is versioned with
+ * the same counter: what makes one revision newer than another has to mean the
+ * same thing on the device and on the server.
  */
-export async function saveDoc(value: unknown): Promise<boolean> {
+export async function saveDoc(value: unknown): Promise<{ ok: boolean; rev: number }> {
   rev += 1;
-  const record: Envelope = { rev, savedAt: Date.now(), doc: value };
+  const at = rev;
+  const record: Envelope = { rev: at, savedAt: Date.now(), doc: value };
   mirrorWrite(record);
-  return idbPut(record);
+  return { ok: await idbPut(record), rev: at };
+}
+
+/** The revision this device last wrote. */
+export function currentRev(): number {
+  return rev;
+}
+
+/**
+ * Take on a revision that came from the shared copy, so the next save counts
+ * from it and is recognised as following it rather than losing to it.
+ */
+export function adoptRev(remote: number): void {
+  if (remote > rev) rev = remote;
 }
 
 /**
