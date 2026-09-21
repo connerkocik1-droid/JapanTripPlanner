@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { City, LatLng, MAX_NIGHTS, PLACE_KINDS, Place } from '@/lib/data';
 import { fmtUsd, walkLabel } from '@/lib/format';
 import { CitySpend } from '@/lib/derive';
+import { isFlightLeg } from '@/lib/legKind';
 import { Touch } from '@/lib/tripState';
 import TouchMark, { touchStyle } from './TouchMark';
 import { GeoStatus, NumField, boxed, ghostBtn, label, useGeocodedAddress } from './fields';
@@ -28,6 +29,8 @@ export default function CityPanel({
 }: CityPanelProps) {
   const active = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
   const options = city.hotels.filter((h) => h.name.trim()).length;
+  // A flown leg carries a flight number and an arrival time instead of a route.
+  const flight = isFlightLeg(city.transitName);
 
   return (
     <div
@@ -106,7 +109,7 @@ export default function CityPanel({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 7px' }}>
         <div>
           <div className="mono" style={label}>Getting to {city.name}</div>
-          <TouchMark touch={touch('transitName') ?? touch('transitCost')} />
+          <TouchMark touch={touch('transitName') ?? touch('transitCost') ?? touch('flightNo')} />
         </div>
         {city.transitUrl ? (
           <a
@@ -128,7 +131,10 @@ export default function CityPanel({
         style={{
           ...boxed,
           padding: '2px 8px',
-          ...(touchStyle(touch('transitName') ?? touch('transitCost') ?? touch('transitUrl')) ?? {}),
+          ...(touchStyle(
+            touch('transitName') ?? touch('transitCost') ?? touch('transitUrl')
+            ?? touch('flightNo') ?? touch('arriveAt'),
+          ) ?? {}),
         }}
       >
         <input
@@ -138,6 +144,37 @@ export default function CityPanel({
           onChange={(e) => onCity('transitName', e.target.value)}
           style={{ width: '100%', height: 40, fontSize: 13, fontWeight: 500 }}
         />
+        {flight ? (
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, height: 44,
+              borderTop: '1px solid var(--color-neutral-900)',
+            }}
+          >
+            <input
+              type="text"
+              value={city.flightNo ?? ''}
+              placeholder="Flight no."
+              aria-label={`Flight number to ${city.name}`}
+              onChange={(e) => onCity('flightNo', e.target.value)}
+              style={{
+                flex: 1, minWidth: 0, height: 42, fontSize: 12,
+                fontFamily: 'var(--font-mono)',
+              }}
+            />
+            <div className="mono" style={{ ...label, flex: 'none' }}>Arrives</div>
+            <input
+              type="time"
+              value={city.arriveAt ?? ''}
+              aria-label={`Arrival time in ${city.name}`}
+              onChange={(e) => onCity('arriveAt', e.target.value)}
+              style={{
+                flex: 'none', width: 96, height: 42, fontSize: 12,
+                fontFamily: 'var(--font-mono)', color: 'var(--color-neutral-300)',
+              }}
+            />
+          </div>
+        ) : null}
         <input
           type="url"
           value={city.transitUrl}

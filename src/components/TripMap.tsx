@@ -4,7 +4,7 @@ import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import maplibregl, { LngLatBoundsLike, Map as MlMap, Marker } from 'maplibre-gl';
 import { LatLng } from '@/lib/data';
 import { money } from '@/lib/format';
-import { boundsOf, routeLine, toLngLat } from '@/lib/geo';
+import { RouteStop, boundsOf, routeSegments, toLngLat } from '@/lib/geo';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
 const PLACE_LAYER = /city|town|village|suburb|quarter|hamlet|neighbourhood|country|state|province|region/i;
@@ -56,8 +56,8 @@ export interface MapFocus {
 
 export interface TripMapProps {
   pins: MapPin[];
-  /** City coordinates in trip order — the route is drawn through these. */
-  route: LatLng[];
+  /** Cities in trip order — the route is drawn through these, leg by leg. */
+  route: RouteStop[];
   /** Routed legs of the day being planned; empty on the other tabs. */
   legs: MapLeg[];
   /** Fit the map to these points when the nonce changes. */
@@ -189,17 +189,15 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
         }
       });
 
-      const empty: GeoJSON.Feature = {
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'LineString', coordinates: [] },
-      };
+      const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
       (['route-main', 'route-pulse'] as const).forEach((id, i) => {
         m.addSource(id, { type: 'geojson', data: empty });
         m.addLayer({
           id,
           type: 'line',
           source: id,
+          // Flights are their own layer below; this is everything on the ground.
+          filter: ['!=', ['get', 'flight'], true],
           layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: {
             'line-color': i ? '#d2cefd' : '#9184d9',
@@ -207,6 +205,17 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
             ...(i ? { 'line-dasharray': [0, 4] } : {}),
           },
         });
+      });
+
+      // Flights don't follow anything on the ground, so they are drawn as a
+      // chopped blue line rather than as a route you could take.
+      m.addLayer({
+        id: 'route-flight',
+        type: 'line',
+        source: 'route-main',
+        filter: ['==', ['get', 'flight'], true],
+        layout: { 'line-cap': 'butt', 'line-join': 'round' },
+        paint: { 'line-color': '#4f9dfd', 'line-width': 2.6, 'line-dasharray': [2.4, 2.2] },
       });
 
       // Planned-day legs: walking dashed, transit solid, drawn above the route.
@@ -259,10 +268,17 @@ export default function TripMap({ pins, route, legs, fit, sheetPx, focus, onSele
     if (!m || !ready.current) return;
     const { pins: ps, route: rt } = latest.current;
 
-    const line = rt.length > 1 ? routeLine(rt) : [];
+    const routeData: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: routeSegments(rt).map((seg) => ({
+        type: 'Feature' as const,
+        properties: { flight: seg.flight },
+        geometry: { type: 'LineString' as const, coordinates: seg.line },
+      })),
+    };
     (['route-main', 'route-pulse'] as const).forEach((id) => {
       const src = m.getSource(id) as maplibregl.GeoJSONSource | undefined;
-      src?.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line } });
+      src?.setData(routeData);
     });
 
     const legSrc = m.getSource('day-legs') as maplibregl.GeoJSONSource | undefined;

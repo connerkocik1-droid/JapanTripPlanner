@@ -56,6 +56,10 @@ export interface City {
   transitName: string;
   transitUrl: string;
   transitCost: number;
+  /** Flight legs only: the flight you are on, and when it gets in. */
+  flightNo: string;
+  /** HH:MM local, as printed on the ticket. */
+  arriveAt: string;
   /** A single metro/bus fare here, per person — prices the day's transit legs. */
   metroFare: number;
   foodPer: number;
@@ -137,6 +141,8 @@ export function blankCity(name: string, ll: LatLng | null = null): City {
     transitName: '',
     transitUrl: '',
     transitCost: 0,
+    flightNo: '',
+    arriveAt: '',
     metroFare: 0,
     foodPer: 0,
     places: [],
