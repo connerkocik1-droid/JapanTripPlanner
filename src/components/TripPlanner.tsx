@@ -10,6 +10,7 @@ import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import type { RouteStop } from '@/lib/geo';
 import { cityLegKind, hopKind } from '@/lib/legKind';
 import { useAirportRoutes } from '@/lib/airportRoute';
+import { useAutoPacks } from '@/lib/autoPacks';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
@@ -63,6 +64,20 @@ const SEG_FILL: Record<string, string> = {
 export default function TripPlanner() {
   const store = useTripStore();
   const { doc } = store;
+
+  // A city whose shortlist ships with the app gets it pinned on its own, and
+  // anything still missing its coordinates is resolved in the background.
+  useAutoPacks({
+    ready: store.ready,
+    cities: doc.cities,
+    addPlaces: store.addPlaces,
+    markPacks: (cityId, packIds) => {
+      const city = doc.cities.find((c) => c.id === cityId);
+      if (!city) return;
+      store.setCity(cityId, 'packs', [...new Set([...city.packs, ...packIds])]);
+    },
+    locate: (cityId, placeId, ll) => store.setPlace(cityId, placeId, 'll', ll),
+  });
 
   const [tab, setTab] = useState<Tab>('map');
   const [cityId, setCityId] = useState<string | null>(null);
