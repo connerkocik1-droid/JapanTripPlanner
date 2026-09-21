@@ -1,5 +1,6 @@
 'use client';
 
+import { forwardRef } from 'react';
 import { fmtClock, fmtSpan } from '@/lib/dayPlan';
 import { fmtUsd } from '@/lib/format';
 import { Draft, PlanLeg, parseStartTime, startTimeValue, timeline } from '@/lib/planDraft';
@@ -45,15 +46,16 @@ export interface PlanBuilderProps {
  * offered, and the way home — which is always shown, because a plan you cannot
  * get back from is not a plan.
  */
-export default function PlanBuilder({
+const PlanBuilder = forwardRef<HTMLDivElement, PlanBuilderProps>(function PlanBuilder({
   draft, cityName, homeName, dayLabel, travelers, back, backLoading, preview,
   onSetStart, onAddPreview, onClosePreview, onRemoveStop, onSave, onDiscard,
-}: PlanBuilderProps) {
+}, ref) {
   if (!draft && !preview) return null;
   const line = draft ? timeline(draft, back, homeName) : null;
 
   return (
     <div
+      ref={ref}
       style={{
         position: 'absolute', left: 8, right: 8, bottom: 'calc(var(--safe-bottom) + 10px)', zIndex: 7,
         borderRadius: 'var(--radius-md)', overflow: 'hidden',
@@ -290,7 +292,9 @@ export default function PlanBuilder({
       ) : null}
     </div>
   );
-}
+});
+
+export default PlanBuilder;
 
 /** "19 min metro · 9 min walking · 12.4 km · EST" — the same shape everywhere. */
 function LegLine({ leg, verbose = false }: { leg: PlanLeg; verbose?: boolean }) {

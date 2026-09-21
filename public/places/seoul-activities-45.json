@@ -1,0 +1,279 @@
+{
+  "id": "seoul-activities-45",
+  "name": "Seoul activities, 4.5★ and up",
+  "city": "Seoul",
+  "summary": "30 museums, temples, parks and experiences rated 4.5 or better.",
+  "source": "Compiled from TripAdvisor and Google Maps ratings, September 2026.",
+  "places": [
+    {
+      "name": "National Museum of Korea",
+      "korean": "국립중앙박물관",
+      "addr": "137 Seobinggo-ro, Yongsan-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Museum · Yongsan-gu (Ichon-dong) · 2,525 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=National%20Museum%20of%20Korea%20137%20Seobinggo-ro%2C%20Yongsan-gu%2C%20Seoul"
+    },
+    {
+      "name": "War Memorial of Korea",
+      "korean": "전쟁기념관",
+      "addr": "29 Itaewon-ro, Yongsan-gu, Seoul 04353",
+      "kind": "do",
+      "band": "4.6★",
+      "note": "Museum · Yongsan-gu · 4,399 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=War%20Memorial%20of%20Korea%2029%20Itaewon-ro%2C%20Yongsan-gu%2C%20Seoul%2004353"
+    },
+    {
+      "name": "War and Women's Human Rights Museum",
+      "korean": "전쟁과여성인권박물관",
+      "addr": "32 World Cup buk-ro 11-gil, Mapo-gu, Seoul",
+      "kind": "do",
+      "band": "4.8★",
+      "note": "Museum (history) · Mapo-gu (Seongsan-dong) · 86 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=War%20and%20Women%27s%20Human%20Rights%20Museum%2032%20World%20Cup%20buk-ro%2011-gil%2C%20Mapo-gu%2C%20Seoul"
+    },
+    {
+      "name": "Korea Furniture Museum",
+      "korean": "한국가구박물관",
+      "addr": "121 Daesagwan-ro, Seongbuk-gu, Seoul",
+      "kind": "do",
+      "band": "4.6★",
+      "note": "Museum · Seongbuk-gu · 38 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Korea%20Furniture%20Museum%20121%20Daesagwan-ro%2C%20Seongbuk-gu%2C%20Seoul"
+    },
+    {
+      "name": "Baek In-je's House Museum",
+      "korean": "백인제가옥",
+      "addr": "16 Bukchon-ro 7-gil, Jongno-gu, Seoul",
+      "kind": "do",
+      "band": "4.8★",
+      "note": "Historic house museum · Jongno-gu (Bukchon) · 28 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Baek%20In-je%27s%20House%20Museum%2016%20Bukchon-ro%207-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Gilsangsa Temple",
+      "korean": "길상사",
+      "addr": "68 Seonjam-ro 5-gil, Seongbuk-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Temple · Seongbuk-gu · 43 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Gilsangsa%20Temple%2068%20Seonjam-ro%205-gil%2C%20Seongbuk-gu%2C%20Seoul"
+    },
+    {
+      "name": "Jingwansa Temple",
+      "korean": "진관사",
+      "addr": "73 Jingwan-gil, Eunpyeong-gu, Seoul 03308",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Temple · Eunpyeong-gu · 20 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Jingwansa%20Temple%2073%20Jingwan-gil%2C%20Eunpyeong-gu%2C%20Seoul%2003308"
+    },
+    {
+      "name": "Ikseon-dong Hanok Street",
+      "korean": "익선동 한옥거리",
+      "addr": "Donhwamun-ro, Jongno-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Historic hanok district · Jongno-gu · 119 reviews · pinned on Donhwamun-ro, the street the alleys run off",
+      "url": "https://www.google.com/maps/search/?api=1&query=Ikseon-dong%20Hanok%20Street%20Ikseon-dong%20district%20%28alleys%20off%20Donhwamun-ro%29%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Eunpyeong Hanok Village",
+      "korean": "은평한옥마을",
+      "addr": "127-27 Jingwan-dong, Eunpyeong-gu, Seoul",
+      "kind": "do",
+      "band": "4.8★",
+      "note": "Historic hanok village · Eunpyeong-gu · 32 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Eunpyeong%20Hanok%20Village%20127-27%20Jingwan-dong%2C%20Eunpyeong-gu%2C%20Seoul"
+    },
+    {
+      "name": "Mongchontoseong Fortress",
+      "korean": "몽촌토성",
+      "addr": "424 Olympic-ro, Songpa-gu, Seoul",
+      "kind": "do",
+      "band": "4.6★",
+      "note": "Historic earthen fortress wall · Songpa-gu (Bangi-dong) · within Olympic Park · 16 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Mongchontoseong%20Fortress%20424%20Olympic-ro%2C%20Songpa-gu%2C%20Seoul%20%28within%20Olympic%20Park%29"
+    },
+    {
+      "name": "Inwangsan Mountain / Seoul City Wall Trail",
+      "korean": "인왕산 (한양도성 구간)",
+      "addr": "29 Inwangsan-ro 1-gil, Jongno-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Viewpoint & historic city wall · Jongno-gu / Seodaemun-gu border · 90 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Inwangsan%20Mountain%20/%20Seoul%20City%20Wall%20Trail%20Trail%20entrance%3A%2029%20Inwangsan-ro%201-gil%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Bukhansan National Park",
+      "korean": "북한산국립공원",
+      "addr": "Ui-dong, Gangbuk-gu, Seoul",
+      "kind": "do",
+      "band": "4.7★",
+      "note": "Nature / mountain / historic fortress · Gangbuk-gu (and others) · 1,134 reviews · pinned at the Ui-dong trailhead; the park spans several districts",
+      "url": "https://www.google.com/maps/search/?api=1&query=Bukhansan%20National%20Park%20Ui-dong%20area%2C%20Gangbuk-gu%2C%20Seoul%20%28park%20spans%20several%20districts%29"
+    },
+    {
+      "name": "Seoul Botanic Park",
+      "korean": "서울식물원",
+      "addr": "161 Magokdong-ro, Gangseo-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Garden · Gangseo-gu (Magok-dong) · 38 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Seoul%20Botanic%20Park%20161%20Magokdong-ro%2C%20Gangseo-gu%2C%20Seoul"
+    },
+    {
+      "name": "63 Sky Picnic (63 Building Observatory)",
+      "korean": "63스카이픽닉",
+      "addr": "50 63-ro, Yeongdeungpo-gu, Seoul",
+      "kind": "do",
+      "band": "5.0★",
+      "note": "Observatory / viewpoint · Yeongdeungpo-gu (Yeouido) · 60F · 63 Hanwha Life Bldg · 23 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=63%20Sky%20Picnic%20%2863%20Building%20Observatory%29%2060F%2C%2063%20Hanwha%20Life%20Bldg%2C%2050%2063-ro%2C%20Yeongdeungpo-gu%2C%20Seoul"
+    },
+    {
+      "name": "Haneul Park (Sky Park)",
+      "korean": "하늘공원",
+      "addr": "World Cup Park, Sangam-dong, Mapo-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Park / viewpoint · Mapo-gu · 309 reviews · address unconfirmed · pinned at World Cup Park, below the stairs up",
+      "url": "https://www.google.com/maps/search/?api=1&query=Haneul%20Park%20%28Sky%20Park%29%20World%20Cup%20Park%20area%2C%20Sangam-dong%2C%20Mapo-gu%2C%20Seoul"
+    },
+    {
+      "name": "Seoul Forest",
+      "korean": "서울숲",
+      "addr": "273 Ttukseom-ro, Seongdong-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Park · Seongdong-gu (Seongsu/Ttukseom) · 410 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Seoul%20Forest%20273%20Ttukseom-ro%2C%20Seongdong-gu%2C%20Seoul"
+    },
+    {
+      "name": "Yeouido Hangang Park",
+      "korean": "여의도한강공원",
+      "addr": "Yeouido-dong, Yeongdeungpo-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Riverside park · Yeongdeungpo-gu · 705 reviews · address unconfirmed · pinned on Yeouido; the park runs the length of the riverbank",
+      "url": "https://www.google.com/maps/search/?api=1&query=Yeouido%20Hangang%20Park%20Yeouido-dong%2C%20Yeongdeungpo-gu%2C%20Seoul"
+    },
+    {
+      "name": "Dream Forest",
+      "korean": "북서울꿈의숲",
+      "addr": "173 Wolgye-ro, Gangbuk-gu, Seoul",
+      "kind": "do",
+      "band": "4.6★",
+      "note": "Park / viewpoint (observatory) · Gangbuk-gu · 37 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Dream%20Forest%20173%20Wolgye-ro%2C%20Gangbuk-gu%2C%20Seoul"
+    },
+    {
+      "name": "Dobongsan Mountain",
+      "korean": "도봉산",
+      "addr": "Dobongsan Station, Dobong-gu, Seoul",
+      "kind": "do",
+      "band": "4.7★",
+      "note": "Viewpoint / mountain · Dobong-gu · 27 reviews, small sample · pinned at Dobongsan Station, where the trails start",
+      "url": "https://www.google.com/maps/search/?api=1&query=Dobongsan%20Mountain%20Dobong-gu%2C%20Seoul%20%28mountain%20-%20no%20single%20street%20address%29"
+    },
+    {
+      "name": "Gwanaksan Mountain",
+      "korean": "관악산",
+      "addr": "Gwanaksan, Gwanak-gu, Seoul",
+      "kind": "do",
+      "band": "4.7★",
+      "note": "Viewpoint / mountain · Gwanak-gu · 36 reviews, small sample · pinned on the mountain itself; trailheads ring it",
+      "url": "https://www.google.com/maps/search/?api=1&query=Gwanaksan%20Mountain%20Gwanak-gu%2C%20Seoul%20%28mountain%20-%20no%20single%20street%20address%29"
+    },
+    {
+      "name": "Olympic Park (World Peace Gate)",
+      "korean": "올림픽공원",
+      "addr": "51 Wiryeseong-daero, Songpa-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Park / green space · Songpa-gu (Jamsil area) · 4,233 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Olympic%20Park%20%28World%20Peace%20Gate%29%2051%20Wiryeseong-daero%2C%20Songpa-gu%2C%20Seoul"
+    },
+    {
+      "name": "Banpo Hangang Park",
+      "korean": "반포한강공원",
+      "addr": "40 Sinbanpo-ro 11-gil, Seocho-gu, Seoul",
+      "kind": "do",
+      "band": "4.8★",
+      "note": "Park / green space (Han River) · Seocho-gu (Banpo) · 182 reviews · rating source unclear",
+      "url": "https://www.google.com/maps/search/?api=1&query=Banpo%20Hangang%20Park%2040%20Sinbanpo-ro%2011-gil%2C%20Seocho-gu%2C%20Seoul"
+    },
+    {
+      "name": "1Million Dance Studio",
+      "korean": "원밀리언 댄스 스튜디오",
+      "addr": "33 Ttukseom-ro 13-gil, Seongdong-gu, Seoul",
+      "kind": "do",
+      "band": "4.8★",
+      "note": "Experience - K-pop dance class · Seongsu-dong · 1,518 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=1Million%20Dance%20Studio%2033%20Ttukseom-ro%2013-gil%2C%20Seongdong-gu%2C%20Seoul"
+    },
+    {
+      "name": "O'ngo Food Communications",
+      "korean": "온고푸드커뮤니케이션즈",
+      "addr": "137-11 Bukchon-ro, Jongno-gu, Seoul",
+      "kind": "do",
+      "band": "4.9★",
+      "note": "Experience - Korean cooking class · Jongno-gu (Bukchon) · 1,183 reviews · address unconfirmed",
+      "url": "https://www.google.com/maps/search/?api=1&query=O%27ngo%20Food%20Communications%20137-11%20Bukchon-ro%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Doryeongassi Hanbok Rental (near Gyeongbokgung)",
+      "korean": "도령앗씨한복",
+      "addr": "3 Jahamun-ro 2-gil, Tongui-dong, Jongno-gu, Seoul",
+      "kind": "do",
+      "band": "4.7★",
+      "note": "Experience - hanbok rental · Jongno-gu (near Gyeongbokgung) · 132 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Doryeongassi%20Hanbok%20Rental%20%28near%20Gyeongbokgung%29%203%20Jahamun-ro%202-gil%2C%20Tongui-dong%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "3355 Hanbok Rental (Bukchon store)",
+      "korean": "3355한복대여 (북촌점)",
+      "addr": "21 Bukchon-ro, Jongno-gu, Seoul",
+      "kind": "do",
+      "band": "4.8★",
+      "note": "Experience - hanbok rental · Jongno-gu (Bukchon) · B1 · 57 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=3355%20Hanbok%20Rental%20%28Bukchon%20store%29%2021%20Bukchon-ro%2C%20B1%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "Teafference Seoul",
+      "korean": "티퍼런스",
+      "addr": "61 Donhwamun-ro, Jongno-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Experience - traditional tea experience · Jongno-gu (Ikseon-dong) · 88 reviews, small sample",
+      "url": "https://www.google.com/maps/search/?api=1&query=Teafference%20Seoul%2061%20Donhwamun-ro%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "MMCA Seoul (National Museum of Modern & Contemporary Art)",
+      "korean": "국립현대미술관 서울관",
+      "addr": "30 Samcheong-ro, Jongno-gu, Seoul",
+      "kind": "do",
+      "band": "4.6★",
+      "note": "Modern art museum · Jongno-gu (Samcheong-dong) · 4,222 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=MMCA%20Seoul%20%28National%20Museum%20of%20Modern%20%26%20Contemporary%20Art%29%2030%20Samcheong-ro%2C%20Jongno-gu%2C%20Seoul"
+    },
+    {
+      "name": "COEX (incl. Starfield COEX Mall)",
+      "korean": "코엑스",
+      "addr": "513 Yeongdong-daero, Gangnam-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Shopping / entertainment complex · Gangnam-gu (Samseong-dong) · 8,703 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=COEX%20%28incl.%20Starfield%20COEX%20Mall%29%20513%20Yeongdong-daero%2C%20Gangnam-gu%2C%20Seoul"
+    },
+    {
+      "name": "Myeongdong NANTA Theatre",
+      "korean": "명동난타극장",
+      "addr": "26 Myeongdong-gil, Jung-gu, Seoul",
+      "kind": "do",
+      "band": "4.5★",
+      "note": "Performance venue (non-verbal comedy show) · Jung-gu (Myeongdong) · UNESCO House · 5,602 reviews",
+      "url": "https://www.google.com/maps/search/?api=1&query=Myeongdong%20NANTA%20Theatre%20UNESCO%20House%2C%2026%20Myeongdong-gil%2C%20Jung-gu%2C%20Seoul"
+    }
+  ]
+}

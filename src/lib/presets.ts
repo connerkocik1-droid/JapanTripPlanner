@@ -1,6 +1,6 @@
 'use client';
 
-import { DEFAULT_DWELL, Place, PlaceKind, TravelMode, uid } from './data';
+import { DEFAULT_DWELL, Place, PlaceKind, TravelMode, blankPlace, uid } from './data';
 
 /**
  * A preset is a ready-made day: an ordered list of stops with coordinates.
@@ -89,11 +89,10 @@ export function normalizePreset(input: unknown): Preset | null {
 /** A preset stop becomes a pinned place plus a scheduled stop. */
 export function stopToPlace(stop: PresetStop): Place {
   return {
-    id: uid(),
+    ...blankPlace(stop.kind),
     name: stop.place,
     addr: stop.addr ?? '',
     note: stop.note ?? '',
-    kind: stop.kind,
     band: stop.band ?? '',
     ll: stop.ll ?? null,
   };

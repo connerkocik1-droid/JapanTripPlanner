@@ -1,0 +1,20 @@
+{
+  "packs": [
+    {
+      "id": "seoul-restaurants-45",
+      "name": "Seoul restaurants, 4.5★ and up",
+      "city": "Seoul",
+      "summary": "47 places rated 4.5 or better on Google Maps and TripAdvisor.",
+      "file": "seoul-restaurants-45.json",
+      "count": 47
+    },
+    {
+      "id": "seoul-activities-45",
+      "name": "Seoul activities, 4.5★ and up",
+      "city": "Seoul",
+      "summary": "30 museums, temples, parks and experiences rated 4.5 or better.",
+      "file": "seoul-activities-45.json",
+      "count": 30
+    }
+  ]
+}

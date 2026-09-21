@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { City, DEFAULT_DWELL, LatLng, PLACE_KINDS, Place, uid } from '@/lib/data';
+import { City, DEFAULT_DWELL, LatLng, Place, placeKind, uid } from '@/lib/data';
 import { planDay } from '@/lib/dayPlan';
 import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
@@ -32,6 +32,13 @@ import TripSettings from './TripSettings';
 
 // MapLibre touches window on import — keep it off the server render.
 const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
+
+/**
+ * How long the pointer has to sit on a place before it is routed. Long enough
+ * that sweeping across a dense city routes nothing, short enough that stopping
+ * on a pin feels like it answered straight away.
+ */
+const HOVER_SETTLE_MS = 220;
 
 type Tab = 'map' | 'cities' | 'stay' | 'days' | 'build' | 'list' | 'notes';
 
@@ -69,6 +76,11 @@ export default function TripPlanner() {
   // A plan being built on the map: the stops so far, and the hop on offer.
   const [draft, setDraft] = useState<Draft | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
+  // Read by the hover handler without making it depend on the preview, which
+  // would rebuild the callback — and so restart the timer — on every keystroke.
+  const previewRef = useRef<Preview | null>(null);
+  previewRef.current = preview;
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [backLeg, setBackLeg] = useState<PlanLeg | null>(null);
   const [backLoading, setBackLoading] = useState(false);
   const [fit, setFit] = useState<{ points: LatLng[]; nonce: number } | null>(null);
@@ -102,6 +114,25 @@ export default function TripPlanner() {
    * more, so this is just the clearance for the plot-all pill.
    */
   const mapInset = tab === 'map' && d.cities.length > 1 ? 58 : 8;
+
+  /**
+   * How much of the map's bottom the plan builder covers. It floats over the
+   * map rather than pushing it up, so the only way a mini-card can stay clear
+   * of it is to be told how tall it is — and it changes height as stops go in.
+   */
+  const planBox = useRef<HTMLDivElement | null>(null);
+  const [planPx, setPlanPx] = useState(0);
+  useEffect(() => {
+    const el = planBox.current;
+    if (!el) {
+      setPlanPx(0);
+      return;
+    }
+    const ro = new ResizeObserver(() => setPlanPx(el.offsetHeight + 18));
+    ro.observe(el);
+    setPlanPx(el.offsetHeight + 18);
+    return () => ro.disconnect();
+  }, [draft, preview]);
 
   // The strip scrolls when the tabs outrun the width — keep the current one in view.
   useEffect(() => {
@@ -345,6 +376,38 @@ export default function TripPlanner() {
     [doc.cities, selectCity, openPreview, showOnMap],
   );
 
+  /**
+   * Resting the pointer on a place routes it, the same as tapping it does.
+   *
+   * Sweeping across a city full of pins would otherwise fire a request per pin,
+   * so the hover has to settle first. What it draws then stays put when the
+   * pointer moves on — a route that vanishes the moment you look away is no use
+   * for comparing two restaurants against each other.
+   */
+  const hoverPlace = useCallback(
+    (id: string) => {
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
+      if (previewRef.current?.placeId === id) return;
+      hoverTimer.current = setTimeout(() => {
+        for (const c of doc.cities) {
+          const place = c.places.find((p) => p.id === id);
+          if (place) {
+            void openPreview(c, place);
+            return;
+          }
+        }
+      }, HOVER_SETTLE_MS);
+    },
+    [doc.cities, openPreview],
+  );
+
+  useEffect(
+    () => () => {
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    },
+    [],
+  );
+
   /** Take the hop on offer: the plan grows by one stop and keeps its route. */
   const addPreview = useCallback(() => {
     const p = preview;
@@ -514,6 +577,7 @@ export default function TripPlanner() {
       if (!focused && !plotAll) return;
       c.places.forEach((p) => {
         if (!p.ll || !p.name) return;
+        const kind = placeKind(p.kind);
         out.push({
           id: p.id,
           name: p.name,
@@ -521,8 +585,16 @@ export default function TripPlanner() {
           ll: p.ll,
           selected: false,
           kind: 'place',
-          icon: PLACE_KINDS.find((k) => k.id === p.kind)?.icon ?? 'ph-map-pin',
-            stopNumber: stopIndex.get(p.ll.join(',')),
+          icon: kind.icon,
+          stopNumber: stopIndex.get(p.ll.join(',')),
+          place: {
+            kindLabel: kind.label,
+            color: kind.color,
+            band: p.band,
+            note: p.note,
+            images: p.images ?? [],
+            url: p.url ?? '',
+          },
         });
       });
     });
@@ -783,8 +855,10 @@ export default function TripPlanner() {
           legs={legs}
           fit={fit}
           sheetPx={mapInset}
+          overlayPx={planPx}
           focus={focus}
           onSelect={onPin}
+          onHoverPlace={hoverPlace}
           onActivateHotel={(cid, hid) => store.setCity(cid, 'hotelSel', hid)}
         />
 
@@ -810,6 +884,7 @@ export default function TripPlanner() {
         ) : null}
 
         <PlanBuilder
+          ref={planBox}
           draft={draft}
           cityName={planCity?.name ?? ''}
           homeName={planHome?.name || 'your hotel'}
@@ -964,6 +1039,7 @@ export default function TripPlanner() {
                     onCity={(key, val) => store.setCity(c.id, key, val)}
                     onOpenStay={() => setTab('stay')}
                     onAddPlace={() => store.addPlace(c.id)}
+                    onAddPlaces={(places) => store.addPlaces(c.id, places)}
                     onPlace={(pid, key, val) => store.setPlace(c.id, pid, key, val)}
                     onRemovePlace={(pid) => store.removePlace(c.id, pid)}
                     onZoom={showOnMap}

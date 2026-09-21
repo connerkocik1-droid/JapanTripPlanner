@@ -28,6 +28,19 @@ export interface HotelDetail {
   pick: boolean;
 }
 
+/** What the mini-card on a pinned place shows. */
+export interface PlaceDetail {
+  /** "Eat", "Do" — what kind of place this is. */
+  kindLabel: string;
+  /** The colour this kind is drawn in, shared by the pin and the card. */
+  color: string;
+  /** Rating or price band, as typed: "4.7★", "$$". */
+  band: string;
+  note: string;
+  images: string[];
+  url: string;
+}
+
 export interface MapPin {
   id: string;
   name: string;
@@ -42,6 +55,8 @@ export interface MapPin {
   icon?: string;
   /** Present on hotel pins — hovering or tapping one opens this card. */
   hotel?: HotelDetail;
+  /** Present on place pins — hovering or tapping one opens this card. */
+  place?: PlaceDetail;
 }
 
 /** One routed hop of the planned day, drawn on the map in its own colour. */
@@ -68,14 +83,26 @@ export interface TripMapProps {
   fit: { points: LatLng[]; nonce: number } | null;
   /** Pixels of map covered by the bottom sheet. */
   sheetPx: number;
+  /**
+   * Pixels of map covered by the plan builder, which floats over it rather
+   * than pushing it up. Only the mini-card reads this: framing the trip around
+   * it would move the camera every time a hover routed something, which is the
+   * opposite of what hovering is for.
+   */
+  overlayPx: number;
   focus: MapFocus | null;
   onSelect: (id: string) => void;
+  /**
+   * The pointer came to rest on a pinned place. Routing it is the caller's
+   * business; the map only reports what is under the cursor.
+   */
+  onHoverPlace: (id: string) => void;
   /** Make this option the one the budget counts, or clear it with null. */
   onActivateHotel: (cityId: string, hotelId: string | null) => void;
 }
 
 export default function TripMap({
-  pins, route, legs, fit, sheetPx, focus, onSelect, onActivateHotel,
+  pins, route, legs, fit, sheetPx, overlayPx, focus, onSelect, onHoverPlace, onActivateHotel,
 }: TripMapProps) {
   const holder = useRef<HTMLDivElement | null>(null);
   const map = useRef<MlMap | null>(null);
@@ -85,19 +112,20 @@ export default function TripMap({
   const stepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const box = useRef({ w: 0, h: 0 });
 
-  const latest = useRef({ pins, route, legs, sheetPx, onSelect, onActivateHotel });
-  latest.current = { pins, route, legs, sheetPx, onSelect, onActivateHotel };
+  const latest = useRef({ pins, route, legs, sheetPx, overlayPx, onSelect, onHoverPlace, onActivateHotel });
+  latest.current = { pins, route, legs, sheetPx, overlayPx, onSelect, onHoverPlace, onActivateHotel };
 
-  // The hotel mini-card. `sticky` is set by a tap and survives the pointer
-  // leaving; a hover-opened card closes again as soon as the pointer does.
+  // The mini-card, for a hotel or a pinned place. `sticky` is set by a tap and
+  // survives the pointer leaving; a hover-opened card closes as the pointer does.
   const [card, setCard] = useState<{ id: string; sticky: boolean } | null>(null);
   const cardBox = useRef<HTMLDivElement | null>(null);
   const cardId = useRef<string | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   cardId.current = card?.id ?? null;
   const cardPin = card ? pins.find((p) => p.id === card.id) ?? null : null;
-  // Narrowed once, so the card's callbacks can reach the hotel payload.
+  // Narrowed once, so the card's callbacks can reach the payload.
   const cardHotel = cardPin?.hotel ? { pin: cardPin, hotel: cardPin.hotel } : null;
+  const cardPlace = cardPin?.place ? { pin: cardPin, place: cardPin.place } : null;
 
   const holdCard = () => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -140,7 +168,8 @@ export default function TripMap({
     const cardW = el.offsetWidth;
     const cardH = el.offsetHeight;
     const ceiling = Math.min(150, Math.round(h * 0.17)) + 8;
-    const floor = h - Math.min(latest.current.sheetPx, Math.round(h * 0.6)) - 8;
+    const covered = Math.max(latest.current.sheetPx, latest.current.overlayPx);
+    const floor = h - Math.min(covered, Math.round(h * 0.6)) - 8;
 
     let top = pt.y - 22 - cardH;
     if (top < ceiling) top = pt.y + 30;
@@ -321,20 +350,32 @@ export default function TripMap({
         el.className = 'trip-pin';
         el.style.width = '80px';
         el.style.textAlign = 'center';
+        const self = () => latest.current.pins.find((q) => q.id === p.id);
         el.addEventListener('click', (ev) => {
           ev.stopPropagation();
+          const me = self();
           // A hotel pin opens its card instead of steering the bottom sheet.
-          if (latest.current.pins.find((q) => q.id === p.id)?.hotel) {
+          if (me?.hotel) {
             tapCard(p.id);
             return;
           }
+          // A place opens its card and asks for its route in the same tap,
+          // which is the only way a phone gets what a hover gets.
+          if (me?.place) tapCard(p.id);
           latest.current.onSelect(p.id);
         });
         el.addEventListener('mouseenter', () => {
-          if (latest.current.pins.find((q) => q.id === p.id)?.hotel) hoverCard(p.id);
+          const me = self();
+          if (!me?.hotel && !me?.place) return;
+          hoverCard(p.id);
+          // Resting on a place routes it, so the way there is drawn without
+          // having to commit to anything.
+          if (me.place) latest.current.onHoverPlace(p.id);
         });
         el.addEventListener('mouseleave', () => {
-          if (latest.current.pins.find((q) => q.id === p.id)?.hotel) closeSoon();
+          // The card follows the pointer away; the route it drew does not, so
+          // there is something left to look at.
+          if (self()?.hotel || self()?.place) closeSoon();
         });
         mk = new maplibregl.Marker({ element: el, anchor: 'top', offset: [0, -7] })
           .setLngLat(toLngLat(p.ll))
@@ -353,15 +394,22 @@ export default function TripMap({
       el.classList.toggle('is-airport', p.kind === 'airport');
       el.classList.toggle('is-pick', p.kind === 'hotel' && !!p.hotel?.pick);
       el.classList.toggle('is-open', cardId.current === p.id);
+      el.classList.toggle('is-place', p.kind === 'place');
       // Hotels are purple whatever else they are, so the lodging options read
       // as one set at a glance; the budgeted one is the brighter of them.
       const hotelDot = p.kind === 'hotel' ? ' tp-hotel' + (p.hotel?.pick ? ' is-pick' : '') : '';
+      // A place is drawn in its kind's colour — restaurants red — so a city's
+      // hundred pins sort themselves out before you read a single label.
+      const placeDot = p.place ? ' tp-place' : '';
+      if (p.place) el.style.setProperty('--pin', p.place.color);
+      else el.style.removeProperty('--pin');
       // Airports are the blue of a flight leg — the same colour arrives twice.
       const airportDot = p.kind === 'airport' ? ' tp-airport' : '';
+      const extra = hotelDot + placeDot + airportDot;
       const dot = p.stopNumber !== undefined
-        ? `<span class="tp-dot tp-num${hotelDot}${airportDot}">${p.stopNumber}</span>`
+        ? `<span class="tp-dot tp-num${extra}">${p.stopNumber}</span>`
         : p.icon
-          ? `<span class="tp-dot tp-icon${hotelDot}${airportDot}"><i class="ph ${p.icon}"></i></span>`
+          ? `<span class="tp-dot tp-icon${extra}"><i class="ph ${p.icon}"></i></span>`
           : '<span class="tp-dot"></span>';
       el.innerHTML =
         '<span class="tp-ret"></span>' + dot +
@@ -438,7 +486,10 @@ export default function TripMap({
     });
     placeCard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card?.id, cardPin?.ll[0], cardPin?.ll[1], cardPin?.hotel?.images.length, sheetPx]);
+  }, [
+    card?.id, cardPin?.ll[0], cardPin?.ll[1],
+    cardPin?.hotel?.images.length, cardPin?.place?.images.length, sheetPx, overlayPx,
+  ]);
 
   // Resize only on a real box change — an unconditional resize cancels
   // any in-flight camera animation.
@@ -476,6 +527,16 @@ export default function TripMap({
               cardHotel.hotel.pick ? null : cardHotel.pin.id,
             )
           }
+        />
+      ) : null}
+      {cardPlace ? (
+        <PlaceMiniCard
+          ref={cardBox}
+          pin={cardPlace.pin}
+          place={cardPlace.place}
+          onHold={holdCard}
+          onLeave={closeSoon}
+          onClose={closeCard}
         />
       ) : null}
       <div className="map-attrib">© OpenStreetMap contributors</div>
@@ -569,3 +630,87 @@ const HotelMiniCard = forwardRef<
     </div>
   );
 });
+
+/**
+ * The place mini-card: what somewhere is, what it looks like, and how it was
+ * rated, without leaving the map. The route to it is drawn on the map and
+ * priced in the plan builder at the same moment, so nothing here repeats it.
+ *
+ * Every place gets a picture. A photo the travelers pasted is used when there
+ * is one; otherwise the card draws its own, from the place's name and kind, so
+ * a shortlist of forty restaurants still reads as a shortlist of places rather
+ * than a list of empty boxes.
+ */
+const PlaceMiniCard = forwardRef<
+  HTMLDivElement,
+  {
+    pin: MapPin;
+    place: PlaceDetail;
+    onHold: () => void;
+    onLeave: () => void;
+    onClose: () => void;
+  }
+>(function PlaceMiniCard({ pin, place, onHold, onLeave, onClose }, ref) {
+  const shot = place.images.find((src) => src.trim()) ?? '';
+  const [broken, setBroken] = useState(false);
+  return (
+    <div
+      ref={ref}
+      className="hotel-card place-card"
+      style={{ ['--pin' as string]: place.color }}
+      role="dialog"
+      aria-label={pin.name + ' details'}
+      onMouseEnter={onHold}
+      onMouseLeave={onLeave}
+    >
+      <div className="pc-shot">
+        {shot && !broken ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={shot} alt="" loading="lazy" onError={() => setBroken(true)} />
+        ) : (
+          <PlaceArt name={pin.name} icon={pin.icon ?? 'ph-map-pin'} />
+        )}
+        {place.band ? <span className="mono pc-band">{place.band}</span> : null}
+      </div>
+
+      <div className="hc-head">
+        <span className="hc-title">{pin.name}</span>
+        <button className="tap hc-x" onClick={onClose} aria-label="Close">
+          <i className="ph ph-x" />
+        </button>
+      </div>
+      <div className="mono hc-where">
+        <i className={'ph ' + (pin.icon ?? 'ph-map-pin')} /> {place.kindLabel}
+      </div>
+
+      {place.note.trim() ? <p className="hc-note pc-note">{place.note}</p> : null}
+
+      {place.url ? (
+        <a className="mono hc-link pc-link" href={place.url} target="_blank" rel="noopener noreferrer">
+          Open listing ↗
+        </a>
+      ) : null}
+    </div>
+  );
+});
+
+/**
+ * The stand-in picture: a band of colour keyed to the name, with the kind's
+ * glyph over it. Deterministic, so the same restaurant looks the same every
+ * time, and drawn rather than fetched, so it never fails to load.
+ */
+function PlaceArt({ name, icon }: { name: string; icon: string }) {
+  let h = 0;
+  for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return (
+    <span
+      className="pc-art"
+      style={{
+        background:
+          `linear-gradient(135deg, hsl(${h} 42% 26%) 0%, hsl(${(h + 38) % 360} 38% 17%) 100%)`,
+      }}
+    >
+      <i className={'ph ' + icon} />
+    </span>
+  );
+}
