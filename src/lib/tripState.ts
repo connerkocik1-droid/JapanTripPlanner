@@ -54,12 +54,19 @@ const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
 
 /**
- * Saves written before a field existed are missing it. Fill the hotel and place
- * gaps so the inputs bound to them stay controlled and the map cards have
- * something defined to read.
+ * Saves written before a field existed are missing it. Fill the gaps — on the
+ * city as well as its hotels and places — so the inputs bound to them stay
+ * controlled and everything reading them has something defined to read.
  */
 function fillCity(city: City): City {
   return {
+    // The blanks go underneath, not just over the lists: a city gains fields as
+    // the app grows — `airportCode` came with the airport routes — and a plan
+    // saved before one of them has no such key at all. Anything that reads it
+    // without checking then throws while the map is drawing, which takes the
+    // whole page down. Filling from a blank city means a field added tomorrow
+    // is already present in every plan saved yesterday.
+    ...blankCity(city?.name ?? '', city?.ll ?? null),
     ...city,
     hotels: (Array.isArray(city?.hotels) ? city.hotels : []).map((h) => ({
       ...blankHotel(),
