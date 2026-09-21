@@ -26,9 +26,13 @@ No environment variables are required. Two optional ones tune the geocoder:
 | `OSRM_URL` | `https://routing.openstreetmap.de` | Walking/cycling router |
 | `TRANSIT_URL` | *(unset)* | A MOTIS `/api/v1/plan` endpoint for real metro routing |
 
-Without `TRANSIT_URL` the metro option is a clearly-labelled estimate (modelled from
-the walking distance at ~32 km/h plus 10 minutes of access and waiting), so "walk or
-metro?" still has an answer. Walking is routed either way.
+Without `TRANSIT_URL` the metro option is a clearly-labelled estimate: the walking
+distance less the walks either side, ridden at 27 km/h for a short hop and up to
+72 km/h for a long one, plus five minutes of waiting and a modelled walk at each
+end. So "walk or metro?" still has an answer. Walking is routed either way.
+
+Either way a transit leg comes back split into what you ride and what you walk, which
+is what the airport → hotel figures below are built from.
 
 ## What's in it
 
@@ -66,6 +70,18 @@ selected option is costed, so switching the radio re-prices the whole trip
 instantly. Add the transit leg (× travelers) and a per-day food figure, and the
 header card sums Lodging / Transit / Food live against the budget you set. Costs
 you attach to itinerary items are tracked separately as "planned items".
+
+**Airport → hotel.** Every city with a pinned hotel shows how you get in from the
+airport, for **each** option rather than only the selected one — total door-to-door
+time, the metro portion and the walking portion separately, and the fare for
+everyone travelling. The airport is the nearest one to the city by default (a
+built-in list of Japanese airports plus the nearby regional hubs), and the picker
+switches it where that guess is wrong — Haneda rather than Narita, say. The fare
+starts from that airport's typical published rail fare into town and is editable per
+city, because the express and the ordinary train are not the same money. When a hotel
+is close enough that walking beats riding, the row says so and costs nothing. With
+`TRANSIT_URL` set these are real routed journeys with the lines named; without it they
+are modelled and marked `EST`.
 
 **Plot first, route later.** Every place you pin shows on the map immediately, with
 a glyph for its kind (eat / do / stay / other) — across all cities, or just the open

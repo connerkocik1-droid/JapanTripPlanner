@@ -13,6 +13,10 @@ import { NextResponse } from 'next/server';
  *   - otherwise: a clearly-flagged estimate (`estimated: true`) from the
  *     walking distance, so "walk or metro?" still has an answer offline.
  *
+ * A transit leg also comes back split into `parts` — the ride and the walk
+ * either side of it — so a caller can show "38 min metro + 12 min walking"
+ * rather than one opaque number.
+ *
  * The client always gets a usable answer; `provider` and `estimated` say how
  * much to trust it, and the UI labels estimates.
  */
@@ -35,6 +39,17 @@ export interface Leg {
   provider: string;
   /** Transit only: a short summary such as "Metro · 2 changes". */
   summary?: string;
+  /** Transit only: the journey split into what you ride and what you walk. */
+  parts?: LegPart[];
+}
+
+/** One piece of a transit journey — a ride, or the walk either side of it. */
+export interface LegPart {
+  kind: 'walk' | 'ride';
+  meters: number;
+  seconds: number;
+  /** The line for a ride ("Keisei Access Express"), or what the walk is for. */
+  label?: string;
 }
 
 type Pt = [number, number]; // [lat, lng]
@@ -67,6 +82,50 @@ function straightLine(from: Pt, to: Pt, mode: Mode): Leg {
     ],
     estimated: true,
     provider: 'estimate',
+  };
+}
+
+/**
+ * A modelled metro or rail journey, for when no transit router is configured.
+ *
+ * Door to door it is three pieces: the walk to a station, the ride, and the
+ * walk off at the far end. The ride speed rises with distance because a long
+ * run stops far less often than a cross-town metro — an airport express
+ * averages something like 70 km/h once it is moving, a city metro half that.
+ * Everything here is flagged `estimated`, and the walks either side are the
+ * same modelled figures whatever the actual streets look like.
+ */
+const ACCESS_WALK = { meters: 400, seconds: 330 }; // street to platform
+const EGRESS_WALK = { meters: 550, seconds: 450 }; // platform to the door
+const WAIT_SECONDS = 300; // one typical headway, plus a change
+
+function rideSpeed(meters: number): number {
+  if (meters < 5000) return 7.5; // 27 km/h — metro, stopping often
+  if (meters < 20000) return 12; // 43 km/h — commuter rail across a city
+  return 20; // 72 km/h — airport express territory
+}
+
+/** `streetMeters` is the walking distance for the same hop, when one is known. */
+function modelTransit(from: Pt, to: Pt, streetMeters: number): Leg {
+  const rideMeters = Math.max(0, streetMeters - ACCESS_WALK.meters - EGRESS_WALK.meters);
+  const rideSeconds = Math.round(rideMeters / rideSpeed(rideMeters));
+  const parts: LegPart[] = [
+    { kind: 'walk', meters: ACCESS_WALK.meters, seconds: ACCESS_WALK.seconds, label: 'to the station' },
+    { kind: 'ride', meters: Math.round(rideMeters), seconds: rideSeconds + WAIT_SECONDS, label: 'metro' },
+    { kind: 'walk', meters: EGRESS_WALK.meters, seconds: EGRESS_WALK.seconds, label: 'to the door' },
+  ];
+  return {
+    mode: 'transit',
+    meters: Math.round(streetMeters),
+    seconds: parts.reduce((a, p) => a + p.seconds, 0),
+    geometry: [
+      [from[1], from[0]],
+      [to[1], to[0]],
+    ],
+    estimated: true,
+    provider: 'estimate',
+    summary: 'Metro, estimated',
+    parts,
   };
 }
 
@@ -158,13 +217,21 @@ async function motis(from: Pt, to: Pt): Promise<Leg | null> {
     const geometry: [number, number][] = [];
     let meters = 0;
     const rides: string[] = [];
+    const parts: LegPart[] = [];
     it.legs.forEach((leg) => {
       meters += leg.distance ?? 0;
       const pts = leg.legGeometry?.points ? decodePolyline(leg.legGeometry.points) : [];
       if (pts.length) geometry.push(...pts);
       else if (leg.from && leg.to) geometry.push([leg.from.lon, leg.from.lat], [leg.to.lon, leg.to.lat]);
       const m = (leg.mode ?? '').toUpperCase();
-      if (m && m !== 'WALK') rides.push(leg.routeShortName || m.toLowerCase());
+      const walking = !m || m === 'WALK';
+      if (!walking) rides.push(leg.routeShortName || m.toLowerCase());
+      parts.push({
+        kind: walking ? 'walk' : 'ride',
+        meters: Math.round(leg.distance ?? 0),
+        seconds: Math.round(leg.duration ?? 0),
+        label: walking ? undefined : leg.routeShortName || m.toLowerCase(),
+      });
     });
 
     return {
@@ -175,6 +242,7 @@ async function motis(from: Pt, to: Pt): Promise<Leg | null> {
       estimated: false,
       provider: 'motis',
       summary: rides.length ? rides.join(' → ') : 'Walk only',
+      parts,
     };
   } catch {
     return null;
@@ -217,19 +285,7 @@ export async function POST(req: Request) {
         const walk = await osrm(from, to, 'walk');
         // Model the metro off the real walking distance when one is available.
         const base = walk ?? straightLine(from, to, 'walk');
-        const seconds = Math.round(base.meters / 8.9 + 600);
-        return {
-          mode: 'transit' as const,
-          meters: base.meters,
-          seconds,
-          geometry: [
-            [from[1], from[0]],
-            [to[1], to[0]],
-          ] as [number, number][],
-          estimated: true,
-          provider: 'estimate',
-          summary: 'Metro, estimated',
-        };
+        return modelTransit(from, to, base.meters);
       }
       return (await osrm(from, to, mode)) ?? straightLine(from, to, mode);
     }),

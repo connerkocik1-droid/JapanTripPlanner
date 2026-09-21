@@ -6,6 +6,7 @@ import { fmtUsd, walkLabel } from '@/lib/format';
 import { CitySpend } from '@/lib/derive';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { Touch } from '@/lib/tripState';
+import AirportRoutes from './AirportRoutes';
 import TouchMark, { touchStyle } from './TouchMark';
 
 const label = { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const;
@@ -104,6 +105,9 @@ export default function CityPanel({
       <button className="tap" onClick={onAddHotel} style={ghostBtn}>
         <i className="ph ph-plus" style={{ fontSize: 12 }} /> Another option
       </button>
+
+      {/* Arrival from the airport, per option. Renders nothing until one is pinned. */}
+      <AirportRoutes city={city} travelers={travelers} onCity={onCity} onZoom={onZoom} />
 
       {/* Transit */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 7px' }}>
