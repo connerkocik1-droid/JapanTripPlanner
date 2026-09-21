@@ -180,10 +180,17 @@ builder just says there are none yet.
 **Place packs.** A pack is a ready-made *shortlist* rather than a ready-made day:
 somewhere's restaurants, its museums, its coffee. Nothing is ordered and nothing is
 scheduled — importing one pins every entry on the map, and you decide afterwards
-which of them a day is built out of. The city panel offers the packs that match the
-city by name, near the top: open for a city with nothing pinned yet, folded away once
-it has places. A city is matched on its own name, so "Seoul", "Seoul, SK" and "Seoul,
-South Korea" are all offered the same lists.
+which of them a day is built out of.
+
+A city that matches a pack simply has it, without being asked: the places are added
+on load and their addresses resolved in the background, so a city whose shortlist
+ships with the app looks, on opening, like a city whose places were typed in. Each
+pack is recorded on the city once it has been given, so a place deleted on purpose
+stays deleted. The same pass resolves anything else that has an address and no pin,
+which is what lets a reload finish a long queue rather than strand half a list. The
+city panel still offers the packs by hand, near the top, for a city that has had them
+and wants them back. A city is matched on its own name, so "Seoul", "Seoul, SK" and
+"Seoul, South Korea" are all offered the same lists.
 
 Packs carry addresses rather than coordinates on purpose: an address is something
 you can check against a listing, and resolving it in the app means every pin comes

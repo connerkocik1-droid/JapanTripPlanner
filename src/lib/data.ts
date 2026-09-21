@@ -94,6 +94,11 @@ export interface City {
   metroFare: number;
   foodPer: number;
   places: Place[];
+  /**
+   * Ids of the ready-made shortlists this city has already been given. Kept so
+   * a place deleted on purpose is not put back on the next load.
+   */
+  packs: string[];
 }
 
 /** How you get to a stop from the one before it. */
@@ -178,5 +183,6 @@ export function blankCity(name: string, ll: LatLng | null = null): City {
     metroFare: 0,
     foodPer: 0,
     places: [],
+    packs: [],
   };
 }

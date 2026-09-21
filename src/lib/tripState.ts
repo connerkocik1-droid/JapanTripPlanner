@@ -97,6 +97,7 @@ function fillCity(city: City): City {
       images: strings(p?.images),
       url: typeof p?.url === 'string' ? p.url : '',
     })),
+    packs: strings(city?.packs),
   };
 }
 
