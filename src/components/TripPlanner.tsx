@@ -948,6 +948,8 @@ export default function TripPlanner() {
                   onExport={store.exportDoc}
                   onImport={store.importDoc}
                   persisted={store.persisted}
+                  syncState={store.syncState}
+                  deviceLink={store.deviceLink}
                 />
               ) : null}
 
