@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { Trip } from '@/lib/data';
 import { fmtUsd } from '@/lib/format';
-import { Touch } from '@/lib/tripState';
+import { SyncState, Touch } from '@/lib/tripState';
 import TouchMark from './TouchMark';
 
 export interface TripSettingsProps {
@@ -16,6 +16,10 @@ export interface TripSettingsProps {
   onImport: (input: unknown) => void;
   /** Whether the browser promised to keep this origin's storage. */
   persisted: boolean;
+  /** How the shared copy is doing; 'off' when this build has nowhere to sync. */
+  syncState: SyncState;
+  /** The link that puts another device on this trip, or '' when there is none. */
+  deviceLink: string;
 }
 
 const label = { fontSize: 9.5, color: 'var(--color-neutral-500)' } as const;
@@ -29,10 +33,12 @@ const row = {
 
 export default function TripSettings({
   trip, spent, onChange, touch, onClose, onExport, onImport, persisted,
+  syncState, deviceLink,
 }: TripSettingsProps) {
   const left = trip.planned ? trip.planned - spent : 0;
   const file = useRef<HTMLInputElement | null>(null);
   const [problem, setProblem] = useState('');
+  const [copied, setCopied] = useState(false);
   return (
     <div
       style={{
@@ -129,6 +135,40 @@ export default function TripSettings({
         </div>
       ) : null}
 
+      {/* One link is all another phone or laptop needs to join this trip. */}
+      {deviceLink ? (
+        <div style={{ ...row, gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="mono" style={label}>Your other devices</div>
+            <div
+              className="mono"
+              style={{
+                fontSize: 9, color: 'var(--color-neutral-600)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >
+              {deviceLink}
+            </div>
+          </div>
+          <button
+            className="tap"
+            style={{ ...backupBtn, flex: '0 0 auto', padding: '0 12px' }}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(deviceLink);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1600);
+              } catch {
+                setProblem('Could not copy — select the link and copy it by hand.');
+              }
+            }}
+          >
+            <i className={copied ? 'ph ph-check' : 'ph ph-link-simple'} style={{ fontSize: 13 }} />
+            {copied ? 'Copied' : 'Copy link'}
+          </button>
+        </div>
+      ) : null}
+
       {/* The plan lives on this device, so it needs a way off it. */}
       <div style={{ ...row, gap: 8 }}>
         <button className="tap" onClick={onExport} style={backupBtn}>
@@ -161,10 +201,16 @@ export default function TripSettings({
       <div className="mono" style={{ ...label, fontSize: 8.5, lineHeight: 1.5 }}>
         {problem ? (
           <span style={{ color: '#ff8fae' }}>{problem}</span>
-        ) : persisted ? (
-          'Saved on this device · storage protected from cleanup'
+        ) : syncState === 'error' ? (
+          <span style={{ color: '#ffd08a' }}>
+            Saved on this device · your other devices are not getting it right now
+          </span>
+        ) : syncState === 'off' ? (
+          persisted
+            ? 'Saved on this device · storage protected from cleanup'
+            : 'Saved on this device · back up before you travel'
         ) : (
-          'Saved on this device · back up before you travel'
+          'Saved on this device and shared with your other devices'
         )}
       </div>
     </div>
