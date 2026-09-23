@@ -105,12 +105,15 @@ export interface TripMapProps {
    * business; the map only reports what is under the cursor.
    */
   onHoverPlace: (id: string) => void;
+  /** Drop a place from the trip, from the card that opened over its pin. */
+  onRemovePlace: (id: string) => void;
   /** Make this option the one the budget counts, or clear it with null. */
   onActivateHotel: (cityId: string, hotelId: string | null) => void;
 }
 
 export default function TripMap({
-  pins, route, legs, mode, fit, frame, sheetPx, overlayPx, focus, onSelect, onHoverPlace, onActivateHotel,
+  pins, route, legs, mode, fit, frame, sheetPx, overlayPx, focus, onSelect, onHoverPlace,
+  onRemovePlace, onActivateHotel,
 }: TripMapProps) {
   const holder = useRef<HTMLDivElement | null>(null);
   const map = useRef<MlMap | null>(null);
@@ -581,6 +584,10 @@ export default function TripMap({
           onHold={holdCard}
           onLeave={closeSoon}
           onClose={closeCard}
+          onRemove={() => {
+            closeCard();
+            onRemovePlace(cardPlace.pin.id);
+          }}
         />
       ) : null}
       <div className="map-attrib">© OpenStreetMap contributors</div>
@@ -693,10 +700,14 @@ const PlaceMiniCard = forwardRef<
     onHold: () => void;
     onLeave: () => void;
     onClose: () => void;
+    onRemove: () => void;
   }
->(function PlaceMiniCard({ pin, place, onHold, onLeave, onClose }, ref) {
+>(function PlaceMiniCard({ pin, place, onHold, onLeave, onClose, onRemove }, ref) {
   const shot = place.images.find((src) => src.trim()) ?? '';
   const [broken, setBroken] = useState(false);
+  // Removing takes two taps. The card opens under a finger on a phone, and a
+  // place dropped by accident is one you have to remember you had.
+  const [armed, setArmed] = useState(false);
   return (
     <div
       ref={ref}
@@ -729,11 +740,20 @@ const PlaceMiniCard = forwardRef<
 
       {place.note.trim() ? <p className="hc-note pc-note">{place.note}</p> : null}
 
-      {place.url ? (
-        <a className="mono hc-link pc-link" href={place.url} target="_blank" rel="noopener noreferrer">
-          Open listing ↗
-        </a>
-      ) : null}
+      <div className="pc-foot">
+        {place.url ? (
+          <a className="mono hc-link pc-link" href={place.url} target="_blank" rel="noopener noreferrer">
+            Open listing ↗
+          </a>
+        ) : null}
+        <button
+          className={'tap mono hc-link pc-drop' + (armed ? ' is-armed' : '')}
+          onClick={() => (armed ? onRemove() : setArmed(true))}
+          onBlur={() => setArmed(false)}
+        >
+          <i className="ph ph-trash" /> {armed ? 'Tap again' : 'Remove'}
+        </button>
+      </div>
     </div>
   );
 });

@@ -7,9 +7,10 @@ import { CitySpend } from '@/lib/derive';
 import { isFlightLeg } from '@/lib/legKind';
 import { Touch } from '@/lib/tripState';
 import AirportRoutes from './AirportRoutes';
+import AddPlace from './AddPlace';
 import PlacePacks from './PlacePacks';
 import TouchMark, { touchStyle } from './TouchMark';
-import { GeoStatus, NumField, boxed, ghostBtn, label, useGeocodedAddress } from './fields';
+import { GeoStatus, NumField, boxed, label, useGeocodedAddress } from './fields';
 
 export interface CityPanelProps {
   city: City;
@@ -18,7 +19,6 @@ export interface CityPanelProps {
   onCity: <K extends keyof City>(key: K, val: City[K]) => void;
   /** Switches to the Stay tab, where the lodging options live. */
   onOpenStay: () => void;
-  onAddPlace: () => void;
   /** Pin a ready-made list; returns the ones that were not already there. */
   onAddPlaces: (places: Place[]) => Place[];
   onPlace: <K extends keyof Place>(placeId: string, key: K, val: Place[K]) => void;
@@ -29,7 +29,7 @@ export interface CityPanelProps {
 
 export default function CityPanel({
   city, spend, travelers, onCity, onOpenStay,
-  onAddPlace, onAddPlaces, onPlace, onRemovePlace, onZoom, touch,
+  onAddPlaces, onPlace, onRemovePlace, onZoom, touch,
 }: CityPanelProps) {
   const active = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
   const options = city.hotels.filter((h) => h.name.trim()).length;
@@ -89,6 +89,10 @@ export default function CityPanel({
       <PlacePacks
         cityName={city.name}
         startOpen={bare}
+        onAdd={onAddPlaces}
+        onLocate={(placeId, ll) => onPlace(placeId, 'll', ll)}
+      />
+      <AddPlace
         onAdd={onAddPlaces}
         onLocate={(placeId, ll) => onPlace(placeId, 'll', ll)}
       />
@@ -252,9 +256,6 @@ export default function CityPanel({
           ))}
         </div>
       )}
-      <button className="tap" onClick={onAddPlace} style={ghostBtn}>
-        <i className="ph ph-plus" style={{ fontSize: 12 }} /> Add a place
-      </button>
 
       {/* Food slider */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 4px' }}>
