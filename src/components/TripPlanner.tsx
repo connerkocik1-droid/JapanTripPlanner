@@ -136,6 +136,27 @@ export default function TripPlanner() {
    * map rather than pushing it up, so the only way a mini-card can stay clear
    * of it is to be told how tall it is — and it changes height as stops go in.
    */
+  /**
+   * Drop a place from the map card. The pin knows its own id and not its city,
+   * and ids are unique across the trip, so the city is the one holding it. Any
+   * plan being built loses the stop too, rather than routing to somewhere that
+   * is no longer on the map.
+   */
+  const dropPlace = useCallback(
+    (id: string) => {
+      const city = doc.cities.find((c) => c.places.some((p) => p.id === id));
+      if (!city) return;
+      store.removePlace(city.id, id);
+      setDraft((cur) =>
+        cur && cur.stops.some((s) => s.placeId === id)
+          ? { ...cur, stops: cur.stops.filter((s) => s.placeId !== id) }
+          : cur,
+      );
+      setPreview((cur) => (cur?.placeId === id ? null : cur));
+    },
+    [doc.cities, store],
+  );
+
   const planBox = useRef<HTMLDivElement | null>(null);
   const [planPx, setPlanPx] = useState(0);
   useEffect(() => {
@@ -889,6 +910,7 @@ export default function TripPlanner() {
           focus={focus}
           onSelect={onPin}
           onHoverPlace={hoverPlace}
+          onRemovePlace={dropPlace}
           onActivateHotel={(cid, hid) => store.setCity(cid, 'hotelSel', hid)}
         />
 
@@ -1073,7 +1095,6 @@ export default function TripPlanner() {
                     travelers={doc.trip.travelers}
                     onCity={(key, val) => store.setCity(c.id, key, val)}
                     onOpenStay={() => setTab('stay')}
-                    onAddPlace={() => store.addPlace(c.id)}
                     onAddPlaces={(places) => store.addPlaces(c.id, places)}
                     onPlace={(pid, key, val) => store.setPlace(c.id, pid, key, val)}
                     onRemovePlace={(pid) => store.removePlace(c.id, pid)}

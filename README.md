@@ -62,6 +62,13 @@ coordinates:
   is green**, lodging keeps the app's purple. A city's hundred pins sort themselves
   out before you read a single label.
 
+**Adding and dropping places.** A city's panel opens on *Add a place*: pick whether
+it is somewhere to eat or something to do, give it a name and an address, and it is
+pinned as soon as the address resolves. The card says which — on the map, not found,
+or found only to the district — so a pin that never appeared is never a mystery. A
+place you do not want goes from the card over its own pin: *Remove*, then once more
+to confirm, because the card opens under a finger on a phone.
+
 **Place cards.** Hovering a place pin — or tapping it, which is how a phone does the
 same thing — opens a small card over it: a picture, the rating or price band, what it
 is, and a link out to the listing. A photo you have pasted is used if there is one;

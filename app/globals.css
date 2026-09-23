@@ -432,7 +432,30 @@ input::placeholder { color: var(--color-neutral-600); }
   max-height: 72px;
   overflow: hidden;
 }
-.place-card .pc-link { display: inline-block; margin-top: 8px; }
+.place-card .pc-link { display: inline-block; }
+/* The listing and the way out sit on one row, so dropping a place is where you
+   already are rather than back in the city panel among seventy-odd others. */
+.place-card .pc-foot {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+.place-card .pc-drop {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+  background: transparent;
+  color: var(--color-neutral-500);
+  cursor: pointer;
+}
+.place-card .pc-drop i { font-size: 11px; }
+.place-card .pc-drop:hover { color: #ff8fae; border-color: color-mix(in srgb, #ff8fae 40%, transparent); }
+.place-card .pc-drop.is-armed {
+  color: #ff8fae;
+  border-color: #ff8fae;
+}
 /* --- airports ----------------------------------------------------------- */
 /* Blue, the colour a flight leg is already drawn in, so where you land and how
    you got there read as the same thing. */
