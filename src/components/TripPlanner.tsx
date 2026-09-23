@@ -82,6 +82,12 @@ export default function TripPlanner() {
   const [tab, setTab] = useState<Tab>('map');
   const [cityId, setCityId] = useState<string | null>(null);
   const [day, setDay] = useState(1);
+  /**
+   * What the map is showing: the whole trip, or one day of it. Day view is
+   * the only thing that zooms in on its own — in trip view the camera stays
+   * on the trip unless you tap something.
+   */
+  const [view, setView] = useState<'trip' | 'day'>('trip');
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [adding, setAdding] = useState(false);
   const [newCity, setNewCity] = useState('');
@@ -101,6 +107,8 @@ export default function TripPlanner() {
   const [backLoading, setBackLoading] = useState(false);
   const [fit, setFit] = useState<{ points: LatLng[]; nonce: number } | null>(null);
   const fitNonce = useRef(0);
+  /** Bumped when the trip as a whole is asked for, so it re-frames every time. */
+  const [frameNonce, setFrameNonce] = useState(0);
   const shell = useRef<HTMLDivElement | null>(null);
   const activeTab = useRef<HTMLButtonElement | null>(null);
   const focusNonce = useRef(0);
@@ -173,6 +181,54 @@ export default function TripPlanner() {
     },
     [cityId, doc.cities, zoomTo],
   );
+
+  /** Fit the camera to a set of points — a day's stops, or a city's places. */
+  const zoomToPoints = useCallback((points: LatLng[]) => {
+    if (!points.length) return;
+    fitNonce.current += 1;
+    setFocus(null);
+    setFit({ points, nonce: fitNonce.current });
+  }, []);
+
+  /**
+   * What day view frames: the day's stops when it has any, so the walk from
+   * the hotel is on screen, and the city itself when the day is still empty.
+   */
+  const showDay = useCallback(
+    (n: number) => {
+      const entry = d.schedule[Math.min(Math.max(1, n), d.schedule.length) - 1];
+      if (!entry) return;
+      setView('day');
+      setTab('map');
+      setDay(entry.n);
+      setCityId(entry.city.id);
+
+      const pts: LatLng[] = [];
+      const hotel = selectedHotel(entry.city);
+      if (hotel?.ll) pts.push(hotel.ll);
+      entry.items.forEach((it) => {
+        const place = entry.city.places.find((q) => q.id === it.placeId);
+        if (place?.ll) pts.push(place.ll);
+      });
+
+      if (pts.length > 1) {
+        zoomToPoints(pts);
+        return;
+      }
+      // Nothing planned yet, so the city is the subject — not the one hotel in it.
+      const ll = entry.city.ll ?? pts[0] ?? null;
+      if (ll) zoomTo(ll, entry.city.ll ? 11.5 : 13.5);
+    },
+    [d.schedule, zoomTo, zoomToPoints],
+  );
+
+  /** Back out to the whole trip. Clearing the focus is what pulls the camera. */
+  const showTrip = useCallback(() => {
+    setView('trip');
+    setTab('map');
+    setFocus(null);
+    setFrameNonce((n) => n + 1);
+  }, []);
 
   /** Zooming from another tab only helps if the map is what you end up looking at. */
   const showOnMap = useCallback(
@@ -379,17 +435,20 @@ export default function TripPlanner() {
       for (const c of doc.cities) {
         const place = c.places.find((p) => p.id === id);
         if (place) {
+          // Tapping a place puts you over it. The route it asks for arrives a
+          // moment later and no longer drags the camera anywhere.
+          if (place.ll) zoomTo(place.ll, 15.5);
           void openPreview(c, place);
           return;
         }
         const hotel = c.hotels.find((h) => h.id === id);
         if (hotel?.ll) {
-          showOnMap(hotel.ll, 16);
+          showOnMap(hotel.ll, 15.5);
           return;
         }
       }
     },
-    [doc.cities, selectCity, openPreview, showOnMap],
+    [doc.cities, selectCity, openPreview, showOnMap, zoomTo],
   );
 
   /**
@@ -542,7 +601,9 @@ export default function TripPlanner() {
     const stopIndex = new Map<string, number>();
     if (draft) {
       draft.stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
-    } else if (tab === 'days' || tab === 'build') {
+    } else if (tab === 'days' || tab === 'build' || (tab === 'map' && view === 'day')) {
+      // Day view is the day: its stops are numbered on the map and say their
+      // names, which is the whole reason for zooming into one.
       stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
     }
 
@@ -631,14 +692,7 @@ export default function TripPlanner() {
       });
     });
     return out;
-  }, [doc.cities, cityId, plotAll, stops, tab, draft, arrivals]);
-
-  const zoomToPoints = useCallback((points: LatLng[]) => {
-    if (!points.length) return;
-    fitNonce.current += 1;
-    setFocus(null);
-    setFit({ points, nonce: fitNonce.current });
-  }, []);
+  }, [doc.cities, cityId, plotAll, stops, tab, view, draft, arrivals]);
 
   // Each city carries how you got there, so the map can draw flown legs as flights.
   const route = useMemo<RouteStop[]>(
@@ -877,13 +931,78 @@ export default function TripPlanner() {
         </div>
       </div>
 
+      {/*
+        * Trip or day, and which day — the one control that says what the map
+        * is looking at. In the flow under the header, like the tabs, so the
+        * map itself stays clear.
+        */}
+      {tab === 'map' && d.schedule.length > 0 ? (
+        <div className="view-bar">
+          <div className="view-seg" role="group" aria-label="Map view">
+            <button
+              className={'view-btn tap' + (view === 'trip' ? ' is-on' : '')}
+              aria-pressed={view === 'trip'}
+              onClick={showTrip}
+            >
+              <i className="ph ph-globe-hemisphere-west" />
+              Trip
+            </button>
+            <button
+              className={'view-btn tap' + (view === 'day' ? ' is-on' : '')}
+              aria-pressed={view === 'day'}
+              onClick={() => showDay(day)}
+            >
+              <i className="ph ph-calendar-blank" />
+              Day
+            </button>
+          </div>
+
+          {view === 'day' ? (
+            <div className="view-step">
+              <button
+                className="view-arrow tap"
+                onClick={() => showDay(day - 1)}
+                disabled={day <= 1}
+                aria-label="Previous day"
+              >
+                <i className="ph ph-caret-left" />
+              </button>
+              <span className="view-day">
+                <span className="view-day-n">
+                  Day {day}
+                  <span className="view-day-of"> of {d.schedule.length}</span>
+                </span>
+                <span className="mono view-day-sub">
+                  {dayCity?.name ?? ''}
+                  {doc.trip.start ? ' · ' + fmtD(dateOf(doc.trip.start, day - 1)) : ''}
+                </span>
+              </span>
+              <button
+                className="view-arrow tap"
+                onClick={() => showDay(day + 1)}
+                disabled={day >= d.schedule.length}
+                aria-label="Next day"
+              >
+                <i className="ph ph-caret-right" />
+              </button>
+            </div>
+          ) : (
+            <span className="mono view-hint">
+              {d.cities.length} {d.cities.length === 1 ? 'city' : 'cities'} · {d.schedule.length} days
+            </span>
+          )}
+        </div>
+      ) : null}
+
       {/* Everything below the header is the map, until a tab covers it. */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         <TripMap
           pins={pins}
           route={route}
           legs={legs}
+          mode={view}
           fit={fit}
+          frame={frameNonce}
           sheetPx={mapInset}
           overlayPx={planPx}
           focus={focus}
@@ -1184,10 +1303,7 @@ export default function TripPlanner() {
               onToggleItem={store.toggleDayItem}
               onRemoveItem={store.removeDayItem}
               onMoveItem={store.moveDayItem}
-              onZoomDay={() => {
-                setTab('map');
-                zoomToPoints(stops.map((s) => s.ll));
-              }}
+              onZoomDay={() => showDay(day)}
               onZoomStop={(ll) => showOnMap(ll, 16.5)}
             />
           ) : null}

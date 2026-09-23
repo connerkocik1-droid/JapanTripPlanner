@@ -172,6 +172,109 @@ input::placeholder { color: var(--color-neutral-600); }
   border-bottom-color: var(--color-accent-400);
 }
 
+/* --- map view bar ------------------------------------------------------- */
+/*
+ * Says what the map is looking at, and steps through the days. It sits in the
+ * flow under the tabs rather than floating over the map, so nothing it does
+ * ever covers the thing it is describing.
+ */
+.view-bar {
+  flex: none;
+  position: relative;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px calc(var(--safe-right) + 12px) 6px calc(var(--safe-left) + 12px);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-neutral-900);
+}
+.view-seg {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-neutral-800);
+  background: var(--color-surface);
+}
+.view-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 11px;
+  border: none;
+  border-radius: 9999px;
+  background: none;
+  color: var(--color-neutral-500);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.view-btn i { font-size: 13px; }
+.view-btn.is-on {
+  background: var(--color-accent-700);
+  color: var(--color-accent-100);
+}
+
+.view-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  min-width: 0;
+}
+.view-arrow {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-neutral-800);
+  background: none;
+  color: var(--color-accent-200);
+  font-size: 14px;
+  cursor: pointer;
+}
+.view-arrow:disabled {
+  color: var(--color-neutral-800);
+  border-color: var(--color-neutral-900);
+  cursor: default;
+}
+/* Fixed width, so stepping from Seoul to Tokyo doesn't move the arrows. */
+.view-day {
+  min-width: 104px;
+  max-width: 150px;
+  text-align: center;
+  line-height: 1.2;
+}
+.view-day-n {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.view-day-of { color: var(--color-neutral-600); font-weight: 400; }
+.view-day-sub {
+  display: block;
+  font-size: 9px;
+  color: var(--color-neutral-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.view-hint {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: var(--color-neutral-600);
+  white-space: nowrap;
+}
+
 /* --- map ---------------------------------------------------------------- */
 .map-holder { position: absolute; inset: 0; isolation: isolate; z-index: 0; }
 .map-canvas {
@@ -291,6 +394,25 @@ input::placeholder { color: var(--color-neutral-600); }
   border-bottom-color: transparent;
   animation: reticle 6s linear infinite;
   pointer-events: none;
+}
+/*
+ * A pin says what it is with its colour and its glyph; the name under it only
+ * repeats what the basemap already prints, and a city's worth of them buries
+ * the map. So the label waits to be asked for — a hover, a tap, or being a
+ * stop in the planned day. Hidden rather than removed, so revealing one never
+ * shifts the pin it belongs to.
+ */
+.trip-pin .tp-label {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.trip-pin:hover .tp-label,
+.trip-pin.is-sel .tp-label,
+.trip-pin.is-open .tp-label,
+.trip-pin.is-stop .tp-label {
+  visibility: visible;
+  opacity: 1;
 }
 .trip-pin .tp-name {
   margin-top: 5px;
