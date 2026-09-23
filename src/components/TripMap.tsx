@@ -431,21 +431,22 @@ export default function TripMap({
       const sub = p.selected || p.stopNumber !== undefined || cardId.current === p.id ? p.sub : '';
       /*
        * Rewriting innerHTML re-creates the icon element, and an icon font
-       * glyph re-renders blank for a frame when it does. sync() runs on every
-       * data change — a hover routing a place redraws every pin on the map —
-       * so the pins flickered constantly. Redraw only what actually changed.
+       * glyph re-renders blank for a frame when it does — a blink on the very
+       * pin the pointer is resting on, since hovering one is what opens its
+       * card and changes its second line. So the disc is rebuilt only when
+       * the disc itself changes, and the two lines of text are written
+       * straight onto the nodes that already hold them.
        */
-      const signature = [dot, p.name, sub].join('\u0000');
-      if (drawn.current[p.id] !== signature) {
-        drawn.current[p.id] = signature;
+      if (drawn.current[p.id] !== dot) {
+        drawn.current[p.id] = dot;
         el.innerHTML =
           '<span class="tp-ret"></span>' + dot +
           '<span class="tp-label"><span class="tp-name"></span><span class="tp-sub"></span></span>';
-        const name = el.querySelector('.tp-name');
-        const subEl = el.querySelector('.tp-sub');
-        if (name) name.textContent = p.name;
-        if (subEl) subEl.textContent = sub;
       }
+      const name = el.querySelector('.tp-name');
+      const subEl = el.querySelector('.tp-sub');
+      if (name && name.textContent !== p.name) name.textContent = p.name;
+      if (subEl && subEl.textContent !== sub) subEl.textContent = sub;
     });
 
     const coords = ps.map((p) => toLngLat(p.ll));

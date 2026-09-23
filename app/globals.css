@@ -363,13 +363,35 @@ input::placeholder { color: var(--color-neutral-600); }
 /* --- pins --------------------------------------------------------------- */
 .trip-pin { background: none; border: none; cursor: pointer; }
 .trip-pin span { display: block; }
+/*
+ * A marker is 80px wide so its name has room to sit under it, but only the
+ * disc is the pin. Left hoverable, that mostly-empty box lies over its
+ * neighbours' discs and takes the hover and the click meant for them — on a
+ * city with its shortlist pinned, four discs in ten could not be clicked at
+ * all, and sweeping across them lit up pins the pointer was nowhere near.
+ * So the box lets the pointer through and the disc catches it. mouseenter
+ * still reaches the marker, which is where the listeners are, because it is
+ * dispatched to the ancestors of whatever was entered.
+ */
+.trip-pin { pointer-events: none; }
+.trip-pin .tp-label { pointer-events: none; }
 .trip-pin .tp-dot {
+  position: relative;
   width: 11px;
   height: 11px;
   border-radius: 9999px;
   background: #6d5fc0;
   border: 2px solid #161826;
   margin: 0 auto;
+  pointer-events: auto;
+}
+/* A thumb's worth of target around the disc — 44px on a place or a hotel.
+   Out of flow, so it does not disturb the glyph the disc centres. */
+.trip-pin .tp-dot::after {
+  content: '';
+  position: absolute;
+  inset: -11px;
+  border-radius: 9999px;
 }
 .trip-pin.is-sel .tp-dot {
   position: relative;
