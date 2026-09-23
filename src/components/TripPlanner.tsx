@@ -236,9 +236,26 @@ export default function TripPlanner() {
         zoomToPoints(pts);
         return;
       }
-      // Nothing planned yet, so the city is the subject — not the one hotel in it.
-      const ll = entry.city.ll ?? pts[0] ?? null;
-      if (ll) zoomTo(ll, entry.city.ll ? 11.5 : 13.5);
+
+      /*
+       * Nothing planned yet, so the city is the subject. Frame what the city
+       * actually has on the map rather than a fixed zoom on its centre —
+       * Tokyo's centre at a city zoom leaves half its pins off the screen.
+       */
+      const spread: LatLng[] = [];
+      if (entry.city.ll) spread.push(entry.city.ll);
+      entry.city.hotels.forEach((h) => {
+        if (h.ll && h.name) spread.push(h.ll);
+      });
+      entry.city.places.forEach((q) => {
+        if (q.ll && q.name) spread.push(q.ll);
+      });
+      if (spread.length > 1) {
+        zoomToPoints(spread);
+        return;
+      }
+      const ll = spread[0] ?? pts[0] ?? null;
+      if (ll) zoomTo(ll, 12.5);
     },
     [d.schedule, zoomTo, zoomToPoints],
   );
