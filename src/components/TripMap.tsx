@@ -75,12 +75,20 @@ export interface MapFocus {
 
 export interface TripMapProps {
   pins: MapPin[];
+  /**
+   * Trip view frames the whole route; day view holds whatever the caller has
+   * pointed the camera at. The map never re-frames itself in day view, so a
+   * route arriving for a place you just tapped cannot pull you back out.
+   */
+  mode: 'trip' | 'day';
   /** Cities in trip order, each carrying how the leg into it is travelled. */
   route: RouteStop[];
   /** Routed legs of the day being planned; empty on the other tabs. */
   legs: MapLeg[];
   /** Fit the map to these points when the nonce changes. */
   fit: { points: LatLng[]; nonce: number } | null;
+  /** Bumped to re-frame the whole trip, however far the map has been moved. */
+  frame: number;
   /** Pixels of map covered by the bottom sheet. */
   sheetPx: number;
   /**
@@ -104,15 +112,17 @@ export interface TripMapProps {
 }
 
 export default function TripMap({
-  pins, route, legs, fit, sheetPx, overlayPx, focus, onSelect, onHoverPlace, onRemovePlace, onActivateHotel,
+  pins, route, legs, mode, fit, frame, sheetPx, overlayPx, focus, onSelect, onHoverPlace,
+  onRemovePlace, onActivateHotel,
 }: TripMapProps) {
   const holder = useRef<HTMLDivElement | null>(null);
   const map = useRef<MlMap | null>(null);
   const markers = useRef<Record<string, Marker>>({});
   const bounds = useRef<LngLatBoundsLike | null>(null);
   const ready = useRef(false);
-  const stepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const box = useRef({ w: 0, h: 0 });
+  /** The markup each marker currently shows, so an unchanged pin is left alone. */
+  const drawn = useRef<Record<string, string>>({});
 
   const latest = useRef({ pins, route, legs, sheetPx, overlayPx, onSelect, onHoverPlace, onActivateHotel });
   latest.current = { pins, route, legs, sheetPx, overlayPx, onSelect, onHoverPlace, onActivateHotel };
@@ -122,8 +132,10 @@ export default function TripMap({
   const [card, setCard] = useState<{ id: string; sticky: boolean } | null>(null);
   const cardBox = useRef<HTMLDivElement | null>(null);
   const cardId = useRef<string | null>(null);
+  const cardSticky = useRef(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   cardId.current = card?.id ?? null;
+  cardSticky.current = !!card?.sticky;
   const cardPin = card ? pins.find((p) => p.id === card.id) ?? null : null;
   // Narrowed once, so the card's callbacks can reach the payload.
   const cardHotel = cardPin?.hotel ? { pin: cardPin, hotel: cardPin.hotel } : null;
@@ -295,7 +307,6 @@ export default function TripMap({
     });
 
     return () => {
-      if (stepTimer.current) clearTimeout(stepTimer.current);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       map.current?.remove();
       map.current = null;
@@ -342,6 +353,7 @@ export default function TripMap({
       if (!seen.has(id)) {
         markers.current[id].remove();
         delete markers.current[id];
+        delete drawn.current[id];
       }
     });
 
@@ -356,9 +368,12 @@ export default function TripMap({
         el.addEventListener('click', (ev) => {
           ev.stopPropagation();
           const me = self();
-          // A hotel pin opens its card instead of steering the bottom sheet.
+          // A hotel pin opens its card, and puts the map over the hotel while
+          // it is open — a tap that closed the card has nothing to look at.
           if (me?.hotel) {
+            const opening = !(cardId.current === p.id && cardSticky.current);
             tapCard(p.id);
+            if (opening) latest.current.onSelect(p.id);
             return;
           }
           // A place opens its card and asks for its route in the same tap,
@@ -413,30 +428,60 @@ export default function TripMap({
         : p.icon
           ? `<span class="tp-dot tp-icon${extra}"><i class="ph ${p.icon}"></i></span>`
           : '<span class="tp-dot"></span>';
-      el.innerHTML =
-        '<span class="tp-ret"></span>' + dot +
-        '<span class="tp-label"><span class="tp-name"></span><span class="tp-sub"></span></span>';
-      const name = el.querySelector('.tp-name');
-      const sub = el.querySelector('.tp-sub');
-      if (name) name.textContent = p.name;
-      if (sub) sub.textContent = p.selected || p.stopNumber !== undefined ? p.sub : '';
+      const sub = p.selected || p.stopNumber !== undefined || cardId.current === p.id ? p.sub : '';
+      /*
+       * Rewriting innerHTML re-creates the icon element, and an icon font
+       * glyph re-renders blank for a frame when it does. sync() runs on every
+       * data change — a hover routing a place redraws every pin on the map —
+       * so the pins flickered constantly. Redraw only what actually changed.
+       */
+      const signature = [dot, p.name, sub].join('\u0000');
+      if (drawn.current[p.id] !== signature) {
+        drawn.current[p.id] = signature;
+        el.innerHTML =
+          '<span class="tp-ret"></span>' + dot +
+          '<span class="tp-label"><span class="tp-name"></span><span class="tp-sub"></span></span>';
+        const name = el.querySelector('.tp-name');
+        const subEl = el.querySelector('.tp-sub');
+        if (name) name.textContent = p.name;
+        if (subEl) subEl.textContent = sub;
+      }
     });
 
     const coords = ps.map((p) => toLngLat(p.ll));
     bounds.current = coords.length ? (boundsOf(coords) as LngLatBoundsLike) : null;
   };
 
+  /*
+   * Redraw, and nothing else. This used to re-frame the whole trip whenever
+   * the pins or the legs changed, which meant tapping a place — whose routed
+   * legs arrive a moment later — flew the camera out to the whole trip
+   * instead of in to the place. Framing now only happens when it is asked
+   * for: a view switch, a day step, or a tapped pin.
+   */
   useEffect(() => {
     sync();
-    if (!focus) frameTrip();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(pins), JSON.stringify(route), JSON.stringify(legs.map((l) => l.id + l.kind + l.geometry.length))]);
+
+  /** Asked for the whole trip — frame it, wherever the map had got to. */
+  useEffect(() => {
+    if (!ready.current) return;
+    frameTrip();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frame]);
+
+  /** In trip view the camera follows the shape of the trip as cities change. */
+  useEffect(() => {
+    if (mode !== 'trip' || focus) return;
+    frameTrip();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, JSON.stringify(route)]);
 
   /** Fit a specific set of points — "zoom to day". */
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current || !fit || fit.points.length === 0) return;
-    if (stepTimer.current) clearTimeout(stepTimer.current);
     const coords = fit.points.map(toLngLat);
     const H = holder.current?.clientHeight ?? 874;
     const top = Math.min(150, Math.round(H * 0.16));
@@ -457,30 +502,30 @@ export default function TripMap({
   useEffect(() => {
     const m = map.current;
     if (!m || !ready.current) return;
-    if (stepTimer.current) clearTimeout(stepTimer.current);
 
     if (!focus) {
-      frameTrip();
+      // Day view keeps whatever the caller framed; only trip view pulls back out.
+      if (mode === 'trip') frameTrip();
       return;
     }
-    // Two-stage descent: an out-and-in arc, then a step down to block level.
+    /*
+     * Straight to it. This used to fly out by three and a half zoom levels
+     * first and step back in a second later, which read as the map running
+     * away from the pin you had just tapped.
+     */
     const H = holder.current?.clientHeight ?? 874;
     const offsetY = -Math.round(Math.min(latest.current.sheetPx, H * 0.42) / 2);
-    const center = toLngLat(focus.ll);
     m.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     m.flyTo({
-      center,
-      zoom: Math.max(9, focus.zoom - 3.5),
+      center: toLngLat(focus.ll),
+      zoom: focus.zoom,
       offset: [0, offsetY],
-      duration: 900,
-      curve: 1.6,
+      duration: 650,
+      curve: 1.2,
       essential: true,
     });
-    stepTimer.current = setTimeout(() => {
-      m.easeTo({ center, zoom: focus.zoom, offset: [0, offsetY], duration: 1100, essential: true });
-    }, 950);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus?.nonce, focus === null]);
+  }, [focus?.nonce, focus === null, mode]);
 
   useLayoutEffect(() => {
     Object.entries(markers.current).forEach(([id, mk]) => {
