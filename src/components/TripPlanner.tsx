@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { City, DEFAULT_DWELL, LatLng, Place, placeKind, uid } from '@/lib/data';
 import { planDay } from '@/lib/dayPlan';
+import { tripDayOn } from '@/lib/today';
 import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
@@ -23,6 +24,7 @@ import {
 import CityPanel from './CityPanel';
 import PlanBuilder, { type Preview } from './PlanBuilder';
 import DaysTab from './DaysTab';
+import TodayTab from './TodayTab';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
 import TripPicker from './TripPicker';
@@ -42,11 +44,12 @@ const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
  */
 const HOVER_SETTLE_MS = 220;
 
-type Tab = 'map' | 'cities' | 'stay' | 'days' | 'list' | 'notes';
+type Tab = 'map' | 'today' | 'cities' | 'stay' | 'days' | 'list' | 'notes';
 
 /** The tab strip, in order. The map is first and is the default view. */
 const TABS: [Tab, string, string][] = [
   ['map', 'Map', 'ph-map-trifold'],
+  ['today', 'Today', 'ph-sun-horizon'],
   ['cities', 'Cities', 'ph-buildings'],
   ['stay', 'Stay', 'ph-bed'],
   ['days', 'Days', 'ph-calendar-blank'],
@@ -287,6 +290,28 @@ export default function TripPlanner() {
   );
 
   const dayEntry = d.schedule[Math.min(Math.max(1, day), Math.max(1, d.schedule.length)) - 1] ?? null;
+
+  /**
+   * Which day of the trip today is, or null when the trip has not started or
+   * is over. Read once per render off the device clock — a trip is days long,
+   * so nothing here needs to notice midnight passing mid-session.
+   */
+  const todayN = tripDayOn(doc.trip.start, d.schedule.length);
+
+  /**
+   * On the trip, the app opens on the day you are in rather than on the whole
+   * plan — that is the point of Today. Once only, and only before anything has
+   * been tapped, so it never pulls you off a tab you chose.
+   */
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current || !store.ready || todayN === null) return;
+    landed.current = true;
+    setTab('today');
+    setDay(todayN);
+    const c = d.schedule[todayN - 1]?.city;
+    if (c) setCityId(c.id);
+  }, [store.ready, todayN, d.schedule]);
 
   /**
    * The planned day as an ordered list of located stops. Only stops get routed —
@@ -963,6 +988,14 @@ export default function TripPlanner() {
                 onClick={() => {
                   setTab(id);
                   if (id !== 'map') setFocus(null);
+                  // Today follows one day and has no day picker, so opening it
+                  // moves the selection to the day it is about.
+                  if (id === 'today') {
+                    const n = todayN ?? 1;
+                    setDay(n);
+                    const c = d.schedule[n - 1]?.city;
+                    if (c) setCityId(c.id);
+                  }
                 }}
               >
                 <i className={'ph ' + icon} />
@@ -1328,6 +1361,23 @@ export default function TripPlanner() {
               onAddHotel={(cid) => store.addHotelSlot(cid)}
               onZoom={showOnMap}
               touch={store.touch}
+            />
+          ) : null}
+
+          {tab === 'today' ? (
+            <TodayTab
+              schedule={d.schedule}
+              start={doc.trip.start}
+              todayN={todayN}
+              dayEntry={dayEntry}
+              plan={plan}
+              hotel={dayCity ? selectedHotel(dayCity) : null}
+              city={dayCity}
+              rates={rates}
+              travelers={doc.trip.travelers}
+              onZoomStop={(ll) => showOnMap(ll, 16.5)}
+              onToggleItem={store.toggleDayItem}
+              onEditDay={() => setTab('days')}
             />
           ) : null}
 
