@@ -2,8 +2,8 @@
 
 import { LatLng } from './data';
 
-/** How exact a match is: the address as given, its road, or its district. */
-export type GeocodePrecision = 'exact' | 'road' | 'area';
+/** How exact a match is: the address as given, its block, its road, or its district. */
+export type GeocodePrecision = 'exact' | 'road' | 'block' | 'area';
 
 export interface GeocodeHit {
   lat: number;
@@ -37,13 +37,14 @@ export function hitToLatLng(hit: GeocodeHit): LatLng {
   return [hit.lat, hit.lng];
 }
 
-/** True when the pin landed on a road or a district rather than on the door. */
+/** True when the pin landed near the place rather than on its door. */
 export function isApprox(hit: GeocodeHit): boolean {
-  return hit.precision === 'road' || hit.precision === 'area';
+  return hit.precision === 'road' || hit.precision === 'block' || hit.precision === 'area';
 }
 
 export function precisionNote(hit: GeocodeHit): string {
   if (hit.precision === 'area') return 'only the district matched — check before you go';
+  if (hit.precision === 'block') return 'matched the block, not the building';
   if (hit.precision === 'road') return 'matched the road, not the number';
   return '';
 }

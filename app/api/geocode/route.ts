@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GeocodePrecision, queryLadder } from '@/lib/addressQuery';
+import { GeocodePrecision, coarser, queryLadder } from '@/lib/addressNormalize';
 
 /**
  * Address → coordinates, via OpenStreetMap Nominatim.
@@ -9,12 +9,12 @@ import { GeocodePrecision, queryLadder } from '@/lib/addressQuery';
  * lets the response be cached instead of re-queried on every keystroke.
  * Swap NOMINATIM_URL for a paid geocoder if the trip gets heavy use.
  *
- * A typed address rarely matches on the first try. Korean addresses in
- * particular carry a floor and a building ("2F Hilltop Bldg, 19 Dosan-daero
- * 67-gil") that Nominatim has never heard of, and plenty of them are lot
- * numbers rather than roads. So the query is tried in widening steps, and the
- * answer says which step matched: a pin the traveler should check before
- * counting on it is worth marking as one, rather than quietly dropping a
+ * A typed address rarely matches on the first try, and a Korean or Japanese one
+ * almost never does as written. `addressNormalize` takes the address apart and
+ * hands back the ways to ask, narrowest first, each labelled with how exact an
+ * answer from it could honestly be. This route walks that list and reports both
+ * the query that matched and what it was worth: a pin the traveler should check
+ * before counting on it is worth marking as one, rather than quietly dropping a
  * restaurant onto the middle of its district.
  */
 
@@ -35,15 +35,28 @@ interface Hit {
   addresstype?: string;
 }
 
-/** A hit that is only a suburb or a district is an area match however it was asked for. */
+/**
+ * How exact the answer really is: the vaguer of what was asked and what came
+ * back. A district-shaped hit is an area match however precisely it was asked
+ * for, and a chome or a quarter is a block — neither is the door.
+ */
 function precisionOf(hit: Hit, asked: GeocodePrecision): GeocodePrecision {
   const what = (hit.addresstype || hit.type || '').toLowerCase();
-  if (/^(suburb|quarter|neighbourhood|city_district|district|borough|city|town|village|county|state)$/.test(what)) {
+  if (/^(city_district|district|borough|city|town|village|county|state|province|municipality)$/.test(what)) {
     return 'area';
   }
-  if (what === 'road' || hit.category === 'highway') return asked === 'exact' ? 'road' : asked;
+  if (/^(suburb|quarter|neighbourhood|city_block|residential)$/.test(what)) return coarser(asked, 'block');
+  if (what === 'road' || hit.category === 'highway') return coarser(asked, 'road');
   return asked;
 }
+
+/**
+ * Nominatim asks for no more than a request a second, and a widening ladder can
+ * be several. The first rung is asked at once, so an address that already works
+ * is as quick as it ever was; the rest are paced, because an address that needs
+ * the whole ladder is being resolved in the background anyway.
+ */
+const RUNG_GAP_MS = 1100;
 
 async function ask(q: string): Promise<Hit | null> {
   const url = `${ENDPOINT}?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`;
@@ -61,7 +74,10 @@ export async function GET(req: Request) {
   if (!q) return NextResponse.json({ error: 'missing q' }, { status: 400 });
 
   try {
-    for (const step of queryLadder(q)) {
+    const ladder = queryLadder(q);
+    for (let i = 0; i < ladder.length; i += 1) {
+      const step = ladder[i];
+      if (i > 0) await new Promise((r) => setTimeout(r, RUNG_GAP_MS));
       const hit = await ask(step.q);
       if (!hit) continue;
       return NextResponse.json({
