@@ -4,7 +4,7 @@
 // an asset keeps it until this version changes. Bump it whenever an asset
 // changes without its name changing — the icons did, and a cached copy of the
 // old one survived a deploy and a reinstall.
-const VERSION = 'v4';
+const VERSION = 'v5';
 const SHELL = `shell-${VERSION}`;
 const TILES = `tiles-${VERSION}`;
 const ASSETS = `assets-${VERSION}`;
