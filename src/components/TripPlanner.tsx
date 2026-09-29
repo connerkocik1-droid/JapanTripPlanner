@@ -1370,8 +1370,11 @@ export default function TripPlanner() {
               city={dayCity}
               rates={rates}
               travelers={doc.trip.travelers}
+              expenses={doc.expenses}
               onZoomStop={(ll) => showOnMap(ll, 16.5)}
               onToggleItem={store.toggleDayItem}
+              onAddExpense={store.addExpense}
+              onRemoveExpense={store.removeExpense}
               onEditDay={() => setTab('days')}
             />
           ) : null}
