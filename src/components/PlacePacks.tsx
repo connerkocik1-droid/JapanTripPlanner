@@ -172,7 +172,7 @@ export default function PlacePacks({ cityName, startOpen = false, onAdd, onLocat
             );
           })}
           {problem ? (
-            <div className="mono" style={{ fontSize: 9, color: '#ff8fae' }}>{problem}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--color-danger)' }}>{problem}</div>
           ) : null}
         </div>
       ) : null}
@@ -213,7 +213,7 @@ function PackReport({ state }: { state: Progress }) {
       </div>
       {state.doubts.length ? (
         <div style={{ marginTop: 6 }}>
-          <div className="mono" style={{ ...label, color: '#ffc46b' }}>
+          <div className="mono" style={{ ...label, color: 'var(--color-warn)' }}>
             {state.doubts.length} to check
           </div>
           <ul style={{ margin: '3px 0 0', padding: '0 0 0 12px' }}>

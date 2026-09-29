@@ -48,7 +48,7 @@ export default function DaysTab({
       <div
         style={{
           position: 'sticky', top: 0, zIndex: 2, display: 'flex', gap: 6,
-          overflowX: 'auto', padding: '2px 0 10px', background: 'rgba(27,30,46,.97)',
+          overflowX: 'auto', padding: '2px 0 10px', background: 'var(--color-raised)',
         }}
       >
         {schedule.map((d) => {
@@ -293,7 +293,7 @@ function HopStrip({
               style={{
                 minHeight: 30, padding: '0 9px', borderRadius: 9999, cursor: 'pointer',
                 border: '1px solid ' + (on ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
-                background: on ? 'rgba(145,132,217,.12)' : 'transparent',
+                background: on ? 'var(--tint-accent)' : 'transparent',
                 color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-400)',
                 display: 'flex', alignItems: 'center', gap: 5, fontSize: 11,
               }}

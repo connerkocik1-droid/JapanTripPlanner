@@ -35,10 +35,10 @@ export type PlaceKind = 'eat' | 'do' | 'stay' | 'other';
  * place is a disc, so the two never have to be told apart from each other.
  */
 export const PLACE_KINDS: { id: PlaceKind; label: string; icon: string; color: string }[] = [
-  { id: 'eat', label: 'Eat', icon: 'ph-fork-knife', color: '#f2545b' },
-  { id: 'do', label: 'Do', icon: 'ph-camera', color: '#37c46f' },
-  { id: 'stay', label: 'Stay', icon: 'ph-bed', color: '#9184d9' },
-  { id: 'other', label: 'Other', icon: 'ph-map-pin', color: '#9184d9' },
+  { id: 'eat', label: 'Eat', icon: 'ph-fork-knife', color: '#d8402f' },
+  { id: 'do', label: 'Do', icon: 'ph-camera', color: '#22885a' },
+  { id: 'stay', label: 'Stay', icon: 'ph-bed', color: '#7a58a8' },
+  { id: 'other', label: 'Other', icon: 'ph-map-pin', color: '#7a58a8' },
 ];
 
 export function placeKind(kind: PlaceKind): (typeof PLACE_KINDS)[number] {

@@ -261,7 +261,7 @@ export default function TripMap({
           type: 'line',
           source: group + '-legs',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': '#ffffff', 'line-width': casing, 'line-opacity': 0.75 },
+          paint: { 'line-color': '#ffffff', 'line-width': casing, 'line-opacity': 0.9 },
         });
         m.addLayer({
           id: group + '-solid',
@@ -558,9 +558,6 @@ export default function TripMap({
   return (
     <div className="map-holder">
       <div ref={holder} className="map-canvas" />
-      <div className="map-tint" />
-      <div className="map-glow" />
-      <div className="map-sweep" />
       {cardHotel ? (
         <HotelMiniCard
           ref={cardBox}

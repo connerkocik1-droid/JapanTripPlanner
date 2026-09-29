@@ -8,7 +8,7 @@ export default function Login({ onPick }: { onPick: (id: PersonId) => void }) {
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 50,
-        background: 'radial-gradient(70% 50% at 50% 30%, #1d2034 0%, #101220 70%)',
+        background: 'radial-gradient(150% 100% at 50% 0%, #fff9f0 0%, #fbf0e0 45%, #f3e4d2 100%)',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 28, padding: 24,
       }}
@@ -17,7 +17,9 @@ export default function Login({ onPick }: { onPick: (id: PersonId) => void }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-accent-300)' }}>
           Korea + Japan · Mar 2027
         </div>
-        <div style={{ fontSize: 22, fontWeight: 500, marginTop: 6 }}>Who&rsquo;s planning?</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 600, marginTop: 6 }}>
+          Who&rsquo;s planning?
+        </div>
         <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', marginTop: 6 }}>
           Your picks get outlined in your color.
         </div>
@@ -40,7 +42,7 @@ export default function Login({ onPick }: { onPick: (id: PersonId) => void }) {
                 border: '2px solid ' + p.color, background: p.glow,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 34, fontWeight: 600, color: p.color,
-                boxShadow: '0 8px 30px rgba(0,0,0,.45)',
+                boxShadow: 'var(--shadow-card)',
               }}
             >
               {p.initial}

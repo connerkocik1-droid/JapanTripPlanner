@@ -133,7 +133,7 @@ function RouteRow({
         display: 'block', width: '100%', textAlign: 'left', padding: '7px 9px',
         borderRadius: 'var(--radius-sm)',
         border: '1px solid ' + (selected ? 'var(--color-accent-600)' : 'var(--color-neutral-800)'),
-        background: selected ? 'rgba(145,132,217,.08)' : 'var(--color-surface)',
+        background: selected ? 'var(--tint-accent-soft)' : 'var(--color-surface)',
         cursor: onZoom ? 'pointer' : 'default',
       }}
     >

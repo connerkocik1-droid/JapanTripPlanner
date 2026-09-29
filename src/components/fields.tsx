@@ -80,7 +80,7 @@ export function GeoStatus({ status }: { status: GeoResult }) {
   return (
     <div
       className="mono"
-      style={{ fontSize: 9, minHeight: 12, color: vague ? '#ffc46b' : 'var(--color-neutral-600)' }}
+      style={{ fontSize: 9, minHeight: 12, color: vague ? 'var(--color-warn)' : 'var(--color-neutral-600)' }}
     >
       {status.state === 'looking' ? 'Locating…' : null}
       {status.state === 'found'

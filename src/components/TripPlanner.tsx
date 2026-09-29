@@ -812,8 +812,8 @@ export default function TripPlanner() {
       {/* Header — opaque and in the flow, so nothing sits over the map. */}
       <div
         style={{
-          flex: 'none', position: 'relative', zIndex: 9, background: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-neutral-900)',
+          flex: 'none', position: 'relative', zIndex: 9, background: 'var(--color-surface)',
+          borderBottom: '1px solid var(--color-neutral-800)',
           padding: 'calc(var(--safe-top) + 12px) calc(var(--safe-right) + 16px) 0 calc(var(--safe-left) + 16px)',
         }}
       >
@@ -824,7 +824,7 @@ export default function TripPlanner() {
           <span
             style={{
               width: 5, height: 5, borderRadius: 9999,
-              background: 'var(--color-accent-400)', animation: 'blip 2.2s ease-in-out infinite',
+              background: 'var(--color-accent-400)',
             }}
           />
           {doc.trip.travelers} {doc.trip.travelers === 1 ? 'traveler' : 'travelers'}
@@ -865,7 +865,8 @@ export default function TripPlanner() {
           >
             <span
               style={{
-                fontSize: 20, fontWeight: 500, lineHeight: 1.15,
+                fontFamily: 'var(--font-display)', fontSize: 23, fontWeight: 600, lineHeight: 1.15,
+                letterSpacing: '-0.01em',
                 color: doc.trip.name ? 'var(--color-text)' : 'var(--color-neutral-600)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}
@@ -1099,8 +1100,9 @@ export default function TripPlanner() {
             style={{
               position: 'absolute', right: 12, bottom: 'calc(var(--safe-bottom) + 14px)', zIndex: 5,
               minHeight: 38, padding: '0 14px', borderRadius: 9999, cursor: 'pointer',
-              background: 'rgba(35,37,50,.94)', backdropFilter: 'blur(12px)',
-              border: '1px solid var(--color-accent-700)', color: 'var(--color-accent-200)',
+              background: 'rgba(255,253,249,.94)', backdropFilter: 'blur(12px)',
+              border: '1px solid var(--color-accent-600)', color: 'var(--color-accent-200)',
+              boxShadow: 'var(--shadow-card)',
               fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
             }}
           >
@@ -1148,7 +1150,8 @@ export default function TripPlanner() {
               <div
                 style={{
                   marginTop: 12, padding: '11px 13px', pointerEvents: 'auto',
-                  background: 'rgba(35,37,50,.92)', border: '1px solid var(--color-neutral-800)',
+                  background: 'var(--color-surface)', border: '1px solid var(--color-neutral-800)',
+                  boxShadow: 'var(--shadow-card)',
                   borderRadius: 'var(--radius-md)',
                 }}
               >
@@ -1416,7 +1419,7 @@ function CityRow({
           width: '100%', minHeight: 56, padding: 14, textAlign: 'left',
           borderRadius: 'var(--radius-md)',
           border: '1px solid ' + (open ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
-          background: open ? 'rgba(145,132,217,.10)' : 'var(--color-surface)',
+          background: open ? 'var(--tint-accent)' : 'var(--color-surface)',
           color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
           animation: 'riseIn .34s ease both', animationDelay: index * 60 + 'ms',
           ...(touchStyle(touch) ?? {}),
@@ -1474,7 +1477,7 @@ function SaveChip({ state, error }: { state: string; error: boolean }) {
     return (
       <span
         className="mono"
-        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, color: '#ff8fae' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, color: 'var(--color-danger)' }}
         title="This device refused to store the plan. Export a backup from the trip panel."
       >
         <i className="ph ph-warning" style={{ fontSize: 11 }} />
