@@ -6,7 +6,7 @@ import { LatLng, Meal } from '@/lib/data';
 import { mealsLine, ratingLine, reviewsLine, shortCuisine } from '@/lib/placeDetails';
 import { money } from '@/lib/format';
 import { boundsOf, toLngLat } from '@/lib/geo';
-import { appleMapsUrl } from '@/lib/appleMaps';
+import { appleMapsUrl, googleMapsUrl } from '@/lib/appleMaps';
 
 // Point this at your own tiles to run without the public OpenFreeMap instance.
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
@@ -805,7 +805,19 @@ const PlaceMiniCard = forwardRef<
 
       <div className="pc-foot">
         <OpenInMaps name={pin.name} addr={place.addr} ll={pin.ll} />
-        {place.url ? (
+        {/* Photos and reviews live on Google Maps; this is the free way there. */}
+        {googleMapsUrl({ name: pin.name, addr: place.addr, ll: pin.ll }) ? (
+          <a
+            className="mono hc-link hc-maps"
+            href={googleMapsUrl({ name: pin.name, addr: place.addr, ll: pin.ll }) ?? ''}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={'See ' + pin.name + ' on Google Maps'}
+          >
+            <i className="ph ph-google-logo" /> Google Maps
+          </a>
+        ) : null}
+        {place.url && !/google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps/.test(place.url) ? (
           <a className="mono hc-link pc-link" href={place.url} target="_blank" rel="noopener noreferrer">
             Open listing ↗
           </a>

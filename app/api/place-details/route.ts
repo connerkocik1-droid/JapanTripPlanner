@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
-import { cuisineFromTypes } from '@/lib/placeDetails';
+import { PlaceFacts, cuisineFromTypes } from '@/lib/placeDetails';
+import { freeFacts } from '@/lib/freeLookup';
 
 /**
- * What a place looks like, what it is rated and what it serves — from Google
- * Places, proxied so the key never reaches the browser.
+ * What a place looks like, what it is rated and what it serves.
  *
- * This is the one thing in the app that cannot be worked out from what the
- * travelers typed, so it is also the one thing that needs an account. Without
- * a key the route answers `configured: false` and the app carries on showing
- * whatever the shortlists already carry: no error, no empty state, no nagging.
- * Set GOOGLE_PLACES_API_KEY and the photographs and hours appear on their own.
+ * With a working GOOGLE_PLACES_API_KEY this asks Google Places, proxied so the
+ * key never reaches the browser, and gets ratings and photographs of
+ * everything. Without one — or with one Google refuses — the free lookup
+ * answers instead: OpenStreetMap for the cuisine, hours and website, and
+ * Wikipedia for a sight's photograph. No ratings from there, and few
+ * restaurant photographs, but nothing to pay and no account to set up.
  *
  * Nothing here invents anything. A place the directory does not know comes
  * back as `null` and stays as the travelers wrote it, because a plausible
@@ -100,15 +101,8 @@ function commonest(all: string[]): string {
   return best;
 }
 
-export async function GET(req: Request) {
-  const key = process.env.GOOGLE_PLACES_API_KEY;
-  if (!key) return NextResponse.json({ configured: false, result: null });
-
-  const params = new URL(req.url).searchParams;
-  const name = params.get('name')?.trim() ?? '';
-  const addr = params.get('addr')?.trim() ?? '';
-  if (!name) return NextResponse.json({ error: 'missing name' }, { status: 400 });
-
+/** Google's answer: the facts, null for nothing found, or 'failed'. */
+async function google(key: string, name: string, addr: string): Promise<PlaceFacts | null | 'failed'> {
   try {
     const res = await fetch(SEARCH, {
       method: 'POST',
@@ -126,19 +120,14 @@ export async function GET(req: Request) {
     });
     if (!res.ok) {
       // Usually the key: Places API (New) not enabled on its project, or the
-      // key restricted to websites, which a server call can never satisfy.
-      // Google says which in the body, so it goes to the logs and the answer.
-      const detail = (await res.text()).slice(0, 500);
-      console.error('place-details: Google Places answered', res.status, detail);
-      return NextResponse.json(
-        { configured: true, result: null, error: `google ${res.status}`, detail },
-        { status: 502 },
-      );
+      // key restricted to websites. Google says which, so it goes to the logs.
+      console.error('place-details: Google Places answered', res.status, (await res.text()).slice(0, 500));
+      return 'failed';
     }
 
     const body = (await res.json()) as { places?: Found[] };
     const hit = body.places?.[0];
-    if (!hit) return NextResponse.json({ configured: true, result: null });
+    if (!hit) return null;
 
     const hours = hoursOf(hit.regularOpeningHours?.periods ?? []);
     // Photographs come back as handles, not URLs: the bytes are behind the key
@@ -149,18 +138,46 @@ export async function GET(req: Request) {
       .slice(0, 3)
       .map((n) => '/api/place-photo?ref=' + encodeURIComponent(n));
 
-    return NextResponse.json({
-      configured: true,
-      result: {
-        rating: typeof hit.rating === 'number' ? hit.rating : 0,
-        ratingCount: typeof hit.userRatingCount === 'number' ? hit.userRatingCount : 0,
-        cuisine: cuisineFromTypes(hit.types ?? [], hit.primaryTypeDisplayName?.text ?? ''),
-        images,
-        url: typeof hit.websiteUri === 'string' ? hit.websiteUri : '',
-        ...hours,
-      },
-    });
+    return {
+      rating: typeof hit.rating === 'number' ? hit.rating : 0,
+      ratingCount: typeof hit.userRatingCount === 'number' ? hit.userRatingCount : 0,
+      cuisine: cuisineFromTypes(hit.types ?? [], hit.primaryTypeDisplayName?.text ?? ''),
+      images,
+      url: typeof hit.websiteUri === 'string' ? hit.websiteUri : '',
+      ...hours,
+    };
   } catch {
-    return NextResponse.json({ configured: true, result: null }, { status: 502 });
+    return 'failed';
+  }
+}
+
+export async function GET(req: Request) {
+  const params = new URL(req.url).searchParams;
+  const name = params.get('name')?.trim() ?? '';
+  const addr = params.get('addr')?.trim() ?? '';
+  if (!name) return NextResponse.json({ error: 'missing name' }, { status: 400 });
+
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (key) {
+    const found = await google(key, name, addr);
+    if (found !== 'failed') return NextResponse.json({ configured: true, source: 'google', result: found });
+  }
+
+  const lat = Number(params.get('lat'));
+  const lon = Number(params.get('lon'));
+  try {
+    const result = await freeFacts({
+      name,
+      addr,
+      kind: params.get('kind')?.trim() ?? '',
+      city: params.get('city')?.trim() ?? '',
+      ll: Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon) ? [lat, lon] : null,
+    });
+    return NextResponse.json({ configured: true, source: 'free', result });
+  } catch (err) {
+    // OpenStreetMap itself could not be reached or asked us to slow down:
+    // not "nothing found", so the app asks again on a later load.
+    console.error('place-details: free lookup failed', err instanceof Error ? err.message : err);
+    return NextResponse.json({ configured: true, result: null, error: 'lookup failed' }, { status: 502 });
   }
 }

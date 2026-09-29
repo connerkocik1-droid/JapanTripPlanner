@@ -15,6 +15,7 @@ export interface PlaceDetailsArg {
 /** A place still waiting to be looked up, and the city it belongs to. */
 interface Pending {
   cityId: string;
+  city: string;
   place: Place;
 }
 
@@ -51,13 +52,13 @@ export function usePlaceDetails(arg: PlaceDetailsArg): void {
       const todo: Pending[] = [];
       latest.current.cities.forEach((city) => {
         city.places.forEach((place) => {
-          if (wantsDetails(place)) todo.push({ cityId: city.id, place });
+          if (wantsDetails(place)) todo.push({ cityId: city.id, city: city.name, place });
         });
       });
 
       for (const item of todo) {
         if (signal.cancelled) return;
-        const answer = await lookUp(item.place);
+        const answer = await lookUp(item.place, item.city);
         if (signal.cancelled) return;
         // No key on the server: there is nothing to look up and nothing to
         // report, so the run stops rather than asking about every place in
@@ -70,9 +71,10 @@ export function usePlaceDetails(arg: PlaceDetailsArg): void {
         if (answer === 'failed') return;
         const on = new Date().toISOString();
         latest.current.fill(item.cityId, item.place.id, detailsPatch(item.place, answer, on));
-        // Paced the way the geocoder is. These are somebody else's servers and
-        // the work is happening while the travelers look at the map anyway.
-        await new Promise((r) => setTimeout(r, 350));
+        // Paced for the free lookup, which asks OpenStreetMap up to twice a
+        // place and is asked for a second between requests. These are
+        // somebody else's servers, and the map is being looked at meanwhile.
+        await new Promise((r) => setTimeout(r, 2200));
       }
     })();
 
@@ -83,9 +85,14 @@ export function usePlaceDetails(arg: PlaceDetailsArg): void {
 }
 
 /** One lookup: the facts, `null` for nothing found, no key, or a failed call. */
-async function lookUp(place: Place): Promise<PlaceFacts | null | 'unconfigured' | 'failed'> {
-  const params = new URLSearchParams({ name: place.name.trim() });
+async function lookUp(place: Place, city: string): Promise<PlaceFacts | null | 'unconfigured' | 'failed'> {
+  const params = new URLSearchParams({ name: place.name.trim(), kind: place.kind, city });
   if (place.addr.trim()) params.set('addr', place.addr.trim());
+  // Where it is pinned finds the right branch of a chain.
+  if (place.ll) {
+    params.set('lat', String(place.ll[0]));
+    params.set('lon', String(place.ll[1]));
+  }
   try {
     const res = await fetch('/api/place-details?' + params.toString());
     if (!res.ok) return 'failed';

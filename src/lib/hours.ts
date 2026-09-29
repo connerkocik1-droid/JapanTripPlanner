@@ -72,6 +72,22 @@ export function clashFor(
   // and comparing that against a 17:00 closing time would be nonsense.
   const at = arrive % (24 * 60);
 
+  // Somewhere open 17:00–02:00 closes the next morning. Closed is then the
+  // stretch between the closing and the opening, and whichever of the two the
+  // arrival is nearer to is the one worth saying.
+  if (opens !== null && closes !== null && closes <= opens) {
+    if (at >= closes && at < opens) {
+      return at - closes < opens - at
+        ? { kind: 'late', weight: 'hard', text: `Shuts at ${clock(closes)} — you get there ${clock(at)}` }
+        : { kind: 'early', weight: 'hard', text: `Opens at ${clock(opens)} — you get there ${clock(at)}` };
+    }
+    const out = depart === null ? null : depart % (24 * 60);
+    if (out !== null && out > closes && out < opens) {
+      return { kind: 'overrun', weight: 'soft', text: `Shuts at ${clock(closes)}, part-way through your stay` };
+    }
+    return null;
+  }
+
   if (closes !== null && at >= closes) {
     return { kind: 'late', weight: 'hard', text: `Shuts at ${clock(closes)} — you get there ${clock(at)}` };
   }

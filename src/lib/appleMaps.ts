@@ -37,3 +37,17 @@ export function appleMapsUrl({ name, addr, ll }: MapTarget): string | null {
   if (ll) q.set('ll', ll[0] + ',' + ll[1]);
   return 'https://maps.apple.com/?' + q.toString();
 }
+
+/**
+ * The same place on Google Maps, where its photographs and reviews are — the
+ * free way to see them, since reading them into the app would need a paid key.
+ * A search by name and address, which is Google's documented link format and
+ * lands on the place itself whenever the name is specific enough.
+ */
+export function googleMapsUrl({ name, addr, ll }: MapTarget): string | null {
+  const label = (name ?? '').trim();
+  const where = (addr ?? '').trim();
+  const query = [label, where].filter(Boolean).join(', ') || (ll ? ll[0] + ',' + ll[1] : '');
+  if (!query) return null;
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query);
+}
