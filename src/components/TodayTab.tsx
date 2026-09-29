@@ -14,7 +14,8 @@ import { LegOptions, betterMode, fmtDistance, fmtDuration, routeLeg } from '@/li
 import { daysToStart, inSpan, nowMins, progressOf } from '@/lib/today';
 import { useHere } from '@/lib/useHere';
 import { Local } from './CityMoney';
-import { currency, fmtLocal, rateFor, type Rates } from '@/lib/money';
+import { currency, fmtLocal, rateFor, toUsd, type Rates } from '@/lib/money';
+import { describe, toC, useWeather, type Weather } from '@/lib/weather';
 
 export interface TodayTabProps {
   schedule: DayEntry[];
@@ -27,6 +28,11 @@ export interface TodayTabProps {
   hotel: Hotel | null;
   city: City | null;
   rates: Rates | null;
+  /** The stored rates are from a day before today. */
+  ratesStale: boolean;
+  onRefreshRates: () => void;
+  /** Every currency the trip spends in, in the order the cities come. */
+  currencies: string[];
   travelers: number;
   /** Everything logged on the trip so far, newest first. */
   expenses: Expense[];
@@ -39,6 +45,8 @@ export interface TodayTabProps {
   onRemoveExpense: (id: string) => void;
   /** Open this day in the planner, for changing it rather than following it. */
   onEditDay: () => void;
+  /** You have arrived: day one becomes today, and every day moves with it. */
+  onStartToday: () => void;
 }
 
 /** The clock is read this often: often enough to be right, rarely enough to be free. */
@@ -54,8 +62,8 @@ const TICK_MS = 30_000;
  * to the hotel, and am I ahead or behind on the money.
  */
 export default function TodayTab({
-  schedule, start, todayN, dayEntry, plan, hotel, city, rates, travelers, expenses,
-  onZoomStop, onToggleItem, onAddExpense, onRemoveExpense, onEditDay,
+  schedule, start, todayN, dayEntry, plan, hotel, city, rates, ratesStale, onRefreshRates, currencies,
+  travelers, expenses, onZoomStop, onToggleItem, onAddExpense, onRemoveExpense, onEditDay, onStartToday,
 }: TodayTabProps) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -64,6 +72,7 @@ export default function TodayTab({
   }, []);
 
   const here = useHere();
+  const { weather } = useWeather(dayEntry?.city.ll ?? null);
 
   const mins = nowMins(now);
   const running = todayN !== null;
@@ -150,12 +159,24 @@ export default function TodayTab({
             <>
               {toStart === 1 ? 'You leave tomorrow.' : `You leave in ${toStart} days.`} Here is what
               day one looks like, so you know what this tab will show you on the trip.
+              <StartTrip planned={dt} onStart={onStartToday} />
             </>
           ) : (
             <>The trip is behind you. This is the last day you planned.</>
           )}
         </div>
       </div>
+
+      {weather ? <WeatherCard weather={weather} place={dayEntry.city.name} /> : null}
+
+      <RatesCard
+        currencies={currencies}
+        local={dayEntry.city.currency}
+        rates={rates}
+        stale={ratesStale}
+        overrides={Object.fromEntries(schedule.map((e) => [e.city.currency, e.city.rate]))}
+        onRefresh={onRefreshRates}
+      />
 
       {running ? (
         <Spend
@@ -810,6 +831,196 @@ function useRouteFromHere(from: LatLng | null, to: LatLng | null) {
 
   const pick = betterMode(options);
   return { loading, best: (pick ? options[pick] : null) ?? options.walk ?? options.transit ?? null };
+}
+
+/**
+ * "We're here." Before the trip, day one is a date on a calendar; this makes
+ * it today, for the arrival that came early or the plan written with the
+ * wrong date. Every day moves with it — the days are stored by city and
+ * night, not by date — so nothing planned is lost. Two taps, because it
+ * moves the whole trip.
+ */
+function StartTrip({ planned, onStart }: { planned: Date; onStart: () => void }) {
+  const [armed, setArmed] = useState(false);
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button
+        className="tap start-trip"
+        onClick={() => (armed ? onStart() : setArmed(true))}
+        onBlur={() => setArmed(false)}
+        style={{
+          width: '100%', minHeight: 42, borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+          border: '1px solid var(--color-accent-500)',
+          background: armed ? 'var(--color-accent-500)' : 'var(--tint-accent)',
+          color: armed ? 'var(--color-on-accent)' : 'var(--color-accent-200)',
+          fontSize: 13, fontWeight: 600,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+        }}
+      >
+        <i className={armed ? 'ph ph-check' : 'ph ph-airplane-landing'} style={{ fontSize: 15 }} />
+        {armed ? 'Tap again to start today' : 'We\u2019re here \u2014 start the trip'}
+      </button>
+      {armed ? (
+        <div style={note}>
+          Day one moves from {fmtDow(planned)} {fmtD(planned)} to today, and every day after it
+          moves with it. Nothing you planned is lost.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Now, the rest of today, and the next few hours, where the day is. */
+function WeatherCard({ weather: w, place }: { weather: Weather; place: string }) {
+  const now = describe(w.code, w.isDay);
+  const old = Date.now() - Date.parse(w.at) > 3 * 60 * 60 * 1000;
+  return (
+    <div style={{ ...card, marginTop: 8 }}>
+      <div className="mono" style={cap}>
+        WEATHER IN {place.toUpperCase()}
+        {old ? ' · LAST READ ' + new Date(w.at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric' }) : ''}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+        <i className={'ph ' + now.icon} style={{ fontSize: 30, color: 'var(--color-accent-300)', flex: 'none' }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="num" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.1 }}>
+            {w.tempF}°F
+            <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--color-neutral-500)' }}>
+              {' '}· {toC(w.tempF)}°C
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>
+            {now.text}
+            {Math.abs(w.feelsF - w.tempF) >= 3 ? ` · feels like ${w.feelsF}°` : ''}
+          </div>
+        </div>
+        <div className="mono num" style={{ fontSize: 10, textAlign: 'right', color: 'var(--color-neutral-500)', lineHeight: 1.6 }}>
+          <div>H {w.highF}° · L {w.lowF}°</div>
+          <div>
+            <i className="ph ph-drop" /> {w.rainPct}% rain
+          </div>
+          {w.sunrise && w.sunset ? (
+            <div>
+              <i className="ph ph-sun-horizon" /> {w.sunrise}–{w.sunset}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {w.hours.length ? (
+        <div style={{ display: 'flex', gap: 4, marginTop: 9 }}>
+          {w.hours.map((h) => (
+            <div
+              key={h.hour}
+              className="mono num"
+              style={{
+                flex: '1 1 0', minWidth: 0, textAlign: 'center', fontSize: 9.5, padding: '5px 0',
+                borderRadius: 'var(--radius-sm)', background: 'var(--color-bg)',
+                color: 'var(--color-neutral-500)',
+              }}
+            >
+              <div>{h.hour}</div>
+              <i className={'ph ' + describe(h.code).icon} style={{ fontSize: 15, color: 'var(--color-accent-300)' }} />
+              <div style={{ color: 'var(--color-text)', fontSize: 11 }}>{h.tempF}°</div>
+              {h.rainPct >= 20 ? <div>{h.rainPct}%</div> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * What a dollar is worth in each currency the trip spends in, and the other
+ * way round: type what the menu says, read it in dollars. The day's city
+ * comes first, because that is the money in your pocket.
+ */
+function RatesCard({
+  currencies, local, rates, stale, overrides, onRefresh,
+}: {
+  currencies: string[];
+  local: string;
+  rates: Rates | null;
+  stale: boolean;
+  overrides: Record<string, number>;
+  onRefresh: () => void;
+}) {
+  const order = [...new Set([local, ...currencies])].filter((c) => currency(c));
+  const [amount, setAmount] = useState('');
+  const [code, setCode] = useState(order[0] ?? '');
+  useEffect(() => {
+    if (!order.includes(code) && order[0]) setCode(order[0]);
+  }, [order.join(','), code]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!order.length) return null;
+
+  const pick = currency(code);
+  const rate = rateFor(code, rates, overrides[code] ?? 0);
+  const usd = toUsd(Number(amount), rate);
+
+  return (
+    <div style={{ ...card, marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="mono" style={{ ...cap, flex: 1, marginBottom: 0 }}>
+          EXCHANGE RATES
+          {rates ? (stale ? ` · AS OF ${fmtD(new Date(rates.date + 'T12:00')).toUpperCase()}` : ' · TODAY') : ''}
+        </div>
+        <button className="tap" onClick={onRefresh} aria-label="Refresh the rates" style={pinBtn}>
+          <i className="ph ph-arrow-clockwise" style={{ fontSize: 14 }} />
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+        {order.map((c) => {
+          const r = rateFor(c, rates, overrides[c] ?? 0);
+          return (
+            <div key={c} className="num" style={{ fontSize: c === local ? 16 : 13, fontWeight: c === local ? 600 : 400 }}>
+              $1 = {r ? fmtLocal(1, c, r) : '—'}
+              {(overrides[c] ?? 0) > 0 ? (
+                <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}> YOUR RATE</span>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9 }}>
+        {order.length > 1 ? (
+          <select
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            aria-label="Currency to convert"
+            style={{
+              minHeight: 36, padding: '0 6px', borderRadius: 'var(--radius-sm)', fontSize: 12.5,
+              border: '1px solid var(--color-neutral-800)', background: 'var(--color-surface)', color: 'var(--color-text)',
+            }}
+          >
+            {order.map((c) => (
+              <option key={c} value={c}>{currency(c)?.symbol} {c}</option>
+            ))}
+          </select>
+        ) : (
+          <span style={{ fontSize: 14 }}>{pick?.symbol}</span>
+        )}
+        <input
+          type="number"
+          min={0}
+          step="any"
+          inputMode="decimal"
+          value={amount}
+          placeholder={`Price in ${pick?.name.toLowerCase() ?? code}`}
+          aria-label={`Amount in ${code}`}
+          onChange={(e) => setAmount(e.target.value)}
+          className="num"
+          style={{
+            flex: 1, minWidth: 0, minHeight: 36, padding: '0 8px', fontSize: 13,
+            borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-neutral-800)',
+            background: 'var(--color-surface)',
+          }}
+        />
+        <div className="num" style={{ minWidth: 64, textAlign: 'right', fontSize: 15, fontWeight: 600 }}>
+          {usd !== null && amount ? fmtUsd(usd) : '$—'}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const card = {

@@ -70,7 +70,7 @@ export default function TripPlanner() {
 
   // One rate a day, shared by every city that spends in something other than
   // dollars. Nothing waits on it: without an answer the figures stay in dollars.
-  const { rates, stale: ratesStale } = useRates();
+  const { rates, stale: ratesStale, refresh: refreshRates } = useRates();
 
   // A city whose shortlist ships with the app gets it pinned on its own, and
   // anything still missing its coordinates is resolved in the background.
@@ -1407,6 +1407,9 @@ export default function TripPlanner() {
               hotel={dayCity ? selectedHotel(dayCity) : null}
               city={dayCity}
               rates={rates}
+              ratesStale={ratesStale}
+              onRefreshRates={refreshRates}
+              currencies={doc.cities.map((c) => c.currency).filter(Boolean)}
               travelers={doc.trip.travelers}
               expenses={doc.expenses}
               onZoomStop={(ll) => showOnMap(ll, 16.5)}
@@ -1414,6 +1417,17 @@ export default function TripPlanner() {
               onAddExpense={store.addExpense}
               onRemoveExpense={store.removeExpense}
               onEditDay={() => setTab('days')}
+              onStartToday={() => {
+                const t = new Date();
+                store.setTrip(
+                  'start',
+                  [t.getFullYear(), String(t.getMonth() + 1).padStart(2, '0'), String(t.getDate()).padStart(2, '0')].join('-'),
+                );
+                // Today is now day one: show it, in its city.
+                setDay(1);
+                const c = d.schedule[0]?.city;
+                if (c) setCityId(c.id);
+              }}
             />
           ) : null}
 
