@@ -895,9 +895,15 @@ input::placeholder { color: var(--color-neutral-600); }
 /* --- intro film --------------------------------------------------------- */
 /*
  * The film is 9:16 with its top and bottom rows extended to 9:20, so a phone
- * fills edge to edge without a letterbox seam and without cropping into the
- * lettering — the only thing a tall screen eats is the extended colour. A wide
- * window is shown the whole picture instead, on the curtain's matching cream.
+ * fills edge to edge with nothing cropped off the lettering — the only thing a
+ * tall screen eats is the extended colour. A window wider than the film is
+ * shown the whole picture instead, on the curtain's matching cream.
+ *
+ * Extending those edges is what once stamped a 85:1 pixel ratio on the film and
+ * made browsers refuse it outright: `scale` rewrites the sample aspect to keep
+ * a scaled strip's own shape, and `vstack` takes it from its first input. The
+ * encode pins `setsar=1` on every piece and on the stack. Check
+ * `ffprobe sample_aspect_ratio` reads 1:1 before shipping a new cut.
  */
 .intro-film {
   width: 100%;

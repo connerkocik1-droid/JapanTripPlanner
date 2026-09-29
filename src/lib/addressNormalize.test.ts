@@ -194,6 +194,67 @@ describe('Japanese shapes', () => {
   });
 });
 
+describe('addresses written in Hangul', () => {
+  // What you get copying an address out of Naver or Kakao, and what the app was
+  // marking "only the district matched" however exactly the gazetteer answered.
+  it('reads a Hangul address as naming a building', () => {
+    assert.equal(best('서울 용산구 서빙고로 137'), 'exact');
+    assert.equal(best('서울특별시 용산구 서빙고로 137'), 'exact');
+  });
+
+  it('reads a house number on a -gil road', () => {
+    assert.equal(best('서울 강남구 도산대로67길 19'), 'exact');
+  });
+
+  it('drops a floor written in Hangul', () => {
+    assert.ok(queries('서울특별시 종로구 북촌로 16, 2층').includes('서울특별시 종로구 북촌로 16'));
+  });
+
+  it('falls back to the road, then the district, cut out of a string with no commas', () => {
+    const ladder = queryLadder('서울특별시 용산구 서빙고로 137');
+    assert.equal(ladder.find((s) => s.q === '서울특별시 용산구 서빙고로')?.precision, 'road');
+  });
+
+  it('does not claim a district-only Hangul address names a building', () => {
+    assert.equal(best('서울특별시 용산구'), 'area');
+  });
+});
+
+describe('addresses written in kanji', () => {
+  it('reads a banchi and go as naming a building', () => {
+    assert.equal(best('東京都渋谷区神宮前1丁目2番3号'), 'exact');
+  });
+
+  it('drops the banchi to the chome, then the ward', () => {
+    const ladder = queryLadder('東京都渋谷区神宮前1丁目2番3号');
+    assert.equal(ladder.find((s) => s.q === '東京都渋谷区神宮前1丁目')?.precision, 'block');
+    assert.equal(ladder.find((s) => s.q === '東京都渋谷区')?.precision, 'area');
+  });
+
+  it('drops a floor written in kanji', () => {
+    assert.ok(queries('東京都新宿区歌舞伎町1-2-3, 2階').includes('東京都新宿区歌舞伎町1-2-3'));
+  });
+
+  it('calls a chome with no banchi a block', () => {
+    assert.equal(best('東京都渋谷区神宮前1丁目'), 'block');
+  });
+});
+
+describe('the road written before its number', () => {
+  it('puts the number in front, which is how a gazetteer indexes it', () => {
+    assert.ok(queries('Seobinggo-ro 137, Yongsan-gu, Seoul').some(
+      (q) => q.startsWith('137 Seobinggo-ro, Yongsan-gu, Seoul'),
+    ));
+  });
+
+  it('does not mistake a sub-road for a house number', () => {
+    // "7-gil" is part of the road name, not the door.
+    for (const q of queries('16 Bukchon-ro 7-gil, Jongno-gu, Seoul')) {
+      assert.ok(!/^7 Bukchon-ro/.test(q), q);
+    }
+  });
+});
+
 describe('an address is never turned into a different place', () => {
   it('caps a mountain with no street address at the district', () => {
     assert.equal(best('Dobong-gu, Seoul (mountain - no single street address)'), 'area');

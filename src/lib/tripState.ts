@@ -5,6 +5,7 @@ import {
   CheckItem, City, DayItem, Hotel, LatLng, Meal, Place, TravelMode, Trip,
   blankCity, blankHotel, blankPlace, newTrip, uid,
 } from './data';
+import { Expense, ExpenseCategory, blankExpense, fillExpense } from './expenses';
 import { blankHood } from './hoods';
 import { fmtClock } from './dayPlan';
 import { PersonId, isPersonId } from './people';
@@ -42,6 +43,8 @@ export interface TripDoc {
   days: Record<string, DayItem[]>;
   checklist: CheckItem[];
   comments: Comment[];
+  /** What was actually spent on the trip, logged as it happens. */
+  expenses: Expense[];
   /** Who last changed each field, keyed by field path. */
   touches: Record<string, Touch>;
 }
@@ -61,7 +64,7 @@ export type SyncState = 'off' | 'syncing' | 'synced' | 'error';
 const PULL_EVERY_MS = 20_000;
 
 export function emptyDoc(): TripDoc {
-  return { trip: newTrip(), cities: [], days: {}, checklist: [], comments: [], touches: {} };
+  return { trip: newTrip(), cities: [], days: {}, checklist: [], comments: [], expenses: [], touches: {} };
 }
 
 export function dayKey(cityId: string, n: number): string {
@@ -141,6 +144,9 @@ export function normalize(input: unknown): TripDoc {
     days: p.days ?? {},
     checklist: Array.isArray(p.checklist) ? p.checklist : [],
     comments: Array.isArray(p.comments) ? p.comments : [],
+    // Expenses arrived after plans were already being saved, so a plan without
+    // them is normal rather than broken; each one is filled the way a city is.
+    expenses: Array.isArray(p.expenses) ? p.expenses.map(fillExpense) : [],
     touches: p.touches ?? {},
   };
 }
@@ -226,6 +232,13 @@ export interface TripStore {
   applyPreset: (cityId: string, dayKey: string, preset: Preset, replace: boolean) => void;
   /** Commit a plan built on the map into one of the city's days. */
   applyPlan: (cityId: string, dayKey: string, plan: PlanCommit, replace: boolean) => void;
+  /** Log what was actually spent. The rate is the one that applies right now. */
+  addExpense: (e: {
+    on: string; cityId: string; category: ExpenseCategory; amount: number;
+    currency: string; rate: number; note: string;
+  }) => void;
+  removeExpense: (id: string) => void;
+
   addComment: (text: string, city: string | null) => void;
   toggleComment: (id: string) => void;
   removeComment: (id: string) => void;
@@ -824,6 +837,28 @@ export function useTripStore(): TripStore {
     [edit],
   );
 
+  const addExpense = useCallback(
+    (e: {
+      on: string; cityId: string; category: ExpenseCategory; amount: number;
+      currency: string; rate: number; note: string;
+    }) => {
+      if (!e.on || !(Number(e.amount) > 0)) return;
+      edit('expenses', (d) => ({
+        ...d,
+        // Newest first: on the trip the list is read, not scrolled.
+        expenses: [{ ...blankExpense(e.on, e.cityId), ...e, id: uid(), at: Date.now() }, ...d.expenses],
+      }));
+    },
+    [edit],
+  );
+
+  const removeExpense = useCallback(
+    (id: string) => {
+      edit(null, (d) => ({ ...d, expenses: d.expenses.filter((e) => e.id !== id) }));
+    },
+    [edit],
+  );
+
   const addComment = useCallback((text: string, city: string | null) => {
     const body = text.trim();
     const by = userRef.current;
@@ -936,6 +971,7 @@ export function useTripStore(): TripStore {
       addPlace, addPlaces, setPlace, fillPlace, removePlace,
       addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck,
+      addExpense, removeExpense,
       applyPreset, applyPlan, addComment, toggleComment, removeComment, reset,
     }),
     [
@@ -946,7 +982,7 @@ export function useTripStore(): TripStore {
       joinByCode, joinCode, setTripCode,
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
       addPlace, addPlaces, setPlace, fillPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
-      addCheck, setCheck, toggleCheck, removeCheck, applyPreset, applyPlan,
+      addCheck, setCheck, toggleCheck, removeCheck, addExpense, removeExpense, applyPreset, applyPlan,
       addComment, toggleComment, removeComment, reset,
     ],
   );
