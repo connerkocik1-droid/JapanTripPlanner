@@ -1,6 +1,8 @@
 /* Service worker: makes the planner open instantly and survive a bad signal. */
 
-const VERSION = 'v1';
+// Bumped when a cached-by-name asset changes under the same filename — the
+// icons did, and cache-first would otherwise serve the old ones forever.
+const VERSION = 'v2';
 const SHELL = `shell-${VERSION}`;
 const TILES = `tiles-${VERSION}`;
 const ASSETS = `assets-${VERSION}`;
