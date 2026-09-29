@@ -10,6 +10,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * from the first frame, so a video that is slow, blocked or missing costs
  * nothing but the moment it takes to notice. Muted and inline so iOS lets it
  * start on its own, and a tap anywhere gets past it.
+ *
+ * The files carry a number in their names. They are served cache first, so a
+ * phone that has taken a copy keeps it for good: a re-cut film has to arrive
+ * at a URL that device has never seen, or it is never seen either. Bump the
+ * number rather than replacing a file in place.
  */
 
 /** The flat colour the film opens on, so its edges are invisible on a wide
@@ -94,8 +99,8 @@ export default function IntroVideo() {
     >
       <video
         ref={video}
-        src="/intro/trip-intro.mp4"
-        poster="/intro/trip-intro.jpg"
+        src="/intro/trip-intro.2.mp4"
+        poster="/intro/trip-intro.2.jpg"
         autoPlay
         muted
         playsInline
