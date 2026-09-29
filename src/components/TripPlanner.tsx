@@ -9,16 +9,14 @@ import { tripDayOn } from '@/lib/today';
 import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
-import type { RouteStop } from '@/lib/geo';
-import { cityLegKind, hopKind } from '@/lib/legKind';
 import { useAirportRoutes } from '@/lib/airportRoute';
 import { useAutoPacks } from '@/lib/autoPacks';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
 import { useRates } from '@/lib/money';
-import type { MapFocus, MapLeg, MapPin } from './TripMap';
-import { legOf, useDayRoute, type Stop } from '@/lib/useDayRoute';
+import type { MapFocus, MapPin } from './TripMap';
+import { useDayRoute, type Stop } from '@/lib/useDayRoute';
 import {
   DEFAULT_START_MINS, Draft, PlanLeg, reroute, routeHop, stopFromPlace, timeline,
 } from '@/lib/planDraft';
@@ -367,57 +365,6 @@ export default function TripPlanner() {
     [doc.cities, cityId, plotAll],
   );
   const { arrivals, routes: airportRoutes } = useAirportRoutes(arrivalCities, doc.trip.travelers);
-
-  /**
-   * The run in from the airport to each option, drawn in the colour of what it
-   * rides. These are what the city panel lists, so the numbers beside a hotel
-   * and the line on the map are the same journey.
-   */
-  const arrivalLegs = useMemo<MapLeg[]>(
-    () =>
-      Object.entries(airportRoutes)
-        .map(([hotelId, state]) => {
-          const r = state.route;
-          if (!r || r.geometry.length < 2) return null;
-          return {
-            id: 'arrival:' + hotelId,
-            kind: hopKind(r.mode, r.rail),
-            geometry: r.geometry,
-          };
-        })
-        .filter((l): l is MapLeg => !!l),
-    [airportRoutes],
-  );
-
-  const legs = useMemo<MapLeg[]>(() => {
-    // A plan being built owns the map: its hops, the way home, and the hop on offer.
-    if (draft || preview) {
-      const out: MapLeg[] = (draft?.stops ?? []).map((s, i) => ({
-        id: 'draft:' + i,
-        kind: hopKind(s.leg.mode, s.leg.rail),
-        geometry: s.leg.geometry,
-      }));
-      if (draft && backLeg) {
-        out.push({ id: 'draft:back', kind: hopKind(backLeg.mode, backLeg.rail), geometry: backLeg.geometry });
-      }
-      if (preview?.leg) {
-        out.push({
-          id: 'draft:preview',
-          kind: hopKind(preview.leg.mode, preview.leg.rail),
-          geometry: preview.leg.geometry,
-        });
-      }
-      return out;
-    }
-    const day = hops
-      .map((h) => {
-        const leg = h.toId.startsWith('return:') ? legOf(h) : legOf(h, h.to.mode);
-        if (!leg) return null;
-        return { id: h.toId, kind: hopKind(leg.mode, leg.rail), geometry: leg.geometry };
-      })
-      .filter((l): l is MapLeg => !!l);
-    return [...arrivalLegs, ...day];
-  }, [hops, draft, preview, backLeg, arrivalLegs]);
 
   const dayCity = dayEntry?.city ?? null;
 
@@ -830,15 +777,6 @@ export default function TripPlanner() {
     return out;
   }, [doc.cities, cityId, plotAll, stops, tab, view, draft, arrivals, openHood]);
 
-  // Each city carries how you got there, so the map can draw flown legs as flights.
-  const route = useMemo<RouteStop[]>(
-    () =>
-      doc.cities
-        .filter((c) => !!c.ll)
-        .map((c) => ({ ll: c.ll as LatLng, kind: cityLegKind(c.transitName) })),
-    [doc.cities],
-  );
-
   const submitCity = async () => {
     const name = newCity.trim();
     if (!name) return;
@@ -1130,8 +1068,6 @@ export default function TripPlanner() {
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         <TripMap
           pins={pins}
-          route={route}
-          legs={legs}
           mode={view}
           fit={fit}
           frame={frameNonce}
