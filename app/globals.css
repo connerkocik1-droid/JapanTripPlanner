@@ -751,6 +751,14 @@ input::placeholder { color: var(--color-neutral-600); }
   background: var(--color-accent-400);
   color: var(--color-on-accent);
 }
+/* The hand-off to Apple Maps, on every card that opens over a pin. It is the
+   one action that leaves the app, so it carries a glyph and sits first. */
+.hc-maps {
+  gap: 4px;
+  border-color: color-mix(in srgb, var(--color-accent-400) 40%, var(--color-neutral-800));
+}
+.hc-maps i { font-size: 11px; }
+
 .hc-link {
   flex: none;
   display: flex;

@@ -679,6 +679,7 @@ export default function TripPlanner() {
               overview: h.overview ?? '',
               images: h.images ?? [],
               url: h.url,
+              addr: h.addr ?? '',
               pick,
             },
           });
@@ -754,6 +755,7 @@ export default function TripPlanner() {
             note: p.note,
             images: p.images ?? [],
             url: p.url ?? '',
+            addr: p.addr ?? '',
           },
         });
       });

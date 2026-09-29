@@ -5,6 +5,7 @@ import maplibregl, { LngLatBoundsLike, Map as MlMap, Marker } from 'maplibre-gl'
 import { LatLng } from '@/lib/data';
 import { money } from '@/lib/format';
 import { boundsOf, toLngLat } from '@/lib/geo';
+import { appleMapsUrl } from '@/lib/appleMaps';
 
 // Point this at your own tiles to run without the public OpenFreeMap instance.
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
@@ -23,6 +24,8 @@ export interface HotelDetail {
   overview: string;
   images: string[];
   url: string;
+  /** As typed, for handing over to Apple Maps. */
+  addr: string;
   /** True for the option currently feeding the budget. */
   pick: boolean;
 }
@@ -38,6 +41,8 @@ export interface PlaceDetail {
   note: string;
   images: string[];
   url: string;
+  /** As typed, for handing over to Apple Maps. */
+  addr: string;
 }
 
 /** What a neighbourhood pin opens: what it is like, and what is in it. */
@@ -605,6 +610,29 @@ export default function TripMap({
 }
 
 /**
+ * The way out of the app: the same row on every card that opens over a pin.
+ *
+ * Renders nothing when there is neither an address nor a coordinate to hand
+ * over, which is the one case where the button would open Apple Maps on a
+ * search for a name and land somewhere else entirely.
+ */
+function OpenInMaps({ name, addr, ll }: { name: string; addr?: string; ll?: LatLng | null }) {
+  const href = appleMapsUrl({ name, addr, ll });
+  if (!href) return null;
+  return (
+    <a
+      className="mono hc-link hc-maps"
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={'Open ' + (name || 'this place') + ' in Apple Maps'}
+    >
+      <i className="ph ph-navigation-arrow" /> Apple Maps
+    </a>
+  );
+}
+
+/**
  * The hotel mini-card: what an option costs, what it is, and what it looks
  * like, without leaving the map. Missing photos or a missing price just drop
  * their row rather than leaving a gap.
@@ -681,6 +709,7 @@ const HotelMiniCard = forwardRef<
           <i className={hotel.pick ? 'ph-fill ph-check-circle' : 'ph ph-circle'} />
           {hotel.pick ? 'Active' : 'Set active'}
         </button>
+        <OpenInMaps name={pin.name} addr={hotel.addr} ll={pin.ll} />
         {hotel.url ? (
           <a className="mono hc-link" href={hotel.url} target="_blank" rel="noopener noreferrer">
             Listing ↗
@@ -750,6 +779,7 @@ const PlaceMiniCard = forwardRef<
       {place.note.trim() ? <p className="hc-note pc-note">{place.note}</p> : null}
 
       <div className="pc-foot">
+        <OpenInMaps name={pin.name} addr={place.addr} ll={pin.ll} />
         {place.url ? (
           <a className="mono hc-link pc-link" href={place.url} target="_blank" rel="noopener noreferrer">
             Open listing ↗
@@ -861,6 +891,12 @@ const HoodMiniCard = forwardRef<
             : 'Nothing pinned here yet'}
         </p>
       )}
+
+      {/* A neighbourhood has no street address, so Apple Maps gets its centre
+          under its name, which drops you in the middle of it. */}
+      <div className="pc-foot">
+        <OpenInMaps name={pin.name} ll={pin.ll} />
+      </div>
     </div>
   );
 });
