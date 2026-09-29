@@ -151,16 +151,43 @@ async function google(key: string, name: string, addr: string): Promise<PlaceFac
   }
 }
 
+/**
+ * Whether Google is answering this key at all. Asked with an ids-only search,
+ * which Google does not charge for, and remembered for an hour, so the app can
+ * ask on every load without it costing a lookup.
+ */
+async function googleLive(key: string): Promise<boolean> {
+  try {
+    const res = await fetch(SEARCH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.id' },
+      body: JSON.stringify({ textQuery: 'Tokyo Tower', maxResultCount: 1 }),
+      next: { revalidate: 3600 },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (params.get('probe')) return NextResponse.json({ google: key ? await googleLive(key) : false });
+
   const name = params.get('name')?.trim() ?? '';
   const addr = params.get('addr')?.trim() ?? '';
   if (!name) return NextResponse.json({ error: 'missing name' }, { status: 400 });
 
-  const key = process.env.GOOGLE_PLACES_API_KEY;
+  // Google first when it answers. A place it has never heard of still goes on
+  // to the free lookup, but is marked as asked, so it is not asked again.
+  let asked = false;
   if (key) {
     const found = await google(key, name, addr);
-    if (found !== 'failed') return NextResponse.json({ configured: true, source: 'google', result: found });
+    if (found !== 'failed') {
+      asked = true;
+      if (found) return NextResponse.json({ configured: true, google: true, source: 'google', result: found });
+    }
   }
 
   const lat = Number(params.get('lat'));
@@ -173,7 +200,7 @@ export async function GET(req: Request) {
       city: params.get('city')?.trim() ?? '',
       ll: Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon) ? [lat, lon] : null,
     });
-    return NextResponse.json({ configured: true, source: 'free', result });
+    return NextResponse.json({ configured: true, google: asked, source: 'free', result });
   } catch (err) {
     // OpenStreetMap itself could not be reached or asked us to slow down:
     // not "nothing found", so the app asks again on a later load.

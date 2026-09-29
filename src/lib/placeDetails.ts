@@ -335,12 +335,21 @@ export function packKey(name: string): string {
   return name.trim().toLowerCase();
 }
 
-/** A place the lookup has not seen yet. Only eats and sights are worth asking about. */
-export function wantsDetails(place: Place): boolean {
+/** Ends a `lookedUp` stamp when Google was the one asked, found or not. */
+export const ASKED_GOOGLE = '#g';
+
+/**
+ * A place the lookup has not seen yet. Only eats and sights are worth asking
+ * about. With Google answering, a place only the free lookup has seen is asked
+ * once more, because Google has the rating and the photograph the free
+ * sources do not.
+ */
+export function wantsDetails(place: Place, googleLive = false): boolean {
   if (place.kind === 'stay') return false;
   if (!place.name.trim()) return false;
   const stamp = place.lookedUp.trim();
   if (!stamp) return true;
+  if (googleLive && !stamp.endsWith(ASKED_GOOGLE)) return true;
   // The first version stamped a bare date even when the lookup had failed —
   // a key that was not yet live, an API not yet enabled — which left every
   // place it touched blank for good. Those stamps are day-only; stamps written

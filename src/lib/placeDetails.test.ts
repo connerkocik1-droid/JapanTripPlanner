@@ -107,6 +107,13 @@ test('a place with nothing found is still stamped, so it is asked about once', (
   assert.equal(wantsDetails({ ...place, ...patch }), false);
 });
 
+test('with Google answering, a place only the free lookup saw is asked once more', () => {
+  const place = { ...blankPlace('eat'), name: 'Ichiran', lookedUp: '2026-09-30T10:00:00.000Z', cuisine: 'Ramen' };
+  assert.equal(wantsDetails(place), false);
+  assert.equal(wantsDetails(place, true), true);
+  assert.equal(wantsDetails({ ...place, lookedUp: place.lookedUp + '#g' }, true), false);
+});
+
 test('a day-only stamp from the first version is retried once if nothing landed', () => {
   const place = { ...blankPlace('eat'), name: 'Ichiran', lookedUp: '2026-09-29' };
   assert.equal(wantsDetails(place), true);

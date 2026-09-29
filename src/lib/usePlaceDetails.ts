@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { City, Place } from './data';
-import { PlaceFacts, detailsPatch, wantsDetails } from './placeDetails';
+import { ASKED_GOOGLE, PlaceFacts, detailsPatch, wantsDetails } from './placeDetails';
 
 export interface PlaceDetailsArg {
   /** Nothing runs until the trip has actually been read from storage. */
@@ -37,11 +37,20 @@ interface Pending {
 export function usePlaceDetails(arg: PlaceDetailsArg): void {
   const latest = useRef(arg);
   latest.current = arg;
+  // Whether Google is answering, asked once a load. Until it says, the queue
+  // runs as though it is not, which is what it would do anyway.
+  const [googleLive, setGoogleLive] = useState(false);
+  useEffect(() => {
+    fetch('/api/place-details?probe=1')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { google?: boolean } | null) => setGoogleLive(Boolean(b?.google)))
+      .catch(() => undefined);
+  }, []);
   // The queue is rebuilt when the set of places that still want one changes.
   // Using the ids rather than the places themselves keeps a rating landing on
   // one place from restarting the run for the other thirty-nine.
   const waiting = arg.cities
-    .flatMap((c) => c.places.filter(wantsDetails).map((p) => p.id))
+    .flatMap((c) => c.places.filter((p) => wantsDetails(p, googleLive)).map((p) => p.id))
     .join('|');
 
   useEffect(() => {
@@ -52,7 +61,7 @@ export function usePlaceDetails(arg: PlaceDetailsArg): void {
       const todo: Pending[] = [];
       latest.current.cities.forEach((city) => {
         city.places.forEach((place) => {
-          if (wantsDetails(place)) todo.push({ cityId: city.id, city: city.name, place });
+          if (wantsDetails(place, googleLive)) todo.push({ cityId: city.id, city: city.name, place });
         });
       });
 
@@ -69,23 +78,29 @@ export function usePlaceDetails(arg: PlaceDetailsArg): void {
         // about again next load; and since the next one would fail the same
         // way, the run stops here.
         if (answer === 'failed') return;
-        const on = new Date().toISOString();
-        latest.current.fill(item.cityId, item.place.id, detailsPatch(item.place, answer, on));
-        // Paced for the free lookup, which asks OpenStreetMap up to twice a
-        // place and is asked for a second between requests. These are
-        // somebody else's servers, and the map is being looked at meanwhile.
-        await new Promise((r) => setTimeout(r, 2200));
+        const on = new Date().toISOString() + (answer.google ? ASKED_GOOGLE : '');
+        latest.current.fill(item.cityId, item.place.id, detailsPatch(item.place, answer.result, on));
+        // Paced for whoever answered: the free lookup asks OpenStreetMap up to
+        // twice a place and is asked for a second between requests; Google
+        // needs only to not be hammered.
+        await new Promise((r) => setTimeout(r, answer.google && answer.result ? 400 : 2200));
       }
     })();
 
     return () => {
       signal.cancelled = true;
     };
-  }, [arg.ready, waiting]);
+  }, [arg.ready, waiting, googleLive]);
 }
 
-/** One lookup: the facts, `null` for nothing found, no key, or a failed call. */
-async function lookUp(place: Place, city: string): Promise<PlaceFacts | null | 'unconfigured' | 'failed'> {
+/** What one lookup found, and whether Google was among those asked. */
+interface Answer {
+  result: PlaceFacts | null;
+  google: boolean;
+}
+
+/** One lookup: the answer, that there is no lookup at all, or a failed call. */
+async function lookUp(place: Place, city: string): Promise<Answer | 'unconfigured' | 'failed'> {
   const params = new URLSearchParams({ name: place.name.trim(), kind: place.kind, city });
   if (place.addr.trim()) params.set('addr', place.addr.trim());
   // Where it is pinned finds the right branch of a chain.
@@ -96,9 +111,9 @@ async function lookUp(place: Place, city: string): Promise<PlaceFacts | null | '
   try {
     const res = await fetch('/api/place-details?' + params.toString());
     if (!res.ok) return 'failed';
-    const body = (await res.json()) as { configured?: boolean; result?: PlaceFacts | null };
+    const body = (await res.json()) as { configured?: boolean; google?: boolean; result?: PlaceFacts | null };
     if (body.configured === false) return 'unconfigured';
-    return body.result ?? null;
+    return { result: body.result ?? null, google: Boolean(body.google) };
   } catch {
     return 'failed';
   }
