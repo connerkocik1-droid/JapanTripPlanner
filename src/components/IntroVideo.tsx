@@ -13,11 +13,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 
 /** The flat colour the film opens on, so its edges are invisible on a wide
- *  window, where the whole 9:16 frame is shown rather than filling the screen. */
+ *  window, where the whole frame is shown rather than filling the screen. */
 const FILM_BG = '#f3e9d7';
 
-/** How long a silent video gets to start before the curtain lifts anyway. */
-const START_GRACE_MS = 2500;
+/**
+ * How long the film gets to *start*. Only the start is on a clock: once a
+ * frame has played the curtain waits for the film however slowly it buffers,
+ * because cutting a film off mid-sentence is worse than a pause. Generous,
+ * since a phone on a bad signal is the case this is for.
+ */
+const START_GRACE_MS = 8000;
 
 /** The fade, matched to the CSS transition below. */
 const FADE_MS = 340;
@@ -39,29 +44,37 @@ export default function IntroVideo() {
   useEffect(() => {
     if (gone) return;
 
-    // Someone who has asked for less motion gets the app, not the film.
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      setGone(true);
-      return;
-    }
-
     const el = video.current;
     if (!el) {
       setGone(true);
       return;
     }
 
-    // Autoplay is refused often enough — on a first visit in some browsers, or
-    // under a data saver — that the promise is worth catching rather than
-    // leaving the curtain down over a frozen first frame.
-    el.play().catch(dismiss);
+    // React sets `muted` as a property after mount, which can land after the
+    // browser has already decided whether this is allowed to autoplay. Saying
+    // it again here, before asking, is what keeps iOS from refusing.
+    el.muted = true;
+    el.defaultMuted = true;
 
-    // Nothing about the film is load-bearing, so a video that has not started
-    // by now is simply given up on.
-    const grace = setTimeout(() => {
-      if (el.currentTime === 0 || el.paused) dismiss();
-    }, START_GRACE_MS);
-    return () => clearTimeout(grace);
+    let grace: ReturnType<typeof setTimeout> | undefined;
+
+    // A frame has played: the film is running and owns the screen until it ends.
+    const started = () => clearTimeout(grace);
+    el.addEventListener('playing', started);
+
+    // A refusal is worth one more ask once there is something to play — the
+    // first attempt can land before the browser has data and be turned down
+    // for that alone.
+    const retry = () => el.play().catch(dismiss);
+    el.play().catch(() => el.addEventListener('canplay', retry, { once: true }));
+
+    grace = setTimeout(dismiss, START_GRACE_MS);
+
+    return () => {
+      clearTimeout(grace);
+      el.removeEventListener('playing', started);
+      el.removeEventListener('canplay', retry);
+    };
   }, [gone, dismiss]);
 
   if (gone) return null;
