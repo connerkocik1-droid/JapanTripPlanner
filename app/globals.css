@@ -877,7 +877,7 @@ input::placeholder { color: var(--color-neutral-600); }
 
 /* --- intro film --------------------------------------------------------- */
 /*
- * The film is 9:16 with its top and bottom rows extended to 2.25:1, so a phone
+ * The film is 9:16 with its top and bottom rows extended to 9:20, so a phone
  * fills edge to edge without a letterbox seam and without cropping into the
  * lettering — the only thing a tall screen eats is the extended colour. A wide
  * window is shown the whole picture instead, on the curtain's matching cream.
