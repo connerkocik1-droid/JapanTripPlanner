@@ -1,7 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { City, DayItem, Hotel, LatLng } from '@/lib/data';
+import {
+  EXPENSE_CATEGORIES, Expense, ExpenseCategory, Insight, byCategory, dayStamp,
+  expenseCategory, insightFor, insightSeen, markInsightSeen, onDay, sumUsd, usdOf,
+} from '@/lib/expenses';
 import { DayEntry } from '@/lib/derive';
 import { DayPlan, fmtClock, fmtSpan } from '@/lib/dayPlan';
 import { clashFor } from '@/lib/hours';
@@ -10,7 +14,7 @@ import { LegOptions, betterMode, fmtDistance, fmtDuration, routeLeg } from '@/li
 import { daysToStart, inSpan, nowMins, progressOf } from '@/lib/today';
 import { useHere } from '@/lib/useHere';
 import { Local } from './CityMoney';
-import type { Rates } from '@/lib/money';
+import { currency, fmtLocal, rateFor, type Rates } from '@/lib/money';
 
 export interface TodayTabProps {
   schedule: DayEntry[];
@@ -24,8 +28,15 @@ export interface TodayTabProps {
   city: City | null;
   rates: Rates | null;
   travelers: number;
+  /** Everything logged on the trip so far, newest first. */
+  expenses: Expense[];
   onZoomStop: (ll: LatLng) => void;
   onToggleItem: (key: string, id: string) => void;
+  onAddExpense: (e: {
+    on: string; cityId: string; category: ExpenseCategory; amount: number;
+    currency: string; rate: number; note: string;
+  }) => void;
+  onRemoveExpense: (id: string) => void;
   /** Open this day in the planner, for changing it rather than following it. */
   onEditDay: () => void;
 }
@@ -38,13 +49,13 @@ const TICK_MS = 30_000;
  *
  * Every other tab is for planning — laying a day out, costing it, moving
  * things around. This one is for following the day you already planned, on a
- * phone, one-handed, in a city you do not know. So it answers three questions
- * and stops: where should I be now, when do I have to leave, and how do I get
- * back to the hotel.
+ * phone, one-handed, in a city you do not know. So it answers four questions
+ * and stops: where should I be now, when do I have to leave, how do I get back
+ * to the hotel, and am I ahead or behind on the money.
  */
 export default function TodayTab({
-  schedule, start, todayN, dayEntry, plan, hotel, city, rates, travelers,
-  onZoomStop, onToggleItem, onEditDay,
+  schedule, start, todayN, dayEntry, plan, hotel, city, rates, travelers, expenses,
+  onZoomStop, onToggleItem, onAddExpense, onRemoveExpense, onEditDay,
 }: TodayTabProps) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -76,6 +87,31 @@ export default function TodayTab({
 
   const fromHere = useRouteFromHere(here.here?.ll ?? null, aim?.ll ?? null);
 
+  /**
+   * Today's read on the money. `schedule` is already every day of the trip with
+   * its city and its stops, which is all a budget needs to know.
+   */
+  const stamp = dayStamp(now);
+  const insight = useMemo<Insight | null>(
+    () => (running ? insightFor(expenses, schedule, todayN ?? 0, stamp, travelers, start) : null),
+    [running, expenses, schedule, todayN, stamp, travelers, start],
+  );
+  const logged = useMemo(() => onDay(expenses, stamp), [expenses, stamp]);
+
+  /**
+   * Which day's insight this device has already been shown. Read in an effect,
+   * not at render: the server has no localStorage, and a card that appeared and
+   * then vanished would be worse than one that arrives a beat late. Null means
+   * not read yet, which shows nothing.
+   */
+  const [seen, setSeen] = useState<string | null>(null);
+  useEffect(() => setSeen(insightSeen()), []);
+  const dismissInsight = useCallback(() => {
+    markInsightSeen(stamp);
+    setSeen(stamp);
+  }, [stamp]);
+  const showInsight = Boolean(insight) && seen !== null && seen !== stamp;
+
   if (!schedule.length) {
     return <div style={empty}>Nothing to follow yet — plan a day and it shows up here on the day.</div>;
   }
@@ -90,6 +126,10 @@ export default function TodayTab({
 
   return (
     <div>
+      {showInsight && insight ? (
+        <Bulletin insight={insight} onDismiss={dismissInsight} />
+      ) : null}
+
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 21 }}>
@@ -116,6 +156,22 @@ export default function TodayTab({
           )}
         </div>
       </div>
+
+      {running ? (
+        <Spend
+          stamp={stamp}
+          city={dayEntry.city}
+          rates={rates}
+          budget={insight?.budgetToday ?? 0}
+          logged={logged}
+          onAdd={onAddExpense}
+          onRemove={onRemoveExpense}
+        />
+      ) : (
+        <div style={{ ...note, marginTop: 8 }}>
+          Logging what you spend starts on day one, and lives here beside the day.
+        </div>
+      )}
 
       {running && aim ? (
         <div style={{ ...card, marginTop: 8 }}>
@@ -253,6 +309,333 @@ export default function TodayTab({
 
       <button className="tap" onClick={onEditDay} style={editBtn}>
         <i className="ph ph-pencil-simple" style={{ fontSize: 12 }} /> Change this day
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The day's money, once a day.
+ *
+ * It is the first thing on the tab the app opens on, and it goes away when it
+ * is read — the running total below it is always there, so dismissing this
+ * loses nothing. It says the day first, because that is the number you can
+ * still do something about, and the trip second, because that is the one that
+ * decides whether the last week is comfortable.
+ */
+function Bulletin({ insight, onDismiss }: { insight: Insight; onDismiss: () => void }) {
+  return (
+    <div
+      style={{
+        ...card,
+        marginBottom: 8,
+        borderColor: 'var(--color-accent-500)',
+        background: 'var(--tint-accent)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <i className="ph-fill ph-coins" style={{ fontSize: 15, color: 'var(--color-accent-300)' }} />
+        <div className="mono" style={{ fontSize: 9, color: 'var(--color-accent-300)', flex: 1 }}>
+          DAY {insight.dayN} · THE MONEY
+        </div>
+        <button className="tap" onClick={onDismiss} aria-label="Dismiss" style={pinBtn}>
+          <i className="ph ph-x" style={{ fontSize: 13 }} />
+        </button>
+      </div>
+      <div style={{ marginTop: 5, fontSize: 14, fontWeight: 600, lineHeight: 1.4 }}>
+        {insight.today}
+      </div>
+      <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, color: 'var(--color-neutral-500)' }}>
+        {insight.trip}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What today has cost, and the one tap that adds to it.
+ *
+ * Logging has to be quick or it does not happen: a figure, what it was for, and
+ * done. The currency defaults to the one you are standing in, because that is
+ * what the receipt says, and the dollars are worked out from the day's rate and
+ * kept with the entry so the trip total does not move when the yen does.
+ */
+function Spend({
+  stamp, city, rates, budget, logged, onAdd, onRemove,
+}: {
+  stamp: string;
+  city: City;
+  rates: Rates | null;
+  /** What the plan budgets for today, in dollars. */
+  budget: number;
+  logged: Expense[];
+  onAdd: TodayTabProps['onAddExpense'];
+  onRemove: TodayTabProps['onRemoveExpense'];
+}) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState<ExpenseCategory>('food');
+  const [noteText, setNoteText] = useState('');
+
+  const cur = currency(city.currency);
+  const rate = rateFor(city.currency, rates, city.rate);
+  /** A local figure is only offered where a rate can price it. */
+  const canLocal = Boolean(cur && rate);
+  const [local, setLocal] = useState(true);
+  const inLocal = canLocal && local;
+
+  const spent = sumUsd(logged);
+  const over = budget > 0 && spent > budget;
+  const pct = budget > 0 ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
+  const cats = byCategory(logged);
+
+  const value = Number(amount);
+  const ready = Number.isFinite(value) && value > 0;
+
+  function save() {
+    if (!ready) return;
+    onAdd({
+      on: stamp,
+      cityId: city.id,
+      category,
+      amount: value,
+      currency: inLocal && cur ? cur.code : '',
+      rate: inLocal && rate ? rate : 0,
+      note: noteText.trim(),
+    });
+    setAmount('');
+    setNoteText('');
+  }
+
+  return (
+    <div style={{ ...card, marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
+            SPENT TODAY
+          </div>
+          <div className="num" style={{ fontSize: 17, fontWeight: 600 }}>
+            {fmtUsd(spent)}
+            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-neutral-500)' }}>
+              {budget > 0 ? ` of ${fmtUsd(budget)} budgeted` : ' · no budget for today'}
+            </span>
+          </div>
+        </div>
+        <button
+          className="tap"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          style={{
+            flex: 'none', minHeight: 38, padding: '0 13px', borderRadius: 9999, cursor: 'pointer',
+            border: '1px solid var(--color-accent-500)',
+            background: open ? 'var(--tint-accent)' : 'var(--color-accent-500)',
+            color: open ? 'var(--color-accent-200)' : 'var(--color-on-accent)',
+            fontSize: 12.5, fontWeight: 600,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          <i className={'ph ' + (open ? 'ph-x' : 'ph-plus')} style={{ fontSize: 13 }} />
+          {open ? 'Close' : 'Log'}
+        </button>
+      </div>
+
+      {budget > 0 ? (
+        <div
+          style={{
+            marginTop: 7, height: 5, borderRadius: 9999, overflow: 'hidden',
+            background: 'var(--color-neutral-800)',
+          }}
+        >
+          <div
+            style={{
+              width: pct + '%', height: '100%',
+              background: over ? 'var(--color-danger)' : 'var(--color-accent-400)',
+            }}
+          />
+        </div>
+      ) : null}
+
+      {open ? (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'flex', gap: 7 }}>
+            <input
+              type="number"
+              min={0}
+              step="any"
+              inputMode="decimal"
+              autoFocus
+              value={amount}
+              placeholder={inLocal && cur ? `Amount in ${cur.code}` : 'Amount in dollars'}
+              aria-label={inLocal && cur ? `Amount in ${cur.name}` : 'Amount in dollars'}
+              onChange={(e) => setAmount(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') save();
+              }}
+              className="num"
+              style={{
+                flex: 1, minWidth: 0, minHeight: 42, padding: '0 10px', fontSize: 16,
+                borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-neutral-800)',
+                background: 'var(--color-surface)', color: 'var(--color-text)',
+              }}
+            />
+            {canLocal && cur ? (
+              <button
+                className="tap"
+                onClick={() => setLocal((v) => !v)}
+                aria-label={inLocal ? `Switch to dollars` : `Switch to ${cur.name}`}
+                style={{
+                  flex: 'none', width: 46, minHeight: 42, borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-neutral-800)', background: 'var(--color-surface)',
+                  color: 'var(--color-accent-200)', fontSize: 17, cursor: 'pointer',
+                }}
+              >
+                {inLocal ? cur.symbol : '$'}
+              </button>
+            ) : null}
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
+            {EXPENSE_CATEGORIES.map((c) => {
+              const on = c.id === category;
+              return (
+                <button
+                  key={c.id}
+                  className="tap"
+                  onClick={() => setCategory(c.id)}
+                  aria-pressed={on}
+                  style={{
+                    minHeight: 34, padding: '0 10px', borderRadius: 9999, cursor: 'pointer',
+                    border: '1px solid ' + (on ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
+                    background: on ? 'var(--tint-accent)' : 'transparent',
+                    color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-500)',
+                    fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <i className={'ph ' + c.icon} style={{ fontSize: 13 }} />
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <input
+            value={noteText}
+            placeholder="What it was, if it helps (optional)"
+            aria-label="Note"
+            onChange={(e) => setNoteText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') save();
+            }}
+            style={{
+              width: '100%', marginTop: 7, minHeight: 38, padding: '0 10px', fontSize: 13,
+              borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-neutral-800)',
+              background: 'var(--color-surface)', color: 'var(--color-text)',
+            }}
+          />
+
+          <div className="mono" style={{ ...cap, marginTop: 7, minHeight: 12 }}>
+            {inLocal && cur && rate && ready
+              ? `${fmtLocal(value / rate, cur.code, rate)} · about ${fmtUsd(value / rate)}`
+              : canLocal
+                ? 'Tap the symbol to switch currency'
+                : cur
+                  ? 'No rate for this city yet, so this is in dollars'
+                  : ''}
+          </div>
+
+          <button
+            className="tap"
+            onClick={save}
+            disabled={!ready}
+            style={{
+              width: '100%', marginTop: 4, minHeight: 44, borderRadius: 'var(--radius-sm)',
+              border: 'none', cursor: ready ? 'pointer' : 'default',
+              background: ready ? 'var(--color-accent-500)' : 'var(--color-neutral-800)',
+              color: ready ? 'var(--color-on-accent)' : 'var(--color-neutral-600)',
+              fontSize: 13.5, fontWeight: 600,
+            }}
+          >
+            Add it
+          </button>
+        </div>
+      ) : cats.length ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {cats.map((c) => (
+            <span
+              key={c.id}
+              className="mono num"
+              style={{
+                fontSize: 9.5, padding: '3px 7px', borderRadius: 9999,
+                border: '1px solid var(--color-neutral-800)', color: 'var(--color-neutral-500)',
+              }}
+            >
+              {expenseCategory(c.id).label} {fmtUsd(c.usd)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {logged.length ? (
+        <div style={{ marginTop: 9 }}>
+          {logged.map((e) => (
+            <Entry key={e.id} expense={e} onRemove={() => onRemove(e.id)} />
+          ))}
+        </div>
+      ) : (
+        <div style={{ ...note, marginTop: open ? 9 : 7 }}>
+          Nothing logged today. Every figure you add here is compared against what
+          the day budgets.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One logged expense: what it cost, what for, and a way to undo a fat finger. */
+function Entry({ expense, onRemove }: { expense: Expense; onRemove: () => void }) {
+  const dollars = usdOf(expense);
+  const cat = expenseCategory(expense.category);
+  const localText =
+    expense.currency && expense.rate > 0
+      ? fmtLocal(expense.amount / expense.rate, expense.currency, expense.rate)
+      : null;
+
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',
+        borderTop: '1px solid var(--color-neutral-800)',
+      }}
+    >
+      <i
+        className={'ph ' + cat.icon}
+        style={{ fontSize: 14, color: 'var(--color-accent-300)', flex: 'none' }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 12.5,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
+        >
+          {expense.note || cat.label}
+        </div>
+        {localText ? (
+          <div className="mono num" style={{ fontSize: 9, color: 'var(--color-neutral-600)' }}>
+            {localText}
+          </div>
+        ) : null}
+      </div>
+      <span className="num" style={{ flex: 'none', fontSize: 13, fontWeight: 600 }}>
+        {dollars === null ? '—' : fmtUsd(dollars)}
+      </span>
+      <button
+        className="tap"
+        onClick={onRemove}
+        aria-label={`Remove ${expense.note || cat.label}`}
+        style={{ ...pinBtn, width: 30, height: 30, color: 'var(--color-neutral-600)' }}
+      >
+        <i className="ph ph-trash" style={{ fontSize: 12 }} />
       </button>
     </div>
   );
