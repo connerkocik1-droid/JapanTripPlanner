@@ -110,7 +110,9 @@ self.addEventListener('fetch', (event) => {
   // Fonts, icon webfonts and anything Next fingerprinted.
   if (
     url.origin === self.location.origin &&
-    (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/'))
+    (url.pathname.startsWith('/_next/static/') ||
+      url.pathname.startsWith('/icons/') ||
+      url.pathname.startsWith('/intro/'))
   ) {
     event.respondWith(cacheFirst(request, ASSETS, ASSET_LIMIT));
     return;

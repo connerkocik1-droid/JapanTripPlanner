@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import IntroVideo from '@/components/IntroVideo';
 import ServiceWorker from '@/components/ServiceWorker';
 import './globals.css';
 
@@ -48,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         {children}
+        <IntroVideo />
         <ServiceWorker />
       </body>
     </html>
