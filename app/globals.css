@@ -641,6 +641,8 @@ input::placeholder { color: var(--color-neutral-600); }
   box-shadow: var(--shadow-float);
   animation: fadeIn 0.16s ease both;
   pointer-events: auto;
+  /* Squeezed rather than parked over its pin when the map runs out of room. */
+  overflow: auto;
 }
 .hc-head { display: flex; align-items: flex-start; gap: 6px; }
 .hc-title {
