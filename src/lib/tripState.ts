@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckItem, City, DayItem, Hotel, LatLng, Place, TravelMode, Trip,
+  CheckItem, City, DayItem, Hotel, LatLng, Meal, Place, TravelMode, Trip,
   blankCity, blankHotel, blankPlace, newTrip, uid,
 } from './data';
 import { blankHood } from './hoods';
@@ -105,6 +105,15 @@ function fillCity(city: City): City {
       // An unknown value would hide the place from the map for good, so
       // anything but the three decisions reads as "nobody has said".
       vote: p?.vote === 'yes' || p?.vote === 'maybe' || p?.vote === 'no' ? p.vote : '',
+      // A score that is not a number reaches `toFixed` on the map card, which
+      // is a render path — the same shape of crash the airport code once was.
+      rating: typeof p?.rating === 'number' && p.rating > 0 ? p.rating : 0,
+      ratingCount: typeof p?.ratingCount === 'number' && p.ratingCount > 0 ? Math.round(p.ratingCount) : 0,
+      cuisine: typeof p?.cuisine === 'string' ? p.cuisine : '',
+      meals: Array.isArray(p?.meals)
+        ? p.meals.filter((m: unknown): m is Meal => m === 'breakfast' || m === 'lunch' || m === 'dinner')
+        : [],
+      lookedUp: typeof p?.lookedUp === 'string' ? p.lookedUp : '',
     })),
     hoods: (Array.isArray(city?.hoods) ? city.hoods : []).map((h) => ({
       ...blankHood(),
@@ -198,6 +207,8 @@ export interface TripStore {
   /** Pin several at once, skipping names already pinned. Returns what was added. */
   addPlaces: (cityId: string, places: Place[]) => Place[];
   setPlace: <K extends keyof Place>(cityId: string, placeId: string, key: K, val: Place[K]) => void;
+  /** Several fields at once — what a details lookup writes back. */
+  fillPlace: (cityId: string, placeId: string, patch: Partial<Place>) => void;
   removePlace: (cityId: string, placeId: string) => void;
 
   addDayItem: (key: string) => string;
@@ -613,6 +624,27 @@ export function useTripStore(): TripStore {
     [edit],
   );
 
+  /**
+   * Write a handful of fields in one go.
+   *
+   * The details lookup comes back with a rating, a cuisine, hours and a
+   * photograph together; setting them one at a time would be four saves and
+   * four renders for one answer, and would leave a place half-filled if the
+   * tab closed between them.
+   */
+  const fillPlace = useCallback(
+    (cityId: string, placeId: string, patch: Partial<Place>) => {
+      if (!Object.keys(patch).length) return;
+      edit(`${cityId}/place/${placeId}`, (d) =>
+        mapCity(d, cityId, (c) => ({
+          ...c,
+          places: c.places.map((p) => (p.id === placeId ? { ...p, ...patch } : p)),
+        })),
+      );
+    },
+    [edit],
+  );
+
   const removePlace = useCallback(
     (cityId: string, placeId: string) => {
       edit(null, (d) => mapCity(d, cityId, (c) => ({ ...c, places: c.places.filter((p) => p.id !== placeId) })));
@@ -901,7 +933,7 @@ export function useTripStore(): TripStore {
       joinByCode, joinCode, setTripCode,
       addCity, removeCity, moveCity, setCity,
       setHotel, addHotelSlot,
-      addPlace, addPlaces, setPlace, removePlace,
+      addPlace, addPlaces, setPlace, fillPlace, removePlace,
       addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck,
       applyPreset, applyPlan, addComment, toggleComment, removeComment, reset,
@@ -913,7 +945,7 @@ export function useTripStore(): TripStore {
       code, trips, tripsLoading, openTrip, createTrip, closeTrip, removeTrip,
       joinByCode, joinCode, setTripCode,
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
-      addPlace, addPlaces, setPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
+      addPlace, addPlaces, setPlace, fillPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck, applyPreset, applyPlan,
       addComment, toggleComment, removeComment, reset,
     ],

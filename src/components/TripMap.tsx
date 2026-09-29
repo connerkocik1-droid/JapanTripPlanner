@@ -2,7 +2,8 @@
 
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import maplibregl, { LngLatBoundsLike, Map as MlMap, Marker } from 'maplibre-gl';
-import { LatLng } from '@/lib/data';
+import { LatLng, Meal } from '@/lib/data';
+import { mealsLine, ratingLine, reviewsLine, shortCuisine } from '@/lib/placeDetails';
 import { money } from '@/lib/format';
 import { boundsOf, toLngLat } from '@/lib/geo';
 import { appleMapsUrl } from '@/lib/appleMaps';
@@ -38,6 +39,14 @@ export interface PlaceDetail {
   color: string;
   /** Rating or price band, as typed: "4.7★", "$$". */
   band: string;
+  /** Out of 5, from the listing it came from; 0 when there is none. */
+  rating: number;
+  /** How many reviews that is out of; 0 when unknown. */
+  ratingCount: number;
+  /** "Sushi", "Korean BBQ" — blank when nobody knows. */
+  cuisine: string;
+  /** Which meals it is worth going for. A suggestion, and shown as one. */
+  meals: Meal[];
   note: string;
   images: string[];
   url: string;
@@ -763,7 +772,11 @@ const PlaceMiniCard = forwardRef<
         ) : (
           <PlaceArt name={pin.name} icon={pin.icon ?? 'ph-map-pin'} />
         )}
-        {place.band ? <span className="mono pc-band">{place.band}</span> : null}
+        {/* The score, where the shortlist's band used to sit — the same corner
+            of the picture, now with the review count behind it. */}
+        {ratingLine(place.rating) || place.band ? (
+          <span className="mono pc-band">{ratingLine(place.rating) || place.band}</span>
+        ) : null}
       </div>
 
       <div className="hc-head">
@@ -773,8 +786,20 @@ const PlaceMiniCard = forwardRef<
         </button>
       </div>
       <div className="mono hc-where">
-        <i className={'ph ' + (pin.icon ?? 'ph-map-pin')} /> {place.kindLabel}
+        <i className={'ph ' + (pin.icon ?? 'ph-map-pin')} />{' '}
+        {[shortCuisine(place.cuisine) || place.kindLabel, reviewsLine(place.ratingCount)]
+          .filter(Boolean)
+          .join(' · ')}
       </div>
+
+      {/* When to go is worked out from the hours and what it serves, so it says
+          "best" rather than stating an opening time nobody confirmed. */}
+      {mealsLine(place.meals) ? (
+        <div className="mono pc-when">
+          <i className="ph ph-clock" /> {mealsLine(place.meals)}
+          <span className="pc-hint"> · suggested</span>
+        </div>
+      ) : null}
 
       {place.note.trim() ? <p className="hc-note pc-note">{place.note}</p> : null}
 

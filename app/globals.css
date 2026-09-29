@@ -593,6 +593,15 @@ input::placeholder { color: var(--color-neutral-600); }
   box-shadow: var(--shadow-pin);
 }
 .place-card .hc-where i { font-size: 10px; color: var(--pin, var(--color-accent-300)); }
+/* When to go. Read off the hours rather than published, so it is set a shade
+   back from the cuisine above it and says so in as many words. */
+.place-card .pc-when {
+  margin-top: 3px;
+  font-size: 8.5px;
+  color: var(--color-neutral-500);
+}
+.place-card .pc-when i { font-size: 10px; color: var(--color-neutral-600); }
+.place-card .pc-hint { color: var(--color-neutral-700); }
 .place-card .pc-note {
   margin-top: 6px;
   max-height: 72px;

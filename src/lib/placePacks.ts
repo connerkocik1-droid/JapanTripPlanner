@@ -1,6 +1,8 @@
 'use client';
 
-import { Place, PlaceKind, uid } from './data';
+import { Meal, Place, PlaceKind, uid } from './data';
+import { suggestMeals } from './placeDetails';
+export { packCatchUp, packKey } from './placeDetails';
 
 /**
  * A place pack is a ready-made shortlist: somewhere's restaurants, its museums,
@@ -23,6 +25,12 @@ export interface PackPlace {
   kind?: PlaceKind;
   /** "4.7★", "$$" — whatever the shortlist was ranked on. */
   band?: string;
+  /** The same score as a number, which is what the card shows it as. */
+  rating?: number;
+  /** How many reviews it is out of, 0 when the shortlist did not say. */
+  reviews?: number;
+  /** What an eat serves, in the shortlist's own words. */
+  cuisine?: string;
   note?: string;
   url?: string;
   images?: string[];
@@ -82,6 +90,9 @@ export function normalizePack(input: unknown): PlacePack | null {
       addr: typeof s.addr === 'string' ? s.addr.trim() : '',
       kind: KINDS.includes(s.kind as PlaceKind) ? (s.kind as PlaceKind) : ('eat' as PlaceKind),
       band: typeof s.band === 'string' ? s.band : '',
+      rating: typeof s.rating === 'number' && s.rating > 0 ? s.rating : 0,
+      reviews: typeof s.reviews === 'number' && s.reviews > 0 ? Math.round(s.reviews) : 0,
+      cuisine: typeof s.cuisine === 'string' ? s.cuisine.trim() : '',
       note: typeof s.note === 'string' ? s.note : '',
       url: typeof s.url === 'string' ? s.url : '',
       images: Array.isArray(s.images) ? s.images.filter((x): x is string => typeof x === 'string') : [],
@@ -105,13 +116,27 @@ export function packPlaceToPlace(entry: PackPlace): Place {
   // The local-script name rides along in the note: it is the one thing worth
   // being able to point at when the English name gets you nowhere.
   const note = [entry.note, entry.korean].filter((s) => s && s.trim()).join(' · ');
+  // The shortlist already knows the score and what the kitchen does, so those
+  // are in before the first render and no lookup is needed for them. Hours it
+  // does not know, so the meals are read off the cuisine and stay a suggestion.
+  const cuisine = (entry.cuisine ?? '').trim();
+  // Eats only. A museum serves nothing, and a best time read off a word in its
+  // note would be an invention rather than a suggestion.
+  const kind = entry.kind ?? 'eat';
+  const meals: Meal[] = kind === 'eat' ? suggestMeals({ cuisine, note }) : [];
   return {
     id: uid(),
     name: entry.name,
     addr: entry.addr ?? '',
     note,
-    kind: entry.kind ?? 'eat',
+    kind,
     band: entry.band ?? '',
+    rating: entry.rating ?? 0,
+    ratingCount: entry.reviews ?? 0,
+    cuisine,
+    meals,
+    // Blank, so the details pass still goes looking for a photograph.
+    lookedUp: '',
     images: entry.images ?? [],
     // Packs do not carry hours yet; a place with none simply never warns.
     shutDays: [],
