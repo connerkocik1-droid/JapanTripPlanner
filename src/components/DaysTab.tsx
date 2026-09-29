@@ -1,6 +1,8 @@
 'use client';
 
-import { DayItem, LatLng, Place, TravelMode } from '@/lib/data';
+import { City, DayItem, LatLng, Place, TravelMode } from '@/lib/data';
+import type { Preset } from '@/lib/presets';
+import DayFill from './DayFill';
 import { DayEntry, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtDow, fmtUsd } from '@/lib/format';
 import { HopResult } from '@/lib/useDayRoute';
@@ -16,6 +18,10 @@ export interface DaysTabProps {
   /** Metro fare per person in this city, for pricing transit legs. */
   fare: number;
   travelers: number;
+  /** The city this day is spent in — what the day is filled from. */
+  city: City | null;
+  /** Where the day currently ends, so a candidate stop can be timed from it. */
+  anchor: { ll: LatLng; label: string } | null;
   onSelectDay: (n: number) => void;
   onAddItem: (key: string) => void;
   onSetItem: <K extends keyof DayItem>(key: string, id: string, field: K, val: DayItem[K]) => void;
@@ -24,11 +30,16 @@ export interface DaysTabProps {
   onMoveItem: (key: string, id: string, dir: number) => void;
   onZoomDay: () => void;
   onZoomStop: (ll: LatLng) => void;
+  onAddStop: (place: Place) => void;
+  onApplyPreset: (preset: Preset, replace: boolean) => void;
+  onSetFare: (fare: number) => void;
+  onStartPlan: () => void;
 }
 
 export default function DaysTab({
-  schedule, start, selected, hops, plan, fare, travelers, onSelectDay, onAddItem, onSetItem,
-  onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop,
+  schedule, start, selected, hops, plan, fare, travelers, city, anchor, onSelectDay, onAddItem,
+  onSetItem, onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop, onAddStop,
+  onApplyPreset, onSetFare, onStartPlan,
 }: DaysTabProps) {
   if (!schedule.length) {
     return <div style={empty}>Add a city on the Map tab and its nights show up here as days to plan.</div>;
@@ -136,8 +147,8 @@ export default function DaysTab({
 
       {day.items.length === 0 ? (
         <div style={empty}>
-          Nothing planned for this day. Add a stop, then pick one of {day.city.name}&rsquo;s places
-          to get walking and metro times between them.
+          Nothing planned for this day yet. Pick one of {day.city.name}&rsquo;s places below and it
+          lands here, timed and priced from wherever the day has got to.
         </div>
       ) : (
         day.items.map((it, i) => {
@@ -222,19 +233,18 @@ export default function DaysTab({
         </div>
       ) : null}
 
-      <button
-        className="tap"
-        onClick={() => onAddItem(day.key)}
-        style={{
-          width: '100%', minHeight: 44, marginTop: 10, borderRadius: 'var(--radius-md)',
-          border: '1px dashed var(--color-neutral-700)', background: 'transparent',
-          color: 'var(--color-accent-200)', fontSize: 12.5, fontWeight: 500,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer',
-        }}
-      >
-        <i className="ph ph-plus" style={{ fontSize: 14 }} />
-        Add a stop
-      </button>
+      <DayFill
+        city={city}
+        anchor={anchor}
+        metroFare={fare}
+        travelers={travelers}
+        onApplyPreset={onApplyPreset}
+        onAddStop={onAddStop}
+        onAddBlank={() => onAddItem(day.key)}
+        onSetFare={onSetFare}
+        onZoom={onZoomStop}
+        onStartPlan={onStartPlan}
+      />
     </div>
   );
 }

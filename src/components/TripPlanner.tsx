@@ -22,7 +22,6 @@ import {
 import CityPanel from './CityPanel';
 import PlanBuilder, { type Preview } from './PlanBuilder';
 import DaysTab from './DaysTab';
-import BuilderTab from './BuilderTab';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
 import TripPicker from './TripPicker';
@@ -42,7 +41,7 @@ const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
  */
 const HOVER_SETTLE_MS = 220;
 
-type Tab = 'map' | 'cities' | 'stay' | 'days' | 'build' | 'list' | 'notes';
+type Tab = 'map' | 'cities' | 'stay' | 'days' | 'list' | 'notes';
 
 /** The tab strip, in order. The map is first and is the default view. */
 const TABS: [Tab, string, string][] = [
@@ -50,7 +49,6 @@ const TABS: [Tab, string, string][] = [
   ['cities', 'Cities', 'ph-buildings'],
   ['stay', 'Stay', 'ph-bed'],
   ['days', 'Days', 'ph-calendar-blank'],
-  ['build', 'Build', 'ph-squares-four'],
   ['list', 'Checklist', 'ph-check-square'],
   ['notes', 'Notes', 'ph-chat-teardrop-text'],
 ];
@@ -639,7 +637,7 @@ export default function TripPlanner() {
     const stopIndex = new Map<string, number>();
     if (draft) {
       draft.stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
-    } else if (tab === 'days' || tab === 'build' || (tab === 'map' && view === 'day')) {
+    } else if (tab === 'days' || (tab === 'map' && view === 'day')) {
       // Day view is the day: its stops are numbered on the map and say their
       // names, which is the whole reason for zooming into one.
       stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
@@ -1334,6 +1332,8 @@ export default function TripPlanner() {
               plan={plan}
               fare={dayCity?.metroFare ?? 0}
               travelers={doc.trip.travelers}
+              city={dayCity}
+              anchor={buildAnchor}
               onSelectDay={(n) => {
                 setDay(n);
                 const c = d.schedule[n - 1]?.city;
@@ -1346,20 +1346,9 @@ export default function TripPlanner() {
               onMoveItem={store.moveDayItem}
               onZoomDay={() => showDay(day)}
               onZoomStop={(ll) => showOnMap(ll, 16.5)}
-            />
-          ) : null}
-
-          {tab === 'build' ? (
-            <BuilderTab
-              day={dayEntry}
-              city={dayCity}
-              anchor={buildAnchor}
-              metroFare={dayCity?.metroFare ?? 0}
-              travelers={doc.trip.travelers}
-              onApplyPreset={applyPreset}
               onAddStop={addStopFromPlace}
+              onApplyPreset={applyPreset}
               onSetFare={(f) => dayCity && store.setCity(dayCity.id, 'metroFare', f)}
-              onZoom={(ll) => showOnMap(ll, 16)}
               onStartPlan={() => dayCity && startPlan(dayCity.id)}
             />
           ) : null}
