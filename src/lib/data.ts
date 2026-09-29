@@ -35,10 +35,10 @@ export type PlaceKind = 'eat' | 'do' | 'stay' | 'other';
  * place is a disc, so the two never have to be told apart from each other.
  */
 export const PLACE_KINDS: { id: PlaceKind; label: string; icon: string; color: string }[] = [
-  { id: 'eat', label: 'Eat', icon: 'ph-fork-knife', color: '#f2545b' },
-  { id: 'do', label: 'Do', icon: 'ph-camera', color: '#37c46f' },
-  { id: 'stay', label: 'Stay', icon: 'ph-bed', color: '#9184d9' },
-  { id: 'other', label: 'Other', icon: 'ph-map-pin', color: '#9184d9' },
+  { id: 'eat', label: 'Eat', icon: 'ph-fork-knife', color: '#d8402f' },
+  { id: 'do', label: 'Do', icon: 'ph-camera', color: '#22885a' },
+  { id: 'stay', label: 'Stay', icon: 'ph-bed', color: '#7a58a8' },
+  { id: 'other', label: 'Other', icon: 'ph-map-pin', color: '#7a58a8' },
 ];
 
 export function placeKind(kind: PlaceKind): (typeof PLACE_KINDS)[number] {
@@ -62,10 +62,18 @@ export interface Place {
   /** Where to read more — a listing, a menu, a map link. */
   url: string;
   ll: LatLng | null;
+  /** Weekdays it is shut all day, 0 = Sunday, as `Date.getDay()` counts them. */
+  shutDays: number[];
+  /** "09:00" / "17:00"; blank means the hours are not known. */
+  opens: string;
+  closes: string;
 }
 
 export function blankPlace(kind: PlaceKind = 'eat'): Place {
-  return { id: uid(), name: '', addr: '', note: '', kind, band: '', images: [], url: '', ll: null };
+  return {
+    id: uid(), name: '', addr: '', note: '', kind, band: '', images: [], url: '', ll: null,
+    shutDays: [], opens: '', closes: '',
+  };
 }
 
 export interface City {
@@ -93,6 +101,10 @@ export interface City {
   /** A single metro/bus fare here, per person — prices the day's transit legs. */
   metroFare: number;
   foodPer: number;
+  /** What this city spends in, as a code from `CURRENCIES` ('' = dollars only). */
+  currency: string;
+  /** Units of that currency per dollar, typed in by hand. 0 means use the day's. */
+  rate: number;
   places: Place[];
   /**
    * Ids of the ready-made shortlists this city has already been given. Kept so
@@ -182,6 +194,8 @@ export function blankCity(name: string, ll: LatLng | null = null): City {
     airportFare: 0,
     metroFare: 0,
     foodPer: 0,
+    currency: '',
+    rate: 0,
     places: [],
     packs: [],
   };

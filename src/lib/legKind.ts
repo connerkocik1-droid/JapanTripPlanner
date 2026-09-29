@@ -27,11 +27,11 @@ export function isFlightLeg(transitName: string | undefined): boolean {
 export type LegKind = 'flight' | 'rail' | 'metro' | 'walk' | 'other';
 
 export const LEG_STYLE: Record<LegKind, { color: string; dashed: boolean; label: string }> = {
-  flight: { color: '#4f9dfd', dashed: true, label: 'Flight' },
-  rail: { color: '#1faa5a', dashed: false, label: 'Train' },
-  metro: { color: '#eab308', dashed: false, label: 'Metro' },
-  walk: { color: '#ef4444', dashed: true, label: 'Walk' },
-  other: { color: '#9184d9', dashed: true, label: 'Travel' },
+  flight: { color: '#2f7fe0', dashed: true, label: 'Flight' },
+  rail: { color: '#12874a', dashed: false, label: 'Train' },
+  metro: { color: '#d19100', dashed: false, label: 'Metro' },
+  walk: { color: '#dc3c30', dashed: true, label: 'Walk' },
+  other: { color: '#7a58a8', dashed: true, label: 'Travel' },
 };
 
 /** A routed hop: on foot, on the metro, or on something long and fast enough to be rail. */

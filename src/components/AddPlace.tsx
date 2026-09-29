@@ -143,7 +143,7 @@ export default function AddPlace({ onAdd, onLocate }: AddPlaceProps) {
           {said ? (
             <div
               className="mono"
-              style={{ ...label, color: said.tone === 'good' ? 'var(--color-accent-300)' : '#ffc46b' }}
+              style={{ ...label, color: said.tone === 'good' ? 'var(--color-accent-300)' : 'var(--color-warn)' }}
             >
               {said.text}
             </div>

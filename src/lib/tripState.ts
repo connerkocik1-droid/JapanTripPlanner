@@ -96,6 +96,11 @@ function fillCity(city: City): City {
       ...p,
       images: strings(p?.images),
       url: typeof p?.url === 'string' ? p.url : '',
+      // Weekday indices only: anything else in the slot would reach
+      // `WEEKDAYS_LONG[d]` and print "Closed on undefined".
+      shutDays: Array.isArray(p?.shutDays)
+        ? p.shutDays.filter((n): n is number => Number.isInteger(n) && n >= 0 && n <= 6)
+        : [],
     })),
     packs: strings(city?.packs),
   };
@@ -170,7 +175,8 @@ export interface TripStore {
   setCity: <K extends keyof City>(id: string, key: K, val: City[K]) => void;
 
   setHotel: <K extends keyof Hotel>(cityId: string, hotelId: string, key: K, val: Hotel[K]) => void;
-  addHotelSlot: (cityId: string) => void;
+  /** Appends a blank option and hands back its id, so the caller can open it. */
+  addHotelSlot: (cityId: string) => string;
 
   addPlace: (cityId: string) => string;
   /** Pin several at once, skipping names already pinned. Returns what was added. */
@@ -526,7 +532,9 @@ export function useTripStore(): TripStore {
 
   const addHotelSlot = useCallback(
     (cityId: string) => {
-      edit(`${cityId}/hotels`, (d) => mapCity(d, cityId, (c) => ({ ...c, hotels: [...c.hotels, blankHotel()] })));
+      const hotel = blankHotel();
+      edit(`${cityId}/hotels`, (d) => mapCity(d, cityId, (c) => ({ ...c, hotels: [...c.hotels, hotel] })));
+      return hotel.id;
     },
     [edit],
   );

@@ -6,13 +6,18 @@ import { fmtUsd, money } from '@/lib/format';
 import { Touch } from '@/lib/tripState';
 import TouchMark, { touchStyle } from './TouchMark';
 import { GeoStatus, NumField, ghostBtn, label, useGeocodedAddress } from './fields';
+import { Local } from './CityMoney';
+import type { Rates } from '@/lib/money';
 
 export interface StayTabProps {
   cities: City[];
+  /** The day's exchange rates, for what a night comes to where it is paid. */
+  rates: Rates | null;
   /** Nothing is active until someone presses the button on an option. */
   onSetActive: (cityId: string, hotelId: string | null) => void;
   onHotel: <K extends keyof Hotel>(cityId: string, hotelId: string, key: K, val: Hotel[K]) => void;
-  onAddHotel: (cityId: string) => void;
+  /** Adds a blank option and returns its id, so it can be opened straight away. */
+  onAddHotel: (cityId: string) => string;
   onZoom: (ll: LatLng, zoom: number) => void;
   touch: (path: string) => Touch | undefined;
 }
@@ -23,8 +28,16 @@ export interface StayTabProps {
  * is the one the budget counts and the one the map marks brightest.
  */
 export default function StayTab({
-  cities, onSetActive, onHotel, onAddHotel, onZoom, touch,
+  cities, rates, onSetActive, onHotel, onAddHotel, onZoom, touch,
 }: StayTabProps) {
+  /**
+   * Blank options the traveler has asked to see. A city ships with three empty
+   * slots and they are not drawn until there is something to put in one, so
+   * "another option" either opens a slot that already exists or makes one.
+   */
+  const [opened, setOpened] = useState<string[]>([]);
+  const reveal = (id: string) => setOpened((ids) => (ids.includes(id) ? ids : [...ids, id]));
+
   if (cities.length === 0) {
     return (
       <div
@@ -45,6 +58,17 @@ export default function StayTab({
     <>
       {cities.map((city) => {
         const active = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
+        /*
+         * Every city ships with three blank slots. A slot nobody has filled in
+         * is not an option, so it is not drawn as one — the button below adds
+         * a card when there is something to put in it. A blank slot that is
+         * somehow active stays, so nothing can make the budget's hotel vanish.
+         */
+        const filled = (h: Hotel) =>
+          Boolean(h.name.trim() || h.cost || h.addr.trim() || h.url.trim());
+        const options = city.hotels.filter(
+          (h) => filled(h) || h.id === city.hotelSel || opened.includes(h.id),
+        );
         return (
           <div key={city.id} style={{ marginBottom: 16 }}>
             <div
@@ -57,23 +81,30 @@ export default function StayTab({
                 <div style={{ fontSize: 15, fontWeight: 500 }}>{city.name}</div>
                 <div className="mono" style={{ ...label, fontSize: 9 }}>
                   {city.nights} {city.nights === 1 ? 'night' : 'nights'} ·{' '}
-                  {city.hotels.filter((h) => h.name.trim()).length || 'no'} options
+                  {options.length || 'no'} {options.length === 1 ? 'option' : 'options'}
                 </div>
               </div>
-              <div className="mono num" style={{ ...label, fontSize: 9, textAlign: 'right', flex: 'none' }}>
-                {active
-                  ? fmtUsd((Number(active.cost) || 0) * city.nights) + ' total'
-                  : 'none active'}
+              <div style={{ flex: 'none' }}>
+                <div className="mono num" style={{ ...label, fontSize: 9, textAlign: 'right' }}>
+                  {active
+                    ? fmtUsd((Number(active.cost) || 0) * city.nights) + ' total'
+                    : 'none active'}
+                </div>
+                {active ? (
+                  <Local usd={(Number(active.cost) || 0) * city.nights} city={city} rates={rates} />
+                ) : null}
               </div>
             </div>
 
             <div style={{ display: 'grid', gap: 7 }}>
-              {city.hotels.map((h, i) => (
+              {options.map((h, i) => (
                 <StayCard
                   key={h.id}
                   index={i}
                   hotel={h}
                   nights={city.nights}
+                  city={city}
+                  rates={rates}
                   active={city.hotelSel === h.id}
                   onToggle={() => {
                     const turningOn = city.hotelSel !== h.id;
@@ -90,7 +121,14 @@ export default function StayTab({
               ))}
             </div>
 
-            <button className="tap" onClick={() => onAddHotel(city.id)} style={ghostBtn}>
+            <button
+              className="tap"
+              onClick={() => {
+                const spare = city.hotels.find((h) => !options.includes(h));
+                reveal(spare ? spare.id : onAddHotel(city.id));
+              }}
+              style={ghostBtn}
+            >
               <i className="ph ph-plus" style={{ fontSize: 12 }} /> Another option in {city.name}
             </button>
           </div>
@@ -101,11 +139,14 @@ export default function StayTab({
 }
 
 function StayCard({
-  index, hotel, nights, active, onToggle, onShow, onField, touch,
+  index, hotel, nights, city, rates, active, onToggle, onShow, onField, touch,
 }: {
   index: number;
   hotel: Hotel;
   nights: number;
+  /** The city this option is in — what its currency and rate are read from. */
+  city: City;
+  rates: Rates | null;
   active: boolean;
   onToggle: () => void;
   onShow: () => void;
@@ -122,7 +163,7 @@ function StayCard({
       style={{
         borderRadius: 'var(--radius-md)',
         border: '1px solid ' + (active ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
-        background: active ? 'rgba(145,132,217,.10)' : 'var(--color-surface)',
+        background: active ? 'var(--tint-accent)' : 'var(--color-surface)',
         transition: 'background-color .16s ease, border-color .16s ease',
         ...(touchStyle(touch) ?? {}),
       }}
@@ -134,7 +175,7 @@ function StayCard({
             flex: 'none', width: 26, height: 26, borderRadius: 9999,
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13,
             // Grey until it is the active option, matching the map's pins.
-            color: active ? '#241f3d' : 'var(--color-neutral-400)',
+            color: active ? 'var(--color-on-accent)' : 'var(--color-neutral-400)',
             background: active ? 'var(--color-accent-400)' : 'var(--color-neutral-800)',
           }}
         >
@@ -199,7 +240,7 @@ function StayCard({
             flex: 1, minHeight: 40, borderRadius: 'var(--radius-sm)', cursor: 'pointer',
             border: '1px solid ' + (active ? 'var(--color-accent-400)' : 'var(--color-neutral-700)'),
             background: active ? 'var(--color-accent-400)' : 'transparent',
-            color: active ? '#241f3d' : 'var(--color-neutral-300)',
+            color: active ? 'var(--color-on-accent)' : 'var(--color-neutral-300)',
             fontSize: 12, fontWeight: 600,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}
@@ -264,8 +305,11 @@ function StayCard({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 44 }}>
             <div className="mono" style={{ ...label, flex: 'none' }}>$ / night</div>
             <NumField value={hotel.cost} onChange={(v) => onField('cost', v)} aria="Cost per night" />
-            <div className="mono num" style={{ ...label, marginLeft: 'auto' }}>
-              {fmtUsd(nightly * nights)} for {nights} {nights === 1 ? 'night' : 'nights'}
+            <div style={{ marginLeft: 'auto' }}>
+              <div className="mono num" style={{ ...label, textAlign: 'right' }}>
+                {fmtUsd(nightly * nights)} for {nights} {nights === 1 ? 'night' : 'nights'}
+              </div>
+              <Local usd={nightly * nights} city={city} rates={rates} />
             </div>
           </div>
 

@@ -14,15 +14,15 @@ export const PEOPLE: Record<PersonId, Person> = {
     id: 'conner',
     name: 'Conner',
     initial: 'C',
-    color: '#4c8dff',
-    glow: 'rgba(76,141,255,.16)',
+    color: '#2f6fd0',
+    glow: 'rgba(47,111,208,.12)',
   },
   anasophia: {
     id: 'anasophia',
     name: 'Anasophia',
     initial: 'A',
-    color: '#ff5fa2',
-    glow: 'rgba(255,95,162,.16)',
+    color: '#cf3f78',
+    glow: 'rgba(207,63,120,.12)',
   },
 };
 

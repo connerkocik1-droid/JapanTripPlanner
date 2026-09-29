@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { City, DEFAULT_DWELL, LatLng, Place, placeKind, uid } from '@/lib/data';
 import { planDay } from '@/lib/dayPlan';
+import { tripDayOn } from '@/lib/today';
 import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
@@ -14,6 +15,7 @@ import { useAutoPacks } from '@/lib/autoPacks';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
+import { useRates } from '@/lib/money';
 import type { MapFocus, MapLeg, MapPin } from './TripMap';
 import { legOf, useDayRoute, type Stop } from '@/lib/useDayRoute';
 import {
@@ -22,7 +24,7 @@ import {
 import CityPanel from './CityPanel';
 import PlanBuilder, { type Preview } from './PlanBuilder';
 import DaysTab from './DaysTab';
-import BuilderTab from './BuilderTab';
+import TodayTab from './TodayTab';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
 import TripPicker from './TripPicker';
@@ -42,16 +44,16 @@ const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
  */
 const HOVER_SETTLE_MS = 220;
 
-type Tab = 'map' | 'cities' | 'stay' | 'days' | 'build' | 'list' | 'notes';
+type Tab = 'map' | 'today' | 'cities' | 'stay' | 'days' | 'list' | 'notes';
 
 /** The tab strip, in order. The map is first and is the default view. */
 const TABS: [Tab, string, string][] = [
   ['map', 'Map', 'ph-map-trifold'],
+  ['today', 'Today', 'ph-sun-horizon'],
   ['cities', 'Cities', 'ph-buildings'],
   ['stay', 'Stay', 'ph-bed'],
   ['days', 'Days', 'ph-calendar-blank'],
-  ['build', 'Build', 'ph-squares-four'],
-  ['list', 'Checklist', 'ph-check-square'],
+  ['list', 'List', 'ph-check-square'],
   ['notes', 'Notes', 'ph-chat-teardrop-text'],
 ];
 
@@ -64,6 +66,10 @@ const SEG_FILL: Record<string, string> = {
 export default function TripPlanner() {
   const store = useTripStore();
   const { doc } = store;
+
+  // One rate a day, shared by every city that spends in something other than
+  // dollars. Nothing waits on it: without an answer the figures stay in dollars.
+  const { rates, stale: ratesStale } = useRates();
 
   // A city whose shortlist ships with the app gets it pinned on its own, and
   // anything still missing its coordinates is resolved in the background.
@@ -284,6 +290,28 @@ export default function TripPlanner() {
   );
 
   const dayEntry = d.schedule[Math.min(Math.max(1, day), Math.max(1, d.schedule.length)) - 1] ?? null;
+
+  /**
+   * Which day of the trip today is, or null when the trip has not started or
+   * is over. Read once per render off the device clock — a trip is days long,
+   * so nothing here needs to notice midnight passing mid-session.
+   */
+  const todayN = tripDayOn(doc.trip.start, d.schedule.length);
+
+  /**
+   * On the trip, the app opens on the day you are in rather than on the whole
+   * plan — that is the point of Today. Once only, and only before anything has
+   * been tapped, so it never pulls you off a tab you chose.
+   */
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current || !store.ready || todayN === null) return;
+    landed.current = true;
+    setTab('today');
+    setDay(todayN);
+    const c = d.schedule[todayN - 1]?.city;
+    if (c) setCityId(c.id);
+  }, [store.ready, todayN, d.schedule]);
 
   /**
    * The planned day as an ordered list of located stops. Only stops get routed —
@@ -639,7 +667,7 @@ export default function TripPlanner() {
     const stopIndex = new Map<string, number>();
     if (draft) {
       draft.stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
-    } else if (tab === 'days' || tab === 'build' || (tab === 'map' && view === 'day')) {
+    } else if (tab === 'days' || (tab === 'map' && view === 'day')) {
       // Day view is the day: its stops are numbered on the map and say their
       // names, which is the whole reason for zooming into one.
       stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
@@ -812,8 +840,8 @@ export default function TripPlanner() {
       {/* Header — opaque and in the flow, so nothing sits over the map. */}
       <div
         style={{
-          flex: 'none', position: 'relative', zIndex: 9, background: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-neutral-900)',
+          flex: 'none', position: 'relative', zIndex: 9, background: 'var(--color-surface)',
+          borderBottom: '1px solid var(--color-neutral-800)',
           padding: 'calc(var(--safe-top) + 12px) calc(var(--safe-right) + 16px) 0 calc(var(--safe-left) + 16px)',
         }}
       >
@@ -824,11 +852,17 @@ export default function TripPlanner() {
           <span
             style={{
               width: 5, height: 5, borderRadius: 9999,
-              background: 'var(--color-accent-400)', animation: 'blip 2.2s ease-in-out infinite',
+              background: 'var(--color-accent-400)',
             }}
           />
           {doc.trip.travelers} {doc.trip.travelers === 1 ? 'traveler' : 'travelers'}
-          {d.schedule.length ? ` · ${d.schedule.length} days` : ' · nothing planned yet'}
+          {/*
+            * The date range says how many days the trip is, so it is here
+            * rather than on a line of its own saying the same thing twice.
+            */}
+          {d.schedule.length
+            ? ` · ${fmtD(dateOf(doc.trip.start, 0))} – ${fmtD(dateOf(doc.trip.start, d.schedule.length - 1))}`
+            : ' · nothing planned yet'}
           <span style={{ flex: 1 }} />
           {!online ? (
             <span
@@ -865,7 +899,8 @@ export default function TripPlanner() {
           >
             <span
               style={{
-                fontSize: 20, fontWeight: 500, lineHeight: 1.15,
+                fontFamily: 'var(--font-display)', fontSize: 23, fontWeight: 600, lineHeight: 1.15,
+                letterSpacing: '-0.01em',
                 color: doc.trip.name ? 'var(--color-text)' : 'var(--color-neutral-600)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}
@@ -900,15 +935,6 @@ export default function TripPlanner() {
           </div>
         </div>
 
-        {d.schedule.length ? (
-          <div
-            className="mono"
-            style={{ fontSize: 9.5, color: 'var(--color-neutral-400)', marginTop: 5, whiteSpace: 'nowrap' }}
-          >
-            {fmtD(dateOf(doc.trip.start, 0))} – {fmtD(dateOf(doc.trip.start, d.schedule.length - 1))}
-          </div>
-        ) : null}
-
         {/* The running total; the breakdown it opens lives on the Cities tab. */}
         <button
           className="tap"
@@ -934,16 +960,6 @@ export default function TripPlanner() {
                 : 'no budget set'}
             </span>
           </div>
-          <div
-            style={{
-              display: 'flex', height: 4, borderRadius: 9999, overflow: 'hidden',
-              background: 'var(--color-neutral-900)', marginTop: 7,
-            }}
-          >
-            {segments.map((s) => (
-              <div key={s.label} style={{ width: s.pct, background: SEG_FILL[s.label] }} />
-            ))}
-          </div>
         </button>
 
         <div className="tab-strip" role="tablist" aria-label="Sections">
@@ -959,6 +975,14 @@ export default function TripPlanner() {
                 onClick={() => {
                   setTab(id);
                   if (id !== 'map') setFocus(null);
+                  // Today follows one day and has no day picker, so opening it
+                  // moves the selection to the day it is about.
+                  if (id === 'today') {
+                    const n = todayN ?? 1;
+                    setDay(n);
+                    const c = d.schedule[n - 1]?.city;
+                    if (c) setCityId(c.id);
+                  }
                 }}
               >
                 <i className={'ph ' + icon} />
@@ -1099,8 +1123,9 @@ export default function TripPlanner() {
             style={{
               position: 'absolute', right: 12, bottom: 'calc(var(--safe-bottom) + 14px)', zIndex: 5,
               minHeight: 38, padding: '0 14px', borderRadius: 9999, cursor: 'pointer',
-              background: 'rgba(35,37,50,.94)', backdropFilter: 'blur(12px)',
-              border: '1px solid var(--color-accent-700)', color: 'var(--color-accent-200)',
+              background: 'rgba(255,253,249,.94)', backdropFilter: 'blur(12px)',
+              border: '1px solid var(--color-accent-600)', color: 'var(--color-accent-200)',
+              boxShadow: 'var(--shadow-card)',
               fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6,
             }}
           >
@@ -1148,7 +1173,8 @@ export default function TripPlanner() {
               <div
                 style={{
                   marginTop: 12, padding: '11px 13px', pointerEvents: 'auto',
-                  background: 'rgba(35,37,50,.92)', border: '1px solid var(--color-neutral-800)',
+                  background: 'var(--color-surface)', border: '1px solid var(--color-neutral-800)',
+                  boxShadow: 'var(--shadow-card)',
                   borderRadius: 'var(--radius-md)',
                 }}
               >
@@ -1229,6 +1255,8 @@ export default function TripPlanner() {
                     city={c}
                     spend={d.spend[c.id]}
                     travelers={doc.trip.travelers}
+                    rates={rates}
+                    ratesStale={ratesStale}
                     onCity={(key, val) => store.setCity(c.id, key, val)}
                     onOpenStay={() => setTab('stay')}
                     onAddPlaces={(places) => store.addPlaces(c.id, places)}
@@ -1314,11 +1342,29 @@ export default function TripPlanner() {
 {tab === 'stay' ? (
             <StayTab
               cities={doc.cities}
+              rates={rates}
               onSetActive={(cid, hid) => store.setCity(cid, 'hotelSel', hid)}
               onHotel={(cid, hid, key, val) => store.setHotel(cid, hid, key, val)}
               onAddHotel={(cid) => store.addHotelSlot(cid)}
               onZoom={showOnMap}
               touch={store.touch}
+            />
+          ) : null}
+
+          {tab === 'today' ? (
+            <TodayTab
+              schedule={d.schedule}
+              start={doc.trip.start}
+              todayN={todayN}
+              dayEntry={dayEntry}
+              plan={plan}
+              hotel={dayCity ? selectedHotel(dayCity) : null}
+              city={dayCity}
+              rates={rates}
+              travelers={doc.trip.travelers}
+              onZoomStop={(ll) => showOnMap(ll, 16.5)}
+              onToggleItem={store.toggleDayItem}
+              onEditDay={() => setTab('days')}
             />
           ) : null}
 
@@ -1331,6 +1377,9 @@ export default function TripPlanner() {
               plan={plan}
               fare={dayCity?.metroFare ?? 0}
               travelers={doc.trip.travelers}
+              city={dayCity}
+              anchor={buildAnchor}
+              rates={rates}
               onSelectDay={(n) => {
                 setDay(n);
                 const c = d.schedule[n - 1]?.city;
@@ -1343,20 +1392,9 @@ export default function TripPlanner() {
               onMoveItem={store.moveDayItem}
               onZoomDay={() => showDay(day)}
               onZoomStop={(ll) => showOnMap(ll, 16.5)}
-            />
-          ) : null}
-
-          {tab === 'build' ? (
-            <BuilderTab
-              day={dayEntry}
-              city={dayCity}
-              anchor={buildAnchor}
-              metroFare={dayCity?.metroFare ?? 0}
-              travelers={doc.trip.travelers}
-              onApplyPreset={applyPreset}
               onAddStop={addStopFromPlace}
+              onApplyPreset={applyPreset}
               onSetFare={(f) => dayCity && store.setCity(dayCity.id, 'metroFare', f)}
-              onZoom={(ll) => showOnMap(ll, 16)}
               onStartPlan={() => dayCity && startPlan(dayCity.id)}
             />
           ) : null}
@@ -1416,7 +1454,7 @@ function CityRow({
           width: '100%', minHeight: 56, padding: 14, textAlign: 'left',
           borderRadius: 'var(--radius-md)',
           border: '1px solid ' + (open ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
-          background: open ? 'rgba(145,132,217,.10)' : 'var(--color-surface)',
+          background: open ? 'var(--tint-accent)' : 'var(--color-surface)',
           color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
           animation: 'riseIn .34s ease both', animationDelay: index * 60 + 'ms',
           ...(touchStyle(touch) ?? {}),
@@ -1474,7 +1512,7 @@ function SaveChip({ state, error }: { state: string; error: boolean }) {
     return (
       <span
         className="mono"
-        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, color: '#ff8fae' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, color: 'var(--color-danger)' }}
         title="This device refused to store the plan. Export a backup from the trip panel."
       >
         <i className="ph ph-warning" style={{ fontSize: 11 }} />

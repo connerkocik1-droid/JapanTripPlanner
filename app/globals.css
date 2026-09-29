@@ -1,7 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
 @import 'maplibre-gl/dist/maplibre-gl.css';
 
-/* Nocturne design tokens */
+/*
+ * Warm daylight — the trip's own palette.
+ *
+ * The app used to be a dark, blue-grey console. It is a holiday planner used
+ * on a phone in daylight, so the ground is warm paper and the map is left the
+ * colour a map is. The accent stays the lodging purple the map already speaks
+ * in, warmed towards wisteria so it sits on cream rather than on ink.
+ *
+ * Both ramps below are CONTRAST ramps, not lightness ramps: 100 is the step
+ * furthest from the page and 900 the step nearest it. That is what every use
+ * of them in this file and in the components already means, so the same
+ * `--color-neutral-500` that was muted text on ink is muted text on paper.
+ */
 :root {
   /* Safe-area insets, so the app sits right when installed to a home screen. */
   --safe-top: env(safe-area-inset-top, 0px);
@@ -9,38 +21,60 @@
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
 
-  --color-bg: #161826;
-  --color-surface: #232532;
-  --color-text: #e9e9ed;
-  --color-accent: #9184d9;
-  --color-divider: rgba(233, 233, 237, 0.16);
+  --color-bg: #fbf5ec;
+  --color-surface: #fffdf9;
+  /* A panel that has to sit over the map, opaque enough to read against it. */
+  --color-raised: #fffdf9;
+  --color-text: #2e2521;
+  --color-accent: #7a58a8;
+  --color-divider: rgba(46, 37, 33, 0.14);
 
-  --color-neutral-100: #f3f5fe;
-  --color-neutral-200: #e4e7f5;
-  --color-neutral-300: #cfd3e5;
-  --color-neutral-400: #b2b6ca;
-  --color-neutral-500: #9397ab;
-  --color-neutral-600: #75798c;
-  --color-neutral-700: #595d6c;
-  --color-neutral-800: #3f424d;
-  --color-neutral-900: #292b31;
+  /* Text that sits on a filled accent or on a place colour. */
+  --color-on-accent: #fffdf9;
 
-  --color-accent-100: #f5f4ff;
-  --color-accent-200: #e7e5fe;
-  --color-accent-300: #d2cefd;
-  --color-accent-400: #b5abfc;
-  --color-accent-500: #968ae0;
-  --color-accent-600: #796cbf;
-  --color-accent-700: #5d5294;
-  --color-accent-800: #423a6a;
-  --color-accent-900: #2b2741;
+  /* Warm greys — the same brown the paper is tinted with, so nothing greys
+     out into the blue the old theme had. */
+  --color-neutral-100: #2a221e;
+  --color-neutral-200: #3d332c;
+  --color-neutral-300: #57493f;
+  --color-neutral-400: #6f5f53;
+  --color-neutral-500: #8a7768;
+  --color-neutral-600: #a6907f;
+  --color-neutral-700: #c9b6a4;
+  --color-neutral-800: #e3d5c6;
+  --color-neutral-900: #f2e8dc;
 
-  --font-body: 'Inter', system-ui, sans-serif;
+  --color-accent-100: #3a2456;
+  --color-accent-200: #4b2f6e;
+  --color-accent-300: #5d3b87;
+  --color-accent-400: #7a58a8;
+  --color-accent-500: #9070bb;
+  --color-accent-600: #a98fcd;
+  --color-accent-700: #c6b3de;
+  --color-accent-800: #e2d7ef;
+  --color-accent-900: #f2ecf9;
+
+  /* Something is wrong, and something is worth a second look. Both are read
+     against paper, so both are deep rather than neon. */
+  --color-danger: #c0392f;
+  --color-warn: #9a6207;
+
+  /* A wash of the accent, for the row or chip that is currently chosen. */
+  --tint-accent: rgba(122, 88, 168, 0.11);
+  --tint-accent-soft: rgba(122, 88, 168, 0.07);
+
+  /* Shadows are the warm brown of the paper, never neutral black. */
+  --shadow-card: 0 1px 2px rgba(86, 62, 40, 0.06), 0 6px 18px rgba(86, 62, 40, 0.1);
+  --shadow-float: 0 2px 6px rgba(86, 62, 40, 0.1), 0 14px 34px rgba(86, 62, 40, 0.18);
+  --shadow-pin: 0 1px 3px rgba(60, 42, 26, 0.3);
+
+  --font-body: 'Nunito', 'Inter', system-ui, sans-serif;
+  --font-display: 'Fraunces', 'Nunito', Georgia, serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 14px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
 }
 
 * { box-sizing: border-box; }
@@ -95,7 +129,7 @@ select {
 }
 
 a { color: var(--color-accent); }
-a:hover { color: var(--color-accent-400); }
+a:hover { color: var(--color-accent-300); }
 
 input, button, textarea { font-family: inherit; }
 input[type='text'], input[type='url'], input[type='number'] {
@@ -107,8 +141,12 @@ input[type='text'], input[type='url'], input[type='number'] {
 input::placeholder { color: var(--color-neutral-600); }
 
 .mono {
-  font-family: var(--font-mono);
-  letter-spacing: 0.1em;
+  /* Once a spaced-out monospace readout. It labels things all over the app,
+     so it carries a lot of the tone: now the body face, a little bolder and
+     barely tracked, which reads as a caption rather than as telemetry. */
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: 0.045em;
   text-transform: uppercase;
 }
 .num { font-variant-numeric: tabular-nums; }
@@ -121,7 +159,6 @@ input::placeholder { color: var(--color-neutral-600); }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes countUp { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-@keyframes blip { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
 @keyframes ticker {
   0% { opacity: 0; transform: translateY(6px); }
   8%, 92% { opacity: 1; transform: none; }
@@ -129,46 +166,49 @@ input::placeholder { color: var(--color-neutral-600); }
 }
 @keyframes reticle { to { transform: rotate(360deg); } }
 @keyframes pulseRing {
-  0% { box-shadow: 0 0 0 0 rgba(145, 132, 217, 0.5); }
-  70% { box-shadow: 0 0 0 16px rgba(145, 132, 217, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(145, 132, 217, 0); }
-}
-@keyframes sweep {
-  0% { transform: translateY(-16%); opacity: 0; }
-  12%, 88% { opacity: 0.5; }
-  100% { transform: translateY(116%); opacity: 0; }
+  0% { box-shadow: 0 0 0 0 rgba(122, 88, 168, 0.45); }
+  70% { box-shadow: 0 0 0 16px rgba(122, 88, 168, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(122, 88, 168, 0); }
 }
 
 /* --- tabs --------------------------------------------------------------- */
-/* Navigation is a strip under the header rather than a menu over the map. */
+/*
+ * Navigation is a strip under the header rather than a menu over the map.
+ *
+ * Every tab has to be on screen at once. Side by side, an icon and a label
+ * ran to about 95px a tab, so four of the seven fitted across a phone and
+ * Days — the tab the trip is planned in — was behind a sideways swipe. Icon
+ * over label is the shape that fits seven, and it is what a phone's own tab
+ * bars do, so nothing has to be discovered.
+ */
 .tab-strip {
   display: flex;
-  gap: 2px;
+  gap: 0;
   margin-top: 10px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
 }
 .tab-btn {
-  flex: none;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 5px;
-  min-height: 42px;
-  padding: 0 11px;
+  justify-content: center;
+  gap: 2px;
+  min-height: 46px;
+  padding: 0 2px;
   border: none;
   border-bottom: 2px solid transparent;
   background: none;
   color: var(--color-neutral-500);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 9.5px;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  scroll-snap-align: center;
 }
-.tab-btn i { font-size: 14px; }
+.tab-btn i { font-size: 17px; }
 .tab-btn:hover { color: var(--color-neutral-300); }
 .tab-btn.is-on {
-  color: var(--color-accent-100);
+  color: var(--color-accent-200);
   border-bottom-color: var(--color-accent-400);
 }
 
@@ -187,7 +227,7 @@ input::placeholder { color: var(--color-neutral-600); }
   gap: 10px;
   padding: 6px calc(var(--safe-right) + 12px) 6px calc(var(--safe-left) + 12px);
   background: var(--color-bg);
-  border-bottom: 1px solid var(--color-neutral-900);
+  border-bottom: 1px solid var(--color-neutral-800);
 }
 .view-seg {
   flex: none;
@@ -196,7 +236,7 @@ input::placeholder { color: var(--color-neutral-600); }
   padding: 2px;
   border-radius: 9999px;
   border: 1px solid var(--color-neutral-800);
-  background: var(--color-surface);
+  background: var(--color-neutral-900);
 }
 .view-btn {
   display: flex;
@@ -215,8 +255,8 @@ input::placeholder { color: var(--color-neutral-600); }
 }
 .view-btn i { font-size: 13px; }
 .view-btn.is-on {
-  background: var(--color-accent-700);
-  color: var(--color-accent-100);
+  background: var(--color-accent-400);
+  color: var(--color-on-accent);
 }
 
 .view-step {
@@ -236,13 +276,13 @@ input::placeholder { color: var(--color-neutral-600); }
   border-radius: 9999px;
   border: 1px solid var(--color-neutral-800);
   background: none;
-  color: var(--color-accent-200);
+  color: var(--color-accent-300);
   font-size: 14px;
   cursor: pointer;
 }
 .view-arrow:disabled {
-  color: var(--color-neutral-800);
-  border-color: var(--color-neutral-900);
+  color: var(--color-neutral-700);
+  border-color: var(--color-neutral-800);
   cursor: default;
 }
 /* Fixed width, so stepping from Seoul to Tokyo doesn't move the arrows. */
@@ -280,38 +320,17 @@ input::placeholder { color: var(--color-neutral-600); }
 .map-canvas {
   position: absolute;
   inset: 0;
-  background: linear-gradient(165deg, #1d2034 0%, #141627 55%, #101220 100%);
+  background: linear-gradient(165deg, #f6efe3 0%, #f1e7d8 55%, #ece0cf 100%);
 }
-.maplibregl-map { background: #141627; font-family: var(--font-body); }
-.maplibregl-canvas { filter: invert(1) grayscale(1) brightness(0.82) contrast(0.95); }
+/*
+ * The basemap is left the colour a map is. It used to be inverted to grey to
+ * match a dark shell, which is what made the app read as a console rather
+ * than as somewhere you are going.
+ */
+.maplibregl-map { background: #f1e7d8; font-family: var(--font-body); }
+.maplibregl-canvas { filter: saturate(1.04); }
 .maplibregl-ctrl-attrib, .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { display: none; }
 
-.map-tint {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: var(--color-bg);
-  opacity: 0.42;
-  mix-blend-mode: color;
-}
-.map-glow {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: radial-gradient(60% 40% at 50% 45%, rgba(145, 132, 217, 0.18), transparent 70%);
-}
-.map-sweep {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 22%;
-  z-index: 2;
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent, rgba(145, 132, 217, 0.13), transparent);
-  animation: sweep 7.5s linear infinite;
-}
 /* The only two things allowed over the map, and both only on the Map tab. */
 .map-empty {
   position: absolute;
@@ -324,8 +343,8 @@ input::placeholder { color: var(--color-neutral-600); }
   text-align: center;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-neutral-800);
-  background: rgba(27, 30, 46, 0.95);
-  box-shadow: 0 12px 30px rgba(8, 9, 18, 0.5);
+  background: var(--color-raised);
+  box-shadow: var(--shadow-float);
 }
 .map-toggle {
   position: absolute;
@@ -341,8 +360,9 @@ input::placeholder { color: var(--color-neutral-600); }
   max-width: calc(100% - 28px);
   border-radius: 9999px;
   border: 1px solid var(--color-neutral-800);
-  background: rgba(35, 37, 50, 0.94);
+  background: rgba(255, 253, 249, 0.94);
   backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
   color: var(--color-accent-200);
   font-size: 11.5px;
   white-space: nowrap;
@@ -380,8 +400,9 @@ input::placeholder { color: var(--color-neutral-600); }
   width: 11px;
   height: 11px;
   border-radius: 9999px;
-  background: #6d5fc0;
-  border: 2px solid #161826;
+  background: var(--color-accent-400);
+  border: 2px solid var(--color-on-accent);
+  box-shadow: var(--shadow-pin);
   margin: 0 auto;
   pointer-events: auto;
 }
@@ -397,8 +418,8 @@ input::placeholder { color: var(--color-neutral-600); }
   position: relative;
   width: 15px;
   height: 15px;
-  background: #b5abfc;
-  border-color: #e9e9ed;
+  background: var(--color-accent-400);
+  border-color: var(--color-on-accent);
   animation: pulseRing 2.8s ease-out infinite;
 }
 .trip-pin .tp-ret { display: none; }
@@ -411,7 +432,7 @@ input::placeholder { color: var(--color-neutral-600); }
   height: 44px;
   margin: -16px 0 0 -22px;
   border-radius: 9999px;
-  border: 1px dashed rgba(181, 171, 252, 0.75);
+  border: 1.5px dashed rgba(122, 88, 168, 0.8);
   border-right-color: transparent;
   border-bottom-color: transparent;
   animation: reticle 6s linear infinite;
@@ -440,16 +461,16 @@ input::placeholder { color: var(--color-neutral-600); }
   margin-top: 5px;
   font-size: 11px;
   font-weight: 500;
-  color: #c9cbd8;
+  color: var(--color-neutral-200);
   white-space: nowrap;
-  text-shadow: 0 1px 4px rgba(16, 18, 32, 0.9);
+  text-shadow: 0 0 3px #fbf5ec, 0 0 6px #fbf5ec, 0 1px 3px rgba(251, 245, 236, 0.95);
 }
-.trip-pin.is-sel .tp-name { font-size: 12.5px; color: #e9e9ed; }
+.trip-pin.is-sel .tp-name { font-size: 12.5px; color: var(--color-neutral-100); }
 .trip-pin .tp-sub {
   font-size: 9.5px;
-  color: #9397ab;
+  color: var(--color-neutral-400);
   white-space: nowrap;
-  text-shadow: 0 1px 4px rgba(16, 18, 32, 0.9);
+  text-shadow: 0 0 3px #fbf5ec, 0 0 6px #fbf5ec;
 }
 
 /* --- print -------------------------------------------------------------- */
@@ -461,7 +482,7 @@ input::placeholder { color: var(--color-neutral-600); }
   #trip-print {
     display: block !important;
     position: static;
-    color: #161826;
+    color: #2e2521;
     font-family: var(--font-body);
   }
   #trip-print .pc { break-inside: avoid; page-break-inside: avoid; }
@@ -478,41 +499,41 @@ input::placeholder { color: var(--color-neutral-600); }
   font-size: 10.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: #161826;
+  color: var(--color-on-accent);
   background: var(--color-accent-400);
-  border: 1.5px solid #161826;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  border: 2px solid var(--color-on-accent);
+  box-shadow: var(--shadow-pin);
 }
 .trip-pin .tp-dot.tp-icon {
   background: var(--color-surface);
   color: var(--color-accent-300);
-  border-color: var(--color-accent-700);
+  border-color: var(--color-accent-500);
   font-size: 11px;
 }
-.trip-pin.is-stop .tp-name { color: #e9e9ed; }
+.trip-pin.is-stop .tp-name { color: var(--color-neutral-100); }
 .trip-pin.is-sub .tp-name { font-size: 10px; }
 
 /* --- hotels ------------------------------------------------------------- */
 /* Purple is reserved for the option feeding the budget; the rest of the
    shortlist sits back in grey so the choice is obvious at a glance. */
 .trip-pin .tp-dot.tp-hotel {
-  background: var(--color-neutral-700);
-  color: var(--color-neutral-200);
-  border-color: var(--color-neutral-500);
-  box-shadow: 0 2px 8px rgba(8, 9, 18, 0.55);
+  background: var(--color-surface);
+  color: var(--color-neutral-400);
+  border-color: var(--color-neutral-700);
+  box-shadow: var(--shadow-pin);
 }
 .trip-pin .tp-dot.tp-hotel.is-pick {
   background: var(--color-accent-400);
-  color: #241f3d;
-  border-color: var(--color-neutral-100);
-  box-shadow: 0 2px 10px rgba(145, 132, 217, 0.55);
+  color: var(--color-on-accent);
+  border-color: var(--color-on-accent);
+  box-shadow: 0 0 0 1px var(--color-accent-500), var(--shadow-pin);
 }
 .trip-pin.is-hotel .tp-name { color: var(--color-neutral-400); }
 .trip-pin.is-hotel.is-pick .tp-name { color: var(--color-accent-200); }
 .trip-pin.is-hotel:hover .tp-dot.tp-hotel,
 .trip-pin.is-hotel.is-open .tp-dot.tp-hotel {
   transform: scale(1.14);
-  border-color: var(--color-neutral-100);
+  border-color: var(--color-accent-400);
 }
 .trip-pin .tp-dot.tp-hotel { transition: transform 0.14s ease, border-color 0.14s ease; }
 
@@ -524,23 +545,23 @@ input::placeholder { color: var(--color-neutral-600); }
   background: var(--color-surface);
   color: var(--pin, var(--color-accent-300));
   border-color: var(--pin, var(--color-accent-700));
-  box-shadow: 0 2px 8px rgba(8, 9, 18, 0.5);
+  box-shadow: var(--shadow-pin);
   transition: transform 0.14s ease, box-shadow 0.14s ease;
 }
 /* A stop in the planned day is filled instead of outlined: it is settled. */
 .trip-pin .tp-dot.tp-num.tp-place {
   background: var(--pin, var(--color-accent-400));
-  color: #161826;
-  border-color: #161826;
+  color: var(--color-on-accent);
+  border-color: var(--color-on-accent);
 }
 .trip-pin.is-place:hover .tp-dot.tp-place,
 .trip-pin.is-place.is-open .tp-dot.tp-place {
   transform: scale(1.16);
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--pin, #9184d9) 55%, transparent);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--pin, #7a58a8) 45%, transparent);
 }
-.trip-pin.is-place.is-open .tp-name { color: #e9e9ed; }
+.trip-pin.is-place.is-open .tp-name { color: var(--color-neutral-100); }
 
-.place-card { border-color: color-mix(in srgb, var(--pin, #9184d9) 52%, var(--color-neutral-800)); }
+.place-card { border-color: color-mix(in srgb, var(--pin, #7a58a8) 42%, var(--color-neutral-800)); }
 .place-card .pc-shot {
   position: relative;
   height: 76px;
@@ -558,17 +579,18 @@ input::placeholder { color: var(--color-neutral-600); }
   align-items: center;
   justify-content: center;
 }
-.place-card .pc-art i { font-size: 26px; color: rgba(233, 233, 237, 0.42); }
+.place-card .pc-art i { font-size: 26px; color: var(--color-neutral-700); }
 .place-card .pc-band {
   position: absolute;
   right: 7px;
   bottom: 6px;
   padding: 2px 6px;
   border-radius: 9999px;
-  background: rgba(16, 18, 32, 0.82);
+  background: rgba(255, 253, 249, 0.94);
   color: var(--pin, var(--color-accent-200));
   font-size: 9.5px;
-  font-weight: 600;
+  font-weight: 700;
+  box-shadow: var(--shadow-pin);
 }
 .place-card .hc-where i { font-size: 10px; color: var(--pin, var(--color-accent-300)); }
 .place-card .pc-note {
@@ -595,21 +617,21 @@ input::placeholder { color: var(--color-neutral-600); }
   cursor: pointer;
 }
 .place-card .pc-drop i { font-size: 11px; }
-.place-card .pc-drop:hover { color: #ff8fae; border-color: color-mix(in srgb, #ff8fae 40%, transparent); }
+.place-card .pc-drop:hover { color: var(--color-danger); border-color: color-mix(in srgb, var(--color-danger) 40%, transparent); }
 .place-card .pc-drop.is-armed {
-  color: #ff8fae;
-  border-color: #ff8fae;
+  color: var(--color-danger);
+  border-color: var(--color-danger);
 }
 /* --- airports ----------------------------------------------------------- */
 /* Blue, the colour a flight leg is already drawn in, so where you land and how
    you got there read as the same thing. */
 .trip-pin .tp-dot.tp-airport {
-  background: #12243d;
-  color: #8fc2ff;
-  border-color: #4f9dfd;
-  box-shadow: 0 2px 10px rgba(79, 157, 253, 0.45);
+  background: var(--color-surface);
+  color: #2f7fe0;
+  border-color: #2f7fe0;
+  box-shadow: var(--shadow-pin);
 }
-.trip-pin.is-airport .tp-name { color: #8fc2ff; }
+.trip-pin.is-airport .tp-name { color: #245fa8; }
 
 /* Above the tint layers and the pins themselves (which run to 500), but still
    inside the map holder, so the header and the sheet stay on top. */
@@ -622,11 +644,13 @@ input::placeholder { color: var(--color-neutral-600); }
   transform: translateX(-50%);
   padding: 9px 10px 10px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-accent-700);
-  background: rgba(27, 29, 45, 0.97);
-  box-shadow: 0 12px 30px rgba(8, 9, 18, 0.66);
+  border: 1px solid var(--color-neutral-800);
+  background: var(--color-raised);
+  box-shadow: var(--shadow-float);
   animation: fadeIn 0.16s ease both;
   pointer-events: auto;
+  /* Squeezed rather than parked over its pin when the map runs out of room. */
+  overflow: auto;
 }
 .hc-head { display: flex; align-items: flex-start; gap: 6px; }
 .hc-title {
@@ -642,7 +666,7 @@ input::placeholder { color: var(--color-neutral-600); }
   padding: 1px 4px;
   border-radius: var(--radius-sm);
   font-size: 8px;
-  color: #241f3d;
+  color: var(--color-on-accent);
   background: var(--color-accent-400);
   white-space: nowrap;
 }
@@ -661,7 +685,7 @@ input::placeholder { color: var(--color-neutral-600); }
   font-size: 12px;
   cursor: pointer;
 }
-.hc-x:hover { color: var(--color-text); background: rgba(233, 233, 237, 0.08); }
+.hc-x:hover { color: var(--color-text); background: var(--color-neutral-900); }
 .hc-where { margin-top: 1px; font-size: 8.5px; color: var(--color-neutral-600); }
 .hc-rates {
   display: grid;
@@ -672,7 +696,7 @@ input::placeholder { color: var(--color-neutral-600); }
 .hc-rates > div {
   padding: 5px 7px;
   border-radius: var(--radius-sm);
-  background: rgba(145, 132, 217, 0.1);
+  background: var(--tint-accent-soft);
   border: 1px solid var(--color-accent-800);
 }
 .hc-k { font-size: 8px; color: var(--color-neutral-500); }
@@ -725,7 +749,7 @@ input::placeholder { color: var(--color-neutral-600); }
 .hc-pick.is-on {
   border-color: var(--color-accent-400);
   background: var(--color-accent-400);
-  color: #241f3d;
+  color: var(--color-on-accent);
 }
 .hc-link {
   flex: none;

@@ -12,7 +12,7 @@ export default function PrintSheet({ d, doc }: { d: Derived; doc: TripDoc }) {
     <div id="trip-print">
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: '18pt', fontWeight: 600 }}>{trip.name || 'Trip'}</div>
-        <div style={{ fontSize: '10pt', color: '#4a4d5c' }}>
+        <div style={{ fontSize: '10pt', color: '#6f5f53' }}>
           {d.schedule.length
             ? `${fmtD(dateOf(trip.start, 0))} – ${fmtD(dateOf(trip.start, last))} · ${d.schedule.length} days`
             : 'No days planned'}{' '}
@@ -39,7 +39,7 @@ export default function PrintSheet({ d, doc }: { d: Derived; doc: TripDoc }) {
                 {span.nights === 1 ? 'night' : 'nights'} · {fmtUsd(d.spend[c.id].total)}
               </div>
             </div>
-            <div style={{ fontSize: '10pt', color: '#4a4d5c', margin: '4px 0 8px' }}>
+            <div style={{ fontSize: '10pt', color: '#6f5f53', margin: '4px 0 8px' }}>
               {hotel?.name ? (
                 <div>
                   Hotel: {hotel.name}
@@ -74,7 +74,7 @@ export default function PrintSheet({ d, doc }: { d: Derived; doc: TripDoc }) {
                         key={it.id}
                         style={{
                           display: 'grid', gridTemplateColumns: '44pt 1fr auto', gap: '0 10pt',
-                          fontSize: '10pt', padding: '3px 0', borderBottom: '1px dotted #d9dbe4',
+                          fontSize: '10pt', padding: '3px 0', borderBottom: '1px dotted #ddcfbe',
                         }}
                       >
                         <span>{it.time || '—'}</span>
@@ -86,7 +86,7 @@ export default function PrintSheet({ d, doc }: { d: Derived; doc: TripDoc }) {
                       </div>
                     ))
                   ) : (
-                    <div style={{ fontSize: '10pt', color: '#75798c' }}>Nothing planned</div>
+                    <div style={{ fontSize: '10pt', color: '#8a7768' }}>Nothing planned</div>
                   )}
                 </div>
               );

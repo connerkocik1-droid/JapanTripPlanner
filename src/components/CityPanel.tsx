@@ -11,9 +11,16 @@ import AddPlace from './AddPlace';
 import PlacePacks from './PlacePacks';
 import TouchMark, { touchStyle } from './TouchMark';
 import { GeoStatus, NumField, boxed, label, useGeocodedAddress } from './fields';
+import CityMoney, { Local } from './CityMoney';
+import type { Rates } from '@/lib/money';
+import { WEEKDAYS, hoursLine } from '@/lib/hours';
 
 export interface CityPanelProps {
   city: City;
+  /** The day's exchange rates, for showing what the city's figures come to there. */
+  rates: Rates | null;
+  /** Those rates are from an earlier day than today. */
+  ratesStale: boolean;
   spend: CitySpend;
   travelers: number;
   onCity: <K extends keyof City>(key: K, val: City[K]) => void;
@@ -28,7 +35,7 @@ export interface CityPanelProps {
 }
 
 export default function CityPanel({
-  city, spend, travelers, onCity, onOpenStay,
+  city, spend, travelers, rates, ratesStale, onCity, onOpenStay,
   onAddPlaces, onPlace, onRemovePlace, onZoom, touch,
 }: CityPanelProps) {
   const active = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
@@ -275,7 +282,7 @@ export default function CityPanel({
         value={city.foodPer}
         aria-label="Food budget per day"
         onChange={(e) => onCity('foodPer', Number(e.target.value))}
-        style={{ width: '100%', height: 32, accentColor: '#9184d9' }}
+        style={{ width: '100%', height: 32, accentColor: 'var(--color-accent)' }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <div className="mono" style={{ ...label, fontSize: 9, color: 'var(--color-neutral-600)' }}>$0</div>
@@ -285,12 +292,17 @@ export default function CityPanel({
         <div className="mono" style={{ ...label, fontSize: 9, color: 'var(--color-neutral-600)' }}>$300</div>
       </div>
 
+      <CityMoney city={city} rates={rates} stale={ratesStale} onCity={onCity} />
+
       {/* Subtotal */}
       <div style={{ borderTop: '1px solid var(--color-divider)', margin: '12px 0 9px' }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ fontSize: 12.5, color: 'var(--color-neutral-400)' }}>{city.name} subtotal</div>
-        <div className="num" style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-accent-200)' }}>
-          {fmtUsd(spend.total)}
+        <div>
+          <div className="num" style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-accent-200)', textAlign: 'right' }}>
+            {fmtUsd(spend.total)}
+          </div>
+          <Local usd={spend.total} city={city} rates={rates} />
         </div>
       </div>
       {spend.activities ? (
@@ -407,6 +419,7 @@ function PlaceCard({
         onChange={(e) => onField('note', e.target.value)}
         style={{ width: '100%', height: 32, fontSize: 11, color: 'var(--color-neutral-400)' }}
       />
+      <Hours place={place} onField={onField} />
       {/* What the map card shows above the name. One photo is enough there. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {shot ? (
@@ -463,6 +476,96 @@ function PlaceCard({
         </span>
       ) : null}
       {!walk || status.state !== 'idle' ? <GeoStatus status={status} /> : null}
+    </div>
+  );
+}
+
+/**
+ * When this place is open. Optional throughout — a place with nothing filled
+ * in never warns about anything — but once the hours are here, a day that
+ * plans a stop outside them says so.
+ */
+function Hours({
+  place, onField,
+}: {
+  place: Place;
+  onField: <K extends keyof Place>(key: K, val: Place[K]) => void;
+}) {
+  const [open, setOpen] = useState(
+    Boolean(place.opens || place.closes || (place.shutDays ?? []).length),
+  );
+  const shut = place.shutDays ?? [];
+  const summary = hoursLine(place);
+
+  if (!open) {
+    return (
+      <button
+        className="tap"
+        onClick={() => setOpen(true)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 5, minHeight: 28, padding: 0,
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--color-neutral-600)', fontSize: 10,
+        }}
+      >
+        <i className="ph ph-clock" style={{ fontSize: 11 }} />
+        Add opening hours
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span className="mono" style={{ ...label, flex: 'none' }}>Open</span>
+        <input
+          type="time"
+          value={place.opens}
+          aria-label={`Opening time for ${place.name || 'this place'}`}
+          onChange={(e) => onField('opens', e.target.value)}
+          className="mono num"
+          style={{ width: 84, height: 32, fontSize: 11 }}
+        />
+        <span className="mono" style={{ ...label, flex: 'none' }}>to</span>
+        <input
+          type="time"
+          value={place.closes}
+          aria-label={`Closing time for ${place.name || 'this place'}`}
+          onChange={(e) => onField('closes', e.target.value)}
+          className="mono num"
+          style={{ width: 84, height: 32, fontSize: 11 }}
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ ...label, flex: 'none', marginRight: 2 }}>Shut</span>
+        {WEEKDAYS.map((d, i) => {
+          const on = shut.includes(i);
+          return (
+            <button
+              key={d}
+              className="tap"
+              aria-pressed={on}
+              aria-label={`${place.name || 'This place'} is closed on ${d}`}
+              onClick={() =>
+                onField('shutDays', on ? shut.filter((n) => n !== i) : [...shut, i].sort())
+              }
+              style={{
+                minWidth: 30, height: 28, borderRadius: 9999, cursor: 'pointer', fontSize: 9.5,
+                border: '1px solid ' + (on ? 'var(--color-danger)' : 'var(--color-neutral-800)'),
+                background: on ? 'color-mix(in srgb, var(--color-danger) 12%, transparent)' : 'transparent',
+                color: on ? 'var(--color-danger)' : 'var(--color-neutral-500)',
+              }}
+            >
+              {d.slice(0, 1)}
+            </button>
+          );
+        })}
+      </div>
+      {summary ? (
+        <div className="mono" style={{ ...label, fontSize: 9, marginTop: 4, color: 'var(--color-neutral-600)' }}>
+          {summary}
+        </div>
+      ) : null}
     </div>
   );
 }

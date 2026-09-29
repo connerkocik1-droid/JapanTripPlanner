@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: 'Trip',
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
   },
   icons: {
     icon: [
@@ -30,7 +30,7 @@ export const viewport: Viewport = {
   userScalable: false,
   // The map runs edge to edge; the layout pads itself with the safe-area insets.
   viewportFit: 'cover',
-  themeColor: '#161826',
+  themeColor: '#fbf5ec',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
