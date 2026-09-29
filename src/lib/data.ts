@@ -24,6 +24,22 @@ export interface Hotel {
 export type PlaceKind = 'eat' | 'do' | 'stay' | 'other';
 
 /**
+ * Where a shortlisted place has got to: wanted, still thinking, ruled out.
+ *
+ * Blank is the fourth state and the one everything starts in — nobody has said
+ * either way yet. It reads on the map exactly as a yes does, because a place
+ * you have just pinned is not a place you have doubts about, and because a
+ * shortlist that vanished the moment it was imported would be useless.
+ */
+export type Vote = '' | 'yes' | 'maybe' | 'no';
+
+export const VOTES: { id: Vote; label: string; icon: string }[] = [
+  { id: 'yes', label: 'Yes', icon: 'ph-check' },
+  { id: 'maybe', label: 'Maybe', icon: 'ph-question' },
+  { id: 'no', label: 'No', icon: 'ph-x' },
+];
+
+/**
  * The colour a kind is drawn in, on the pin and on its card.
  *
  * The travelers picked these: somewhere to eat is red, something to do is
@@ -67,12 +83,18 @@ export interface Place {
   /** "09:00" / "17:00"; blank means the hours are not known. */
   opens: string;
   closes: string;
+  /**
+   * Yes, maybe or no. A 'no' is not plotted and a 'maybe' is plotted faintly,
+   * so the map shows the trip you are actually considering. Blank until
+   * somebody decides, which plots like a yes.
+   */
+  vote: Vote;
 }
 
 export function blankPlace(kind: PlaceKind = 'eat'): Place {
   return {
     id: uid(), name: '', addr: '', note: '', kind, band: '', images: [], url: '', ll: null,
-    shutDays: [], opens: '', closes: '',
+    shutDays: [], opens: '', closes: '', vote: '',
   };
 }
 

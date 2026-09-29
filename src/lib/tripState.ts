@@ -101,6 +101,9 @@ function fillCity(city: City): City {
       shutDays: Array.isArray(p?.shutDays)
         ? p.shutDays.filter((n): n is number => Number.isInteger(n) && n >= 0 && n <= 6)
         : [],
+      // An unknown value would hide the place from the map for good, so
+      // anything but the three decisions reads as "nobody has said".
+      vote: p?.vote === 'yes' || p?.vote === 'maybe' || p?.vote === 'no' ? p.vote : '',
     })),
     packs: strings(city?.packs),
   };

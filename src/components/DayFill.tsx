@@ -242,7 +242,11 @@ function CustomPicker({
   const [filter, setFilter] = useState<'all' | Place['kind']>('all');
   const [legs, setLegs] = useState<Record<string, LegOptions>>({});
 
-  const shown = city.places.filter((p) => (filter === 'all' ? true : p.kind === filter));
+  // A place ruled out is not offered as a stop; a maybe still is, because
+  // deciding it by putting it in a day is exactly how a maybe gets settled.
+  const shown = city.places.filter(
+    (p) => p.vote !== 'no' && (filter === 'all' ? true : p.kind === filter),
+  );
 
   // Cost and time for adding each candidate, from the day's current end.
   useEffect(() => {
