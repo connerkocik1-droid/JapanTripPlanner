@@ -26,6 +26,23 @@ No environment variables are required. Two optional ones tune the geocoder:
 | `OSRM_URL` | `https://routing.openstreetmap.de` | Walking/cycling router |
 | `TRANSIT_URL` | *(unset)* | A MOTIS `/api/v1/plan` endpoint for real metro routing |
 | `NEXT_PUBLIC_MAP_STYLE` | OpenFreeMap `positron` | A MapLibre style URL, to self-host the basemap |
+| `GOOGLE_PLACES_API_KEY` | *(unset)* | Photographs, ratings, cuisines and opening hours for pinned places |
+
+**Place details.** Every pinned place is given a photograph, a rating, what it
+serves and the meals it is worth going for, filled in behind the map one place
+at a time. The shortlists in `data/` already carry a score and a cuisine, so
+those show with no key at all; photographs and opening hours come from Google
+Places and need `GOOGLE_PLACES_API_KEY` — a key with the Places API (New)
+enabled. Without one the lookup answers "not configured" once and stops, and
+nothing in the app complains. The key stays on the server: photographs are
+served through `/api/place-photo`, which redirects to the image rather than
+handing the browser a URL with the key in it.
+
+The best time to go is *derived* — from the opening hours where they are known,
+and from what the place serves where they are not — so the card labels it a
+suggestion and the Cities tab lets you overrule it. Nothing is invented: a
+place the directory has never heard of keeps whatever you typed, and anything
+already filled in wins over anything a lookup returns.
 
 Without `TRANSIT_URL` the metro option is a clearly-labelled estimate: the walking
 distance less the walks either side, ridden at 27 km/h for a short hop and up to

@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { City, Hood, LatLng, MAX_NIGHTS, PLACE_KINDS, Place, VOTES, Vote, placeKind } from '@/lib/data';
+import {
+  City, Hood, LatLng, MAX_NIGHTS, MEALS, Meal, PLACE_KINDS, Place, VOTES, Vote, placeKind,
+} from '@/lib/data';
+import { ratingLine } from '@/lib/placeDetails';
 import { fmtUsd, walkLabel } from '@/lib/format';
 import { CitySpend } from '@/lib/derive';
 import { isFlightLeg } from '@/lib/legKind';
@@ -428,6 +431,8 @@ function PlaceCard({
         </button>
       </div>
       <VoteRow vote={place.vote} onVote={(v) => onField('vote', v)} />
+
+      <Facts place={place} onField={onField} />
       <input
         type="text"
         value={place.addr}
@@ -593,6 +598,86 @@ function Hours({
   );
 }
 
+
+/**
+ * What a place is rated, and — where it is somewhere to eat — what it serves
+ * and when it is worth going.
+ *
+ * The cuisine came off the shortlist or a directory and the meals were worked
+ * out from the opening hours, so both are already filled in by the time anyone
+ * looks. This is where they get corrected: the meals are toggles because the
+ * app's guess is a suggestion, and a suggestion you cannot overrule is just a
+ * wrong answer. A rating is shown rather than typed — it belongs to whoever
+ * published it, and editing it here would only make the card lie.
+ *
+ * A museum gets the rating and stops there. It serves no cuisine, and "best at
+ * lunch" about a palace would be an invention rather than a suggestion.
+ */
+function Facts({
+  place, onField,
+}: {
+  place: Place;
+  onField: <K extends keyof Place>(key: K, val: Place[K]) => void;
+}) {
+  const meals = place.meals ?? [];
+  const score = ratingLine(place.rating, place.ratingCount);
+  const eats = place.kind === 'eat';
+  if (!eats && !score) return null;
+  const toggle = (id: Meal) =>
+    onField('meals', meals.includes(id) ? meals.filter((m) => m !== id) : [...meals, id]);
+
+  const rating = score ? (
+    <span className="mono num" style={{ ...label, flex: 'none', color: 'var(--color-accent-300)' }}>
+      {score}
+    </span>
+  ) : null;
+
+  if (!eats) {
+    return <div style={{ display: 'flex', margin: '5px 0 2px' }}>{rating}</div>;
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 5, margin: '5px 0 2px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="text"
+          value={place.cuisine}
+          placeholder="Cuisine — sushi, KBBQ"
+          aria-label={`What ${place.name || 'this place'} serves`}
+          onChange={(e) => onField('cuisine', e.target.value)}
+          style={{ flex: 1, minWidth: 0, height: 34, fontSize: 11.5 }}
+        />
+        {rating}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        {MEALS.map((m) => {
+          const on = meals.includes(m.id);
+          return (
+            <button
+              key={m.id}
+              className="tap"
+              aria-pressed={on}
+              aria-label={`Best at ${m.label.toLowerCase()}`}
+              onClick={() => toggle(m.id)}
+              style={{
+                flex: '1 1 0', minWidth: 0, minHeight: 32, boxSizing: 'border-box',
+                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                border: '1px solid ' + (on ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
+                background: on ? 'var(--color-accent-500)' : 'transparent',
+                color: on ? 'var(--color-on-accent)' : 'var(--color-neutral-500)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                fontSize: 11, fontWeight: on ? 600 : 500,
+              }}
+            >
+              <i className={'ph ' + m.icon} style={{ fontSize: 12 }} />
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Yes, maybe or no on a place.

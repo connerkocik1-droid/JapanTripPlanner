@@ -88,14 +88,20 @@ def split_addr(raw):
 
 
 def review_note(raw):
-    """The review column, cut down to what is worth a line on the card."""
+    """What the review column says beyond the count, which is now its own field.
+
+    The number of reviews used to be written into the note because there was
+    nowhere else for it; it has a field of its own now and the card prints it,
+    so the note keeps only the caveats — a sample too small to mean much, an
+    address nobody confirmed, a rating somebody read somewhere else.
+    """
     text = raw.strip()
     if not text:
         return ''
     count = re.search(r'\b([\d,]+) reviews', text)
     small = 'small sample' in text.lower()
     if count:
-        return f'{count.group(1)} reviews' + (', small sample' if small else '')
+        return 'small sample' if small else '' 
     if 'unconfirmed' in text.lower() or 'not independently re-confirmed' in text.lower():
         return 'address unconfirmed'
     if 'tripadvisor rating' in text.lower():
@@ -108,6 +114,20 @@ def review_note(raw):
 def stars(raw):
     value = float(raw)
     return f'{value:.1f}★' if value else ''
+
+
+def rating(raw):
+    """The score as a number, so the app can show it as a rating rather than text."""
+    try:
+        return round(float(raw), 1)
+    except (TypeError, ValueError):
+        return 0
+
+
+def review_count(raw):
+    """How many reviews the score is out of, or 0 when the row does not say."""
+    found = re.search(r'\b([\d,]+) reviews', raw or '')
+    return int(found.group(1).replace(',', '')) if found else 0
 
 
 def build(csv_name, kind, pack_id, name, city, summary, source):
@@ -138,19 +158,28 @@ def build(csv_name, kind, pack_id, name, city, summary, source):
                 caveats.append('rating source unclear')
             if override:
                 caveats.append(override[1])
-            bits = [
-                row.get('Cuisine', row.get('Category', '')).strip(),
-                hood, *detail, *gloss, *caveats,
-            ]
-            places.append({
+            # A restaurant's cuisine has its own field and its own chip, so it
+            # is not repeated here; an activity's Category has neither.
+            heading = '' if kind == 'eat' else row.get('Category', '').strip()
+            bits = [heading, hood, *detail, *gloss, *caveats]
+            entry = {
                 'name': title,
                 'korean': row['Korean Name'].strip(),
                 'addr': addr,
                 'kind': kind,
-                'band': stars(row['Rating (out of 5)']),
+                # `band` stays for a price the travelers type in by hand; the
+                # score is a number now and is shown as one.
+                'band': '',
+                'rating': rating(row['Rating (out of 5)']),
+                'reviews': review_count(raw_notes),
                 'note': ' · '.join(b for b in bits if b),
                 'url': row['Google Maps Link'].strip(),
-            })
+            }
+            # The Cuisine column is what a restaurant serves; the activities CSV
+            # calls its column Category and it holds "Museum", which is not one.
+            if kind == 'eat':
+                entry['cuisine'] = row.get('Cuisine', '').strip()
+            places.append(entry)
 
     pack = {
         'id': pack_id,

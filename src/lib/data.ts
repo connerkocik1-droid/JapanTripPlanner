@@ -40,6 +40,18 @@ export const VOTES: { id: Vote; label: string; icon: string }[] = [
 ];
 
 /**
+ * A meal a place is worth going for. The trio everybody plans a day around;
+ * a cafe that only does mornings is a breakfast, and a bar is a dinner.
+ */
+export type Meal = 'breakfast' | 'lunch' | 'dinner';
+
+export const MEALS: { id: Meal; label: string; icon: string }[] = [
+  { id: 'breakfast', label: 'Breakfast', icon: 'ph-coffee' },
+  { id: 'lunch', label: 'Lunch', icon: 'ph-bowl-food' },
+  { id: 'dinner', label: 'Dinner', icon: 'ph-wine' },
+];
+
+/**
  * The colour a kind is drawn in, on the pin and on its card.
  *
  * The travelers picked these: somewhere to eat is red, something to do is
@@ -78,6 +90,27 @@ export interface Place {
   /** Where to read more — a listing, a menu, a map link. */
   url: string;
   ll: LatLng | null;
+  /**
+   * Out of 5, as the listing it came from has it. 0 means nobody has one —
+   * never a stand-in for "unrated", because a made-up score reads as real.
+   */
+  rating: number;
+  /** How many reviews that rating is out of. 0 when the count is not known. */
+  ratingCount: number;
+  /** "Sushi", "Korean BBQ" — what an eat serves. Blank when unknown. */
+  cuisine: string;
+  /**
+   * Which meals this place is worth going for. Worked out from its opening
+   * hours, falling back on what it serves, so it is a suggestion and is
+   * labelled as one — an empty list means there was nothing to go on.
+   */
+  meals: Meal[];
+  /**
+   * When the details lookup last ran, as an ISO date. Blank means never, which
+   * is what puts a place in the queue; set either way so a place with nothing
+   * to find is not asked about again on every load.
+   */
+  lookedUp: string;
   /** Weekdays it is shut all day, 0 = Sunday, as `Date.getDay()` counts them. */
   shutDays: number[];
   /** "09:00" / "17:00"; blank means the hours are not known. */
@@ -95,6 +128,7 @@ export function blankPlace(kind: PlaceKind = 'eat'): Place {
   return {
     id: uid(), name: '', addr: '', note: '', kind, band: '', images: [], url: '', ll: null,
     shutDays: [], opens: '', closes: '', vote: '',
+    rating: 0, ratingCount: 0, cuisine: '', meals: [], lookedUp: '',
   };
 }
 

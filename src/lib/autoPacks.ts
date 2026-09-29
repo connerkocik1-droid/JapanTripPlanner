@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { City, LatLng, Place } from './data';
 import { geocodeQueue, hitToLatLng } from './geocode';
-import { loadPack, loadPackIndex, packPlaceToPlace, packsFor } from './placePacks';
+import { loadPack, loadPackIndex, packCatchUp, packKey, packPlaceToPlace, packsFor } from './placePacks';
 import { loadHoodPack } from './hoods';
 
 export interface AutoPacksArg {
@@ -14,6 +14,8 @@ export interface AutoPacksArg {
   /** Records which shortlists a city has had, so none of them come back. */
   markPacks: (cityId: string, packIds: string[]) => void;
   locate: (cityId: string, placeId: string, ll: LatLng) => void;
+  /** Fills the blanks on a place already pinned — see `packCatchUp`. */
+  fill: (cityId: string, placeId: string, patch: Partial<Place>) => void;
   /** Gives a city the neighbourhoods that ship for it, once. */
   setHoods: (cityId: string, hoods: City['hoods']) => void;
 }
@@ -73,11 +75,23 @@ export function useAutoPacks(arg: AutoPacksArg): void {
       });
 
       for (const city of latest.current.cities) {
-        const want = packsFor(index, city.name).filter((p) => !city.packs.includes(p.id));
-        for (const listing of want) {
+        const offered = packsFor(index, city.name);
+        for (const listing of offered) {
           if (signal.cancelled) return;
           const pack = await loadPack(listing.file);
           if (!pack) continue;
+          if (city.packs.includes(listing.id)) {
+            // Already imported, so nothing is added — but a shortlist that has
+            // learned something since (a rating, a cuisine) passes it on.
+            const byName = new Map(pack.places.map((e) => [packKey(e.name), e]));
+            city.places.forEach((place) => {
+              const entry = byName.get(packKey(place.name));
+              if (!entry) return;
+              const patch = packCatchUp(entry, place);
+              if (Object.keys(patch).length) latest.current.fill(city.id, place.id, patch);
+            });
+            continue;
+          }
           const added = latest.current.addPlaces(city.id, pack.places.map(packPlaceToPlace));
           latest.current.markPacks(city.id, [listing.id]);
           added.forEach((place) => todo.push({ cityId: city.id, place }));

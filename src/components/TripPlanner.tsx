@@ -11,6 +11,8 @@ import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import { useAirportRoutes } from '@/lib/airportRoute';
 import { useAutoPacks } from '@/lib/autoPacks';
+import { usePlaceDetails } from '@/lib/usePlaceDetails';
+import { ratingLine } from '@/lib/placeDetails';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
@@ -82,8 +84,13 @@ export default function TripPlanner() {
       store.setCity(cityId, 'packs', [...new Set([...city.packs, ...packIds])]);
     },
     locate: (cityId, placeId, ll) => store.setPlace(cityId, placeId, 'll', ll),
+    fill: store.fillPlace,
     setHoods: (cityId, hoods) => store.setCity(cityId, 'hoods', hoods),
   });
+
+  // And every place, however it arrived, is given its photograph, its rating
+  // and what it serves. Runs behind the map; fills only what is still blank.
+  usePlaceDetails({ ready: store.ready, cities: doc.cities, fill: store.fillPlace });
 
   const [tab, setTab] = useState<Tab>('map');
   const [cityId, setCityId] = useState<string | null>(null);
@@ -724,7 +731,9 @@ export default function TripPlanner() {
               total: g.places.length,
               yes: g.yes.map((p) => {
                 const k = placeKind(p.kind);
-                return { name: p.name, icon: k.icon, color: k.color, band: p.band };
+                // The score if it has one, the typed band otherwise — the
+                // neighbourhood card is where a shortlist gets skimmed.
+                return { name: p.name, icon: k.icon, color: k.color, band: ratingLine(p.rating) || p.band };
               }),
             },
           });
@@ -752,6 +761,10 @@ export default function TripPlanner() {
             kindLabel: kind.label,
             color: kind.color,
             band: p.band,
+            rating: p.rating,
+            ratingCount: p.ratingCount,
+            cuisine: p.cuisine,
+            meals: p.meals ?? [],
             note: p.note,
             images: p.images ?? [],
             url: p.url ?? '',
