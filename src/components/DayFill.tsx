@@ -9,6 +9,7 @@ import { LegOptions, fmtDistance, fmtDuration, routeLeg } from '@/lib/routing';
 import { LatLng } from '@/lib/data';
 import { Local } from './CityMoney';
 import type { Rates } from '@/lib/money';
+import { WEEKDAYS_LONG, shutOn } from '@/lib/hours';
 
 export interface DayFillProps {
   city: City | null;
@@ -18,6 +19,8 @@ export interface DayFillProps {
   travelers: number;
   /** The day's exchange rates, for what a fare comes to at the gate. */
   rates: Rates | null;
+  /** The weekday the day being filled falls on, for marking what is shut. */
+  weekday: number;
   onApplyPreset: (preset: Preset, replace: boolean) => void;
   onAddStop: (place: Place) => void;
   /** A stop that is not one of the city's pinned places — typed in by hand. */
@@ -37,8 +40,8 @@ export interface DayFillProps {
  * way of adding to it here.
  */
 export default function DayFill({
-  city, anchor, metroFare, travelers, rates, onApplyPreset, onAddStop, onAddBlank, onSetFare,
-  onZoom, onStartPlan,
+  city, anchor, metroFare, travelers, rates, weekday, onApplyPreset, onAddStop, onAddBlank,
+  onSetFare, onZoom, onStartPlan,
 }: DayFillProps) {
   const [index, setIndex] = useState<{ id: string; name: string; city: string; summary?: string; file: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,6 +131,7 @@ export default function DayFill({
       <CustomPicker
         city={city}
         anchor={anchor}
+        weekday={weekday}
         metroFare={metroFare}
         travelers={travelers}
         onAddStop={onAddStop}
@@ -225,10 +229,11 @@ export default function DayFill({
 
 /** Pick from the city's pinned places, each priced and timed from where the day currently ends. */
 function CustomPicker({
-  city, anchor, metroFare, travelers, onAddStop, onZoom,
+  city, anchor, weekday, metroFare, travelers, onAddStop, onZoom,
 }: {
   city: City;
   anchor: { ll: LatLng; label: string } | null;
+  weekday: number;
   metroFare: number;
   travelers: number;
   onAddStop: (place: Place) => void;
@@ -315,6 +320,19 @@ function CustomPicker({
                 <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500 }}>
                   {p.name || 'Unnamed place'}
                 </span>
+                {/* Said here rather than after it is added: the point is not to
+                    add it to a day it is shut on in the first place. */}
+                {shutOn(p, weekday) ? (
+                  <span
+                    className="mono"
+                    style={{
+                      flex: 'none', fontSize: 8.5, padding: '2px 6px', borderRadius: 9999,
+                      border: '1px solid var(--color-danger)', color: 'var(--color-danger)',
+                    }}
+                  >
+                    Shut {WEEKDAYS_LONG[weekday]}
+                  </span>
+                ) : null}
                 {p.band ? (
                   <span className="mono" style={{ fontSize: 9, color: 'var(--color-accent-300)' }}>{p.band}</span>
                 ) : null}
