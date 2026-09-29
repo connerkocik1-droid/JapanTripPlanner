@@ -14,6 +14,7 @@ import { useAutoPacks } from '@/lib/autoPacks';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
+import { useRates } from '@/lib/money';
 import type { MapFocus, MapLeg, MapPin } from './TripMap';
 import { legOf, useDayRoute, type Stop } from '@/lib/useDayRoute';
 import {
@@ -62,6 +63,10 @@ const SEG_FILL: Record<string, string> = {
 export default function TripPlanner() {
   const store = useTripStore();
   const { doc } = store;
+
+  // One rate a day, shared by every city that spends in something other than
+  // dollars. Nothing waits on it: without an answer the figures stay in dollars.
+  const { rates, stale: ratesStale } = useRates();
 
   // A city whose shortlist ships with the app gets it pinned on its own, and
   // anything still missing its coordinates is resolved in the background.
@@ -1230,6 +1235,8 @@ export default function TripPlanner() {
                     city={c}
                     spend={d.spend[c.id]}
                     travelers={doc.trip.travelers}
+                    rates={rates}
+                    ratesStale={ratesStale}
                     onCity={(key, val) => store.setCity(c.id, key, val)}
                     onOpenStay={() => setTab('stay')}
                     onAddPlaces={(places) => store.addPlaces(c.id, places)}
@@ -1315,6 +1322,7 @@ export default function TripPlanner() {
 {tab === 'stay' ? (
             <StayTab
               cities={doc.cities}
+              rates={rates}
               onSetActive={(cid, hid) => store.setCity(cid, 'hotelSel', hid)}
               onHotel={(cid, hid, key, val) => store.setHotel(cid, hid, key, val)}
               onAddHotel={(cid) => store.addHotelSlot(cid)}
@@ -1334,6 +1342,7 @@ export default function TripPlanner() {
               travelers={doc.trip.travelers}
               city={dayCity}
               anchor={buildAnchor}
+              rates={rates}
               onSelectDay={(n) => {
                 setDay(n);
                 const c = d.schedule[n - 1]?.city;
