@@ -5,6 +5,7 @@ import {
   CheckItem, City, DayItem, Hotel, LatLng, Place, TravelMode, Trip,
   blankCity, blankHotel, blankPlace, newTrip, uid,
 } from './data';
+import { blankHood } from './hoods';
 import { fmtClock } from './dayPlan';
 import { PersonId, isPersonId } from './people';
 import { Preset, dwellFor, stopToPlace } from './presets';
@@ -104,6 +105,18 @@ function fillCity(city: City): City {
       // An unknown value would hide the place from the map for good, so
       // anything but the three decisions reads as "nobody has said".
       vote: p?.vote === 'yes' || p?.vote === 'maybe' || p?.vote === 'no' ? p.vote : '',
+    })),
+    hoods: (Array.isArray(city?.hoods) ? city.hoods : []).map((h) => ({
+      ...blankHood(),
+      ...h,
+      match: strings(h?.match),
+      images: strings(h?.images),
+      // A centre that is not a pair of numbers would put the pin at NaN,NaN
+      // and take the whole map with it.
+      ll:
+        Array.isArray(h?.ll) && h.ll.length === 2 && h.ll.every((n: unknown) => typeof n === 'number')
+          ? ([h.ll[0], h.ll[1]] as LatLng)
+          : null,
     })),
     packs: strings(city?.packs),
   };

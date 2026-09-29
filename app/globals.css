@@ -803,3 +803,74 @@ input::placeholder { color: var(--color-neutral-600); }
 .trip-pin.is-faded:hover,
 .trip-pin.is-faded.is-open,
 .trip-pin.is-faded.is-sel { opacity: 1; }
+
+/* --- neighbourhoods ----------------------------------------------------- */
+/*
+ * A neighbourhood is not one of the kinds of place; it is the thing the kinds
+ * of place sit inside. So it is the app's own accent rather than a place
+ * colour, and it is drawn a size larger, because at the zoom where these are
+ * the map they are the only thing to aim at.
+ */
+.trip-pin .tp-dot.tp-hood {
+  background: var(--color-accent-400);
+  color: var(--color-on-accent);
+  border-color: var(--color-on-accent);
+  box-shadow: 0 0 0 1px var(--color-accent-500), var(--shadow-pin);
+  transform: scale(1.12);
+  transition: transform 0.14s ease;
+}
+.trip-pin.is-hood:hover .tp-dot.tp-hood,
+.trip-pin.is-hood.is-open .tp-dot.tp-hood,
+.trip-pin.is-hood.is-sel .tp-dot.tp-hood { transform: scale(1.3); }
+.trip-pin.is-hood .tp-name {
+  color: var(--color-accent-200);
+  font-weight: 700;
+}
+
+/* The card's list of what you said yes to here. */
+.hood-card .pc-band { color: var(--color-accent-200); }
+/* Shorter than a place's note: on a neighbourhood the list below it is the
+   thing you opened the card for, and it has to start above the fold. Clamped
+   by lines rather than by height, so it ends on an ellipsis instead of on a
+   row of half-cut letters. */
+.hood-card .pc-note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  max-height: none;
+  overflow: hidden;
+}
+.hood-list {
+  list-style: none;
+  margin: 6px 0 2px;
+  padding: 0;
+  /* Four or five rows, which is what the map leaves room for above a pin on a
+     phone. A longer list scrolls inside the card rather than pushing itself
+     off the bottom of it. */
+  max-height: 124px;
+  overflow-y: auto;
+}
+.hood-list li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  border-top: 1px solid var(--color-neutral-900);
+  font-size: 12px;
+}
+.hood-list li:first-child { border-top: none; }
+.hood-list li i { flex: none; font-size: 13px; color: var(--pin, var(--color-accent-300)); }
+.hood-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hood-band { flex: none; font-size: 9px; color: var(--color-neutral-500); }
+.hood-none {
+  margin: 7px 0 2px;
+  font-size: 9.5px;
+  color: var(--color-neutral-600);
+}

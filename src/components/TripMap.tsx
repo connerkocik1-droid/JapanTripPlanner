@@ -41,6 +41,20 @@ export interface PlaceDetail {
   url: string;
 }
 
+/** What a neighbourhood pin opens: what it is like, and what is in it. */
+export interface HoodDetail {
+  /** The name in the local script, when it differs. */
+  local: string;
+  blurb: string;
+  images: string[];
+  /** The places said yes to here, in the order the shortlist holds them. */
+  yes: { name: string; icon: string; color: string; band: string }[];
+  /** "6 to do · 4 to eat". */
+  line: string;
+  /** Every located place here, said yes to or not. */
+  total: number;
+}
+
 export interface MapPin {
   id: string;
   name: string;
@@ -48,7 +62,7 @@ export interface MapPin {
   sub: string;
   ll: LatLng;
   selected: boolean;
-  kind: 'city' | 'hotel' | 'place' | 'airport';
+  kind: 'city' | 'hotel' | 'place' | 'airport' | 'hood';
   /** Position in the planned day, when this pin is a stop. */
   stopNumber?: number;
   /** Place category, for the marker glyph. */
@@ -57,6 +71,8 @@ export interface MapPin {
   hotel?: HotelDetail;
   /** Present on place pins — hovering or tapping one opens this card. */
   place?: PlaceDetail;
+  /** Present on neighbourhood pins — hovering or tapping one opens this card. */
+  hood?: HoodDetail;
   /** Drawn faintly: a place nobody has said yes to yet. */
   faded?: boolean;
 }
@@ -144,6 +160,7 @@ export default function TripMap({
   // Narrowed once, so the card's callbacks can reach the payload.
   const cardHotel = cardPin?.hotel ? { pin: cardPin, hotel: cardPin.hotel } : null;
   const cardPlace = cardPin?.place ? { pin: cardPin, place: cardPin.place } : null;
+  const cardHood = cardPin?.hood ? { pin: cardPin, hood: cardPin.hood } : null;
 
   const holdCard = () => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -153,6 +170,11 @@ export default function TripMap({
   const hoverCard = (id: string) => {
     holdCard();
     setCard((cur) => (cur && cur.id === id ? cur : { id, sticky: false }));
+  };
+  /** Open a card and keep it open, whatever was showing before. */
+  const openCard = (id: string) => {
+    holdCard();
+    setCard({ id, sticky: true });
   };
   const tapCard = (id: string) => {
     holdCard();
@@ -426,6 +448,23 @@ export default function TripMap({
             if (opening) latest.current.onSelect(p.id);
             return;
           }
+          /*
+           * A neighbourhood opens its card and zooms in on itself, which is
+           * what reveals the places inside it.
+           *
+           * Which way the tap goes is read off the pin rather than off the
+           * card: the card can be dismissed on its own — by its close button,
+           * or by a tap on the map — while the neighbourhood stays open, and a
+           * card that decided for itself would then close the neighbourhood on
+           * the tap that was meant to bring the card back.
+           */
+          if (me?.hood) {
+            const opening = !me.selected;
+            latest.current.onSelect(p.id);
+            if (opening) openCard(p.id);
+            else closeCard();
+            return;
+          }
           // A place opens its card and asks for its route in the same tap,
           // which is the only way a phone gets what a hover gets.
           if (me?.place) tapCard(p.id);
@@ -433,7 +472,7 @@ export default function TripMap({
         });
         el.addEventListener('mouseenter', () => {
           const me = self();
-          if (!me?.hotel && !me?.place) return;
+          if (!me?.hotel && !me?.place && !me?.hood) return;
           hoverCard(p.id);
           // Resting on a place routes it, so the way there is drawn without
           // having to commit to anything.
@@ -442,7 +481,8 @@ export default function TripMap({
         el.addEventListener('mouseleave', () => {
           // The card follows the pointer away; the route it drew does not, so
           // there is something left to look at.
-          if (self()?.hotel || self()?.place) closeSoon();
+          const me = self();
+          if (me?.hotel || me?.place || me?.hood) closeSoon();
         });
         mk = new maplibregl.Marker({ element: el, anchor: 'top', offset: [0, -7] })
           .setLngLat(toLngLat(p.ll))
@@ -462,6 +502,7 @@ export default function TripMap({
       el.classList.toggle('is-pick', p.kind === 'hotel' && !!p.hotel?.pick);
       el.classList.toggle('is-open', cardId.current === p.id);
       el.classList.toggle('is-place', p.kind === 'place');
+      el.classList.toggle('is-hood', p.kind === 'hood');
       // A maybe is on the map but not competing with the places you have
       // actually chosen, so it is the same pin at a lower contrast.
       el.classList.toggle('is-faded', !!p.faded);
@@ -475,7 +516,10 @@ export default function TripMap({
       else el.style.removeProperty('--pin');
       // Airports are the blue of a flight leg — the same colour arrives twice.
       const airportDot = p.kind === 'airport' ? ' tp-airport' : '';
-      const extra = hotelDot + placeDot + airportDot;
+      // A neighbourhood is the app's own accent: it is not one of the kinds of
+      // place, it is the thing the kinds of place sit inside.
+      const hoodDot = p.kind === 'hood' ? ' tp-hood' : '';
+      const extra = hotelDot + placeDot + airportDot + hoodDot;
       const dot = p.stopNumber !== undefined
         ? `<span class="tp-dot tp-num${extra}">${p.stopNumber}</span>`
         : p.icon
@@ -625,6 +669,16 @@ export default function TripMap({
               cardHotel.hotel.pick ? null : cardHotel.pin.id,
             )
           }
+        />
+      ) : null}
+      {cardHood ? (
+        <HoodMiniCard
+          ref={cardBox}
+          pin={cardHood.pin}
+          hood={cardHood.hood}
+          onHold={holdCard}
+          onLeave={closeSoon}
+          onClose={closeCard}
         />
       ) : null}
       {cardPlace ? (
@@ -829,3 +883,80 @@ function PlaceArt({ name, icon }: { name: string; icon: string }) {
     </span>
   );
 }
+
+
+/**
+ * The neighbourhood mini-card: what this part of the city is like, and what
+ * you have said yes to in it.
+ *
+ * It lists the yes-voted places rather than everything pinned, because the
+ * point of the card is "here is what we are doing in Hongdae", not "here are
+ * the forty restaurants a shortlist put there". The total is still given, so
+ * nothing looks like it went missing.
+ */
+const HoodMiniCard = forwardRef<
+  HTMLDivElement,
+  {
+    pin: MapPin;
+    hood: HoodDetail;
+    onHold: () => void;
+    onLeave: () => void;
+    onClose: () => void;
+  }
+>(function HoodMiniCard({ pin, hood, onHold, onLeave, onClose }, ref) {
+  const shot = hood.images.find((src) => src.trim()) ?? '';
+  const [broken, setBroken] = useState(false);
+  // A photograph earns the band across the top of the card. A gradient with an
+  // icon on it does not: it costs eighty-odd pixels on a phone, which is the
+  // difference between the list of what you are doing here being on the card
+  // and being below the fold of it. Without one, the tally moves up beside the
+  // name and the card starts with its words.
+  const art = Boolean(shot) && !broken;
+  const where = [hood.local, art ? '' : hood.line].filter((v) => v.trim()).join(' · ');
+  return (
+    <div
+      ref={ref}
+      className="hotel-card place-card hood-card"
+      role="dialog"
+      aria-label={pin.name + ' details'}
+      onMouseEnter={onHold}
+      onMouseLeave={onLeave}
+    >
+      {art ? (
+        <div className="pc-shot">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={shot} alt="" loading="lazy" onError={() => setBroken(true)} />
+          <span className="mono pc-band">{hood.line}</span>
+        </div>
+      ) : null}
+
+      <div className="hc-head">
+        <span className="hc-title">{pin.name}</span>
+        <button className="tap hc-x" onClick={onClose} aria-label="Close">
+          <i className="ph ph-x" />
+        </button>
+      </div>
+      {where ? <div className="mono hc-where">{where}</div> : null}
+
+      {hood.blurb.trim() ? <p className="hc-note pc-note">{hood.blurb}</p> : null}
+
+      {hood.yes.length ? (
+        <ul className="hood-list">
+          {hood.yes.map((y) => (
+            <li key={y.name} style={{ ['--pin' as string]: y.color }}>
+              <i className={'ph ' + y.icon} />
+              <span className="hood-name">{y.name}</span>
+              {y.band ? <span className="mono hood-band">{y.band}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mono hood-none">
+          {hood.total
+            ? `${hood.total} pinned here, none said yes to yet`
+            : 'Nothing pinned here yet'}
+        </p>
+      )}
+    </div>
+  );
+});

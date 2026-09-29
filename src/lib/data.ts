@@ -129,6 +129,11 @@ export interface City {
   rate: number;
   places: Place[];
   /**
+   * The parts of the city worth knowing about. Where a city has them, the map
+   * draws one pin each instead of a pin per place. See `hoods.ts`.
+   */
+  hoods: Hood[];
+  /**
    * Ids of the ready-made shortlists this city has already been given. Kept so
    * a place deleted on purpose is not put back on the next load.
    */
@@ -195,6 +200,21 @@ export function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+/**
+ * A part of a city — Myeongdong, Shibuya. Defined in `hoods.ts`, which is also
+ * where places are sorted into them; it lives there rather than here because
+ * the interesting part is the sorting, not the shape.
+ */
+export interface Hood {
+  id: string;
+  name: string;
+  local: string;
+  match: string[];
+  ll: LatLng | null;
+  blurb: string;
+  images: string[];
+}
+
 export function blankHotel(): Hotel {
   return { id: uid(), name: '', url: '', addr: '', cost: 0, overview: '', images: [], ll: null };
 }
@@ -219,6 +239,7 @@ export function blankCity(name: string, ll: LatLng | null = null): City {
     currency: '',
     rate: 0,
     places: [],
+    hoods: [],
     packs: [],
   };
 }
