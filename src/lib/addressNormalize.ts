@@ -115,7 +115,7 @@ const COUNTRY_NAMED: Record<AddressLocale, RegExp> = {
 
 /** A floor, a basement, a suite — real to someone standing outside, invisible to a gazetteer. */
 const FLOOR =
-  /^(b\d+f?|\d+f(\s*-\s*\d+f)?|\d+(st|nd|rd|th)\s+floor|floor\s+\d+|lobby(\s+fl\.?|\s+floor)?|basement|ground(\s+floor)?|rooftop|#\s*\d+[a-z]?|(suite|ste|unit|rm|room|no)\.?\s*\d+|지하\s*\d*층?|\d+\s*층|地下\d*階?|\d+\s*階)\b/i;
+  /^(b\d+f?|\d+f(\s*-\s*\d+f)?|\d+(st|nd|rd|th)\s+floor|floor\s+\d+|lobby(\s+fl\.?|\s+floor)?|basement|ground(\s+floor)?|rooftop|#\s*\d+[a-z]?|(suite|ste|unit|rm|room|no)\.?\s*\d+|지하\s*\d*층?|\d+\s*층|地下\d*階?|\d+\s*階)(?![a-z0-9])/i;
 
 /** A named building rather than a street. */
 const BUILDING = /\b(bldg|building|tower|centre|center|plaza|hall|mall|complex|annex|arcade|b\/d)\b\.?/i;
@@ -136,6 +136,21 @@ const KR_ROAD = /(?:^|[\s(])([\p{L}\d ]*?)\s*-?(daero|ro|gil)\b/iu;
 const HOUSE_NUMBER = /^\d+(-\d+)?$/;
 /** A Korean neighbourhood: Yeouido-dong, Myeongdong 2-ga. */
 const KR_NEIGHBOURHOOD = /\b[\p{L}]+(-dong|dong|\d+-ga)\b/iu;
+
+/**
+ * The same things written in Hangul, which is what you get copying an address
+ * out of Naver or Kakao — 서빙고로 is a road, 용산구 a district, and neither
+ * contains a single Latin letter for the patterns above to match on.
+ */
+const KR_ROAD_NATIVE = /[\uac00-\ud7a3]+(?:대로|로|길)/;
+const KR_ADMIN_NATIVE = /[\uac00-\ud7a3]+(?:특별시|광역시|자치시|자치도|시|군|구|동|읍|면|리|가)/;
+/** A Korean house number at the end of a native address: 서빙고로 137, 도산대로67길 19. */
+const KR_NUMBER_NATIVE = /(?:대로|로|길)\s*\d+(?:-\d+)?\s*(?:번지)?\s*$/;
+
+/** A Japanese address in kanji: 神宮前1丁目2番3号, 歌舞伎町1-2-3. */
+const JP_CHOME_NATIVE = /\d+\s*丁目/;
+/** The banchi and go that name a building rather than a block. */
+const JP_NUMBER_NATIVE = /\d+\s*(?:番地|番|号)/;
 /** A Japanese street address in romaji: "1-2-3 Jingumae", "2-chome-3-1 Kabukicho". */
 const JP_BANCHI = /^(\d+)(?:-chome)?-(\d+)(?:-(\d+))?\s+(.+)$/i;
 /** A Japanese chome written out: "Jingumae 1-chome". */
@@ -245,8 +260,19 @@ function isNoise(part: string, locale: AddressLocale): boolean {
 /** Whether a piece holds a road, a neighbourhood or a banchi — something placeable. */
 function hasAddressable(part: string, locale: AddressLocale): boolean {
   if (!part) return false;
-  if (locale === 'kr') return KR_ROAD.test(part) || KR_NEIGHBOURHOOD.test(part);
-  if (locale === 'jp') return JP_BANCHI.test(part) || JP_CHOME_TAIL.test(part) || /-(ku|shi|cho|machi)\b/i.test(part);
+  if (locale === 'kr') {
+    return KR_ROAD.test(part) || KR_NEIGHBOURHOOD.test(part) || KR_ROAD_NATIVE.test(part) || KR_ADMIN_NATIVE.test(part);
+  }
+  if (locale === 'jp') {
+    return (
+      JP_BANCHI.test(part) ||
+      JP_CHOME_TAIL.test(part) ||
+      /-(ku|shi|cho|machi)\b/i.test(part) ||
+      JP_CHOME_NATIVE.test(part) ||
+      JP_NUMBER_NATIVE.test(part) ||
+      /[市区町村]/.test(part)
+    );
+  }
   return /\d/.test(part) && /[\p{L}]{3}/u.test(part);
 }
 
@@ -276,7 +302,9 @@ function joinStrandedNumber(kept: string[]): string[] {
  * indexes, so offer it both ways.
  */
 function lotReordered(part: string): string | null {
-  const m = part.match(/^(.*?(?:-?dong|\d+-ga))\s+(\d+(?:-\d+)?)$/i);
+  // Also the road written before its number — "Seobinggo-ro 137" is how the
+  // Korean original reads, and the gazetteer wants the number in front.
+  const m = part.match(/^(.*?(?:-ro|-gil|-daero|-?dong|\d+-ga))\s+(\d+(?:-\d+)?)$/i);
   if (!m) return null;
   return `${m[2]} ${m[1]}`;
 }
@@ -312,8 +340,28 @@ function hasBuildingNumber(part: string): boolean {
   if (/^\d+(-\d+)?\s/.test(part)) return true;
   if (JP_BANCHI.test(part)) return true;
   if (lotReordered(part)) return true;
-  // Native script runs the number onto the end with no space: 歌舞伎町1-2-3.
+  if (JP_NUMBER_NATIVE.test(part)) return true;
+  // A native Korean address ends with its house number and no space before the
+  // road: 서빙고로 137 names a building as surely as "137 Seobinggo-ro" does.
+  if (KR_NUMBER_NATIVE.test(part)) return true;
+  // Otherwise a native address that ends in a run of numbers: 歌舞伎町1-2-3.
   return (HANGUL.test(part) || KANA.test(part) || HAN.test(part)) && /\d+(?:[-−]\d+)+\s*$/.test(part);
+}
+
+/**
+ * A native Korean address runs largest first and carries no commas, so the road
+ * and the district have to be cut out of the string rather than dropped off the
+ * end of a list. 서울특별시 용산구 서빙고로 137 gives up 서울특별시 용산구 서빙고로
+ * and 서울특별시 용산구.
+ */
+function krNativeSteps(part: string): { road: string | null; area: string | null } {
+  const road = KR_NUMBER_NATIVE.test(part) ? stripEdges(part.replace(KR_NUMBER_NATIVE, (m) => m.replace(/\d+(?:-\d+)?\s*(?:번지)?\s*$/, ''))) : null;
+  const admin = part.match(/^(.*?(?:특별시|광역시|자치시|시|도))?\s*(.*?(?:구|군))\b/);
+  const area = admin ? stripEdges(`${admin[1] ?? ''} ${admin[2]}`) : null;
+  return {
+    road: road && road !== part ? road : null,
+    area: area && area !== part ? area : null,
+  };
 }
 
 /** The ward and prefecture of a native Japanese address, which runs largest first. */
@@ -322,6 +370,13 @@ function jpNativeArea(part: string): string | null {
   if (!m) return null;
   const area = `${m[1] ?? ''}${m[2]}`;
   return area && area !== part ? area : null;
+}
+
+/** The chome of a native Japanese address, dropping the banchi and go after it. */
+function jpNativeChome(part: string): string | null {
+  const m = part.match(/^(.*?\d+\s*丁目)/);
+  if (!m) return null;
+  return m[1] !== part ? m[1] : null;
 }
 
 /** Strip a house number from the front of a piece, leaving the road. */
@@ -347,7 +402,7 @@ export function normalizeAddress(raw: string): NormalizedAddress {
   // incorrect": the pin is still placed, and still labelled as a guess.
   const confesses = NOT_A_POINT.test(original) || glosses.some((g) => NOT_A_POINT.test(g));
   const hasNumber = joined.some(hasBuildingNumber);
-  const chomeOnly = !hasNumber && joined.some((p) => JP_CHOME_TAIL.test(p));
+  const chomeOnly = !hasNumber && joined.some((p) => JP_CHOME_TAIL.test(p) || JP_CHOME_NATIVE.test(p));
   const ceiling: GeocodePrecision = confesses
     ? 'area'
     : hasNumber
@@ -430,8 +485,17 @@ export function queryLadder(raw: string): AddressQuery[] {
     // A native Japanese address carries no commas, so the ward has to be cut
     // out of the string rather than dropped off the end of a list.
     if (locale === 'jp' && !tail.length) {
+      const chome = jpNativeChome(head);
+      if (chome) add(chome, 'block');
       const native = jpNativeArea(head);
       if (native) add(native, 'area');
+    }
+
+    // The same for a native Korean one: the road, then the district.
+    if (locale === 'kr' && HANGUL.test(head)) {
+      const native = krNativeSteps(head);
+      if (native.road) add([native.road, ...tail].join(', '), 'road');
+      if (native.area) add([native.area, ...tail].join(', '), 'area');
     }
 
     // The road without the number: the right street, the wrong door.
