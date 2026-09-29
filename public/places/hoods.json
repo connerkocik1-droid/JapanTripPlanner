@@ -1,0 +1,121 @@
+{
+  "note": "Parts of a city worth knowing about, keyed by the city's name. `match` is checked against a place's address, so a shortlist sorts itself; `ll` catches anything whose address names none of them. Images are left for the travelers to add — the card draws its own until then.",
+  "cities": {
+    "Seoul": [
+      {
+        "name": "Myeongdong",
+        "local": "명동",
+        "match": ["Jung-gu", "Myeong-dong", "Myeongdong", "Euljiro", "Namdaemun"],
+        "ll": [37.5636, 126.982],
+        "blurb": "The middle of the city and where most people stay. Street food carts after dark, department stores, and the cable car up Namsan at the end of it. Busy, central, and walkable to more than you would expect."
+      },
+      {
+        "name": "Jongno",
+        "local": "종로",
+        "match": ["Jongno-gu", "Insa-dong", "Insadong", "Bukchon", "Samcheong", "Gwanghwamun"],
+        "ll": [37.5735, 126.979],
+        "blurb": "Old Seoul. The big palaces, the hanok lanes of Bukchon, tea houses and galleries in Insadong. This is the half-day of sightseeing everyone comes for, and it is all within a walk of itself."
+      },
+      {
+        "name": "Hongdae",
+        "local": "홍대",
+        "match": ["Mapo-gu", "Hongdae", "Yeonnam", "Seogyo", "Sangsu", "Hapjeong"],
+        "ll": [37.5563, 126.9236],
+        "blurb": "The university quarter, so it is young, loud and open late. Live music, thrift shops and the best cheap eating in the city. Yeonnam-dong just north of it is the calmer, café version of the same thing."
+      },
+      {
+        "name": "Itaewon and Yongsan",
+        "local": "이태원 · 용산",
+        "match": ["Yongsan-gu", "Itaewon", "Hannam", "Ichon", "Huam"],
+        "ll": [37.5384, 126.9654],
+        "blurb": "Where the food stops being only Korean. Itaewon is the international strip; Hannam-dong above it is where the money went. The National Museum and the War Memorial are both down here too."
+      },
+      {
+        "name": "Gangnam",
+        "local": "강남",
+        "match": ["Gangnam-gu", "Sinsa", "Apgujeong", "Cheongdam", "Garosu"],
+        "ll": [37.4979, 127.0276],
+        "blurb": "South of the river and built for it: wide roads, tall buildings, expensive coffee. Garosu-gil is the walkable part. Worth an evening rather than a day unless you are shopping."
+      },
+      {
+        "name": "Seongsu",
+        "local": "성수",
+        "match": ["Seongdong-gu", "Seongsu", "Ttukseom"],
+        "ll": [37.5445, 127.0557],
+        "blurb": "Old shoe factories turned into cafés and concept stores. The one part of the city that everyone in Seoul is currently talking about, and small enough to do in an afternoon."
+      },
+      {
+        "name": "Yeouido",
+        "local": "여의도",
+        "match": ["Yeongdeungpo-gu", "Yeouido"],
+        "ll": [37.5264, 126.9263],
+        "blurb": "The island in the Han. Offices during the week, riverside park at the weekend, and the best place in the city to watch the sun go down over the water."
+      },
+      {
+        "name": "Seongbuk and Daehangno",
+        "local": "성북 · 대학로",
+        "match": ["Seongbuk-gu", "Seongbuk", "Daehangno", "Hyehwa"],
+        "ll": [37.5894, 127.0167],
+        "blurb": "Up the hill behind the palaces. Quiet, residential, a few very good small museums, and the theatre district around Hyehwa station at the bottom of it."
+      }
+    ],
+    "Tokyo": [
+      {
+        "name": "Shinjuku",
+        "local": "新宿",
+        "match": ["Shinjuku", "Kabukicho", "Yoyogi", "Okubo"],
+        "ll": [35.6938, 139.7034],
+        "blurb": "The busiest station on earth and everything that grew around it. Neon, tiny bars in Golden Gai, department stores, and Gyoen park a few minutes south when you need it to stop."
+      },
+      {
+        "name": "Shibuya",
+        "local": "渋谷",
+        "match": ["Shibuya", "Ebisu", "Daikanyama", "Harajuku", "Jingumae", "Aoyama"],
+        "ll": [35.6595, 139.7005],
+        "blurb": "The crossing, and then everything uphill from it. Harajuku and Omotesando for shopping, Daikanyama and Ebisu for eating, and Yoyogi park in the middle of the lot."
+      },
+      {
+        "name": "Asakusa and Ueno",
+        "local": "浅草 · 上野",
+        "match": ["Taito", "Asakusa", "Ueno", "Yanaka", "Kappabashi"],
+        "ll": [35.7127, 139.78],
+        "blurb": "Old Tokyo. Senso-ji and the approach of souvenir stalls, Ueno's park full of museums, and Yanaka's back lanes, which survived the war and look it."
+      },
+      {
+        "name": "Ginza and Tsukiji",
+        "local": "銀座 · 築地",
+        "match": ["Chuo-ku", "Ginza", "Tsukiji", "Nihonbashi", "Kyobashi"],
+        "ll": [35.6706, 139.772],
+        "blurb": "The expensive shopping streets, closed to cars at the weekend, and the old outer fish market a few blocks south where breakfast is still very good and very early."
+      },
+      {
+        "name": "Akihabara and the Palace",
+        "local": "秋葉原 · 皇居",
+        "match": ["Chiyoda", "Akihabara", "Marunouchi", "Kanda", "Jinbocho"],
+        "ll": [35.694, 139.7536],
+        "blurb": "Electronics, arcades and anime in Akihabara; the Imperial Palace gardens a short walk west; and Jinbocho's secondhand bookshops in between the two."
+      },
+      {
+        "name": "Roppongi and Azabu",
+        "local": "六本木 · 麻布",
+        "match": ["Minato-ku", "Roppongi", "Azabu", "Akasaka", "Shiba", "Odaiba", "Daiba"],
+        "ll": [35.6581, 139.7414],
+        "blurb": "Art museums and nightlife in the same few blocks, Tokyo Tower to the south, and some of the best views over the city from the top of the Roppongi Hills tower."
+      },
+      {
+        "name": "Nakameguro",
+        "local": "中目黒",
+        "match": ["Meguro", "Nakameguro", "Naka-meguro"],
+        "ll": [35.6339, 139.7157],
+        "blurb": "A canal lined with cherry trees and, along both banks, the small coffee places and shops everyone comes to see. An afternoon rather than a day, and best in the late light."
+      },
+      {
+        "name": "Skytree and Kiyosumi",
+        "local": "スカイツリー · 清澄",
+        "match": ["Sumida", "Koto", "Oshiage", "Kiyosumi", "Ryogoku", "Kinshicho"],
+        "ll": [35.7101, 139.8107],
+        "blurb": "East of the river. The Skytree and its view, sumo at Ryogoku, and Kiyosumi's garden and warehouse cafés a little further south."
+      }
+    ]
+  }
+}

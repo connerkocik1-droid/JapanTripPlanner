@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { City, LatLng, MAX_NIGHTS, PLACE_KINDS, Place, VOTES, Vote, placeKind } from '@/lib/data';
+import { City, Hood, LatLng, MAX_NIGHTS, PLACE_KINDS, Place, VOTES, Vote, placeKind } from '@/lib/data';
 import { fmtUsd, walkLabel } from '@/lib/format';
 import { CitySpend } from '@/lib/derive';
 import { isFlightLeg } from '@/lib/legKind';
@@ -10,10 +10,11 @@ import AirportRoutes from './AirportRoutes';
 import AddPlace from './AddPlace';
 import PlacePacks from './PlacePacks';
 import TouchMark, { touchStyle } from './TouchMark';
-import { GeoStatus, NumField, boxed, label, useGeocodedAddress } from './fields';
+import { GeoStatus, NumField, boxed, ghostBtn, label, useGeocodedAddress } from './fields';
 import CityMoney, { Local } from './CityMoney';
 import type { Rates } from '@/lib/money';
 import { WEEKDAYS, hoursLine } from '@/lib/hours';
+import { blankHood, groupByHood } from '@/lib/hoods';
 
 export interface CityPanelProps {
   city: City;
@@ -237,6 +238,14 @@ export default function CityPanel({
           </div>
         </div>
       </div>
+
+      {/*
+        Neighbourhoods. The map draws one pin each in place of a pin per
+        place, so this is where the words and pictures behind those pins are
+        written. Membership is read off addresses, so there is nothing to sort
+        by hand here — only what a part of the city is like.
+      */}
+      <Hoods city={city} onCity={onCity} onZoom={onZoom} />
 
       {/* Places */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 7px' }}>
@@ -593,6 +602,196 @@ function Hours({
  * consideration rather than everything anyone has ever pinned. Pressing the
  * answer already showing takes it back to undecided, which plots like a yes.
  */
+/**
+ * The city's neighbourhoods, folded away until opened.
+ *
+ * Everything here is optional. A neighbourhood arrives from the shipped set
+ * already named and placed, with a line about what it is like; what it does
+ * not arrive with is photographs, because inventing image addresses would put
+ * broken pictures on the map. So the one field that matters is the photo
+ * links, and the rest is there to be corrected rather than filled in.
+ */
+function Hoods({
+  city, onCity, onZoom,
+}: {
+  city: City;
+  onCity: <K extends keyof City>(key: K, val: City[K]) => void;
+  onZoom: (ll: LatLng, zoom: number) => void;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const hoods = city.hoods ?? [];
+  // How many places each one caught, so an edit to the matching can be seen
+  // working without leaving the tab.
+  const counts = new Map(groupByHood(city).groups.map((g) => [g.hood.id, g.places.length]));
+
+  const write = (id: string, patch: Partial<Hood>) =>
+    onCity('hoods', hoods.map((h) => (h.id === id ? { ...h, ...patch } : h)));
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 7px' }}>
+        <div className="mono" style={label}>Neighbourhoods</div>
+        <div className="mono num" style={{ ...label, fontSize: 9 }}>
+          {hoods.length ? `${hoods.length} on the map` : 'none yet'}
+        </div>
+      </div>
+      {hoods.length === 0 ? (
+        <div style={emptyNote}>
+          Parts of the city — Myeongdong, Shibuya. The map draws one pin each,
+          with what is in it, instead of a pin per place.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 6 }}>
+          {hoods.map((h) => {
+            const isOpen = open === h.id;
+            const held = counts.get(h.id) ?? 0;
+            return (
+              <div key={h.id} style={{ ...boxed, padding: '2px 8px', boxSizing: 'border-box', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 42 }}>
+                  <i
+                    className="ph ph-buildings"
+                    style={{ flex: 'none', fontSize: 14, color: 'var(--color-accent-300)' }}
+                  />
+                  <input
+                    type="text"
+                    value={h.name}
+                    placeholder="Neighbourhood"
+                    aria-label="Neighbourhood name"
+                    onChange={(e) => write(h.id, { name: e.target.value })}
+                    style={{ flex: 1, minWidth: 0, height: 40, fontSize: 12.5, fontWeight: 500 }}
+                  />
+                  <span
+                    className="mono num"
+                    aria-label={`${held} pinned here`}
+                    style={{ ...label, flex: 'none', fontSize: 9 }}
+                  >
+                    {held}
+                  </span>
+                  {h.ll ? (
+                    <button
+                      className="tap"
+                      aria-label={`Show ${h.name || 'this neighbourhood'} on the map`}
+                      onClick={() => h.ll && onZoom(h.ll, 14)}
+                      style={iconBtn}
+                    >
+                      <i className="ph ph-crosshair" style={{ fontSize: 13 }} />
+                    </button>
+                  ) : null}
+                  <button
+                    className="tap"
+                    aria-label={isOpen ? 'Close' : `Edit ${h.name || 'this neighbourhood'}`}
+                    aria-expanded={isOpen}
+                    onClick={() => setOpen(isOpen ? null : h.id)}
+                    style={iconBtn}
+                  >
+                    <i className={'ph ' + (isOpen ? 'ph-caret-up' : 'ph-caret-down')} style={{ fontSize: 13 }} />
+                  </button>
+                </div>
+                {isOpen ? (
+                  <>
+                    <textarea
+                      value={h.blurb}
+                      placeholder="What this part of the city is like"
+                      aria-label="Neighbourhood description"
+                      rows={3}
+                      onChange={(e) => write(h.id, { blurb: e.target.value })}
+                      style={{
+                        width: '100%', boxSizing: 'border-box', padding: '8px 0', fontSize: 11.5,
+                        lineHeight: 1.45, resize: 'vertical',
+                        borderTop: '1px solid var(--color-neutral-900)',
+                      }}
+                    />
+                    <textarea
+                      value={h.images.join('\n')}
+                      placeholder="Photo links, one per line"
+                      aria-label="Neighbourhood photo links"
+                      rows={2}
+                      onChange={(e) =>
+                        write(h.id, { images: e.target.value.split('\n').map((v) => v.trim()).filter(Boolean) })
+                      }
+                      style={{
+                        width: '100%', boxSizing: 'border-box', padding: '8px 0', fontSize: 10.5,
+                        fontFamily: 'var(--font-mono)', color: 'var(--color-accent-300)', resize: 'vertical',
+                        borderTop: '1px solid var(--color-neutral-900)',
+                      }}
+                    />
+                    <div
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, minHeight: 42,
+                        borderTop: '1px solid var(--color-neutral-900)',
+                      }}
+                    >
+                      <div className="mono" style={{ ...label, flex: 'none' }}>In addresses</div>
+                      <input
+                        type="text"
+                        value={h.match.join(', ')}
+                        placeholder="Jongno-gu, Insa-dong"
+                        aria-label="Address words that mean this neighbourhood"
+                        onChange={(e) =>
+                          write(h.id, { match: e.target.value.split(',').map((v) => v.trim()).filter(Boolean) })
+                        }
+                        style={{
+                          flex: 1, minWidth: 0, height: 40, fontSize: 11,
+                          fontFamily: 'var(--font-mono)', textAlign: 'right',
+                        }}
+                      />
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        minHeight: 42, borderTop: '1px solid var(--color-neutral-900)',
+                      }}
+                    >
+                      <span className="mono" style={{ ...label, fontSize: 9 }}>
+                        {h.ll ? 'Pinned' : 'Sits over whatever it catches'}
+                      </span>
+                      <button
+                        className="tap"
+                        onClick={() => {
+                          setOpen(null);
+                          onCity('hoods', hoods.filter((x) => x.id !== h.id));
+                        }}
+                        style={{
+                          minHeight: 40, padding: '0 10px', margin: '0 -10px 0 0', border: 'none',
+                          background: 'none', color: 'var(--color-danger)', fontSize: 11, cursor: 'pointer',
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <button
+        className="tap"
+        onClick={() => {
+          const h = blankHood();
+          onCity('hoods', [...hoods, h]);
+          setOpen(h.id);
+        }}
+        style={ghostBtn}
+      >
+        <i className="ph ph-plus" style={{ fontSize: 12 }} />
+        Add a neighbourhood
+      </button>
+    </>
+  );
+}
+
+const iconBtn = {
+  flex: 'none' as const,
+  width: 34,
+  height: 40,
+  border: 'none',
+  background: 'none',
+  color: 'var(--color-neutral-500)',
+  cursor: 'pointer',
+};
+
 function VoteRow({ vote, onVote }: { vote: Vote; onVote: (v: Vote) => void }) {
   return (
     <div

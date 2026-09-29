@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { City, LatLng, Place } from './data';
 import { geocodeQueue, hitToLatLng } from './geocode';
 import { loadPack, loadPackIndex, packPlaceToPlace, packsFor } from './placePacks';
+import { loadHoodPack } from './hoods';
 
 export interface AutoPacksArg {
   /** Nothing is touched until the trip has actually been read from storage. */
@@ -13,6 +14,8 @@ export interface AutoPacksArg {
   /** Records which shortlists a city has had, so none of them come back. */
   markPacks: (cityId: string, packIds: string[]) => void;
   locate: (cityId: string, placeId: string, ll: LatLng) => void;
+  /** Gives a city the neighbourhoods that ship for it, once. */
+  setHoods: (cityId: string, hoods: City['hoods']) => void;
 }
 
 /** A place still waiting on its address, and the city it belongs to. */
@@ -46,6 +49,17 @@ export function useAutoPacks(arg: AutoPacksArg): void {
     const signal = { cancelled: false };
 
     void (async () => {
+      // Neighbourhoods first: they are what the map draws, and they do not
+      // depend on the places having arrived or been geocoded. A city that
+      // already has some is left alone — they are editable, and putting the
+      // shipped set back over an edited one would undo the edit every reload.
+      for (const city of latest.current.cities) {
+        if (signal.cancelled) return;
+        if ((city.hoods ?? []).length) continue;
+        const hoods = await loadHoodPack(city.name);
+        if (hoods.length) latest.current.setHoods(city.id, hoods);
+      }
+
       const index = await loadPackIndex();
       if (signal.cancelled || !index.length) return;
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { City, DEFAULT_DWELL, LatLng, Place, placeKind, uid } from '@/lib/data';
 import { planDay } from '@/lib/dayPlan';
+import { groupByHood, hoodLine } from '@/lib/hoods';
 import { tripDayOn } from '@/lib/today';
 import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
@@ -83,6 +84,7 @@ export default function TripPlanner() {
       store.setCity(cityId, 'packs', [...new Set([...city.packs, ...packIds])]);
     },
     locate: (cityId, placeId, ll) => store.setPlace(cityId, placeId, 'll', ll),
+    setHoods: (cityId, hoods) => store.setCity(cityId, 'hoods', hoods),
   });
 
   const [tab, setTab] = useState<Tab>('map');
@@ -101,6 +103,13 @@ export default function TripPlanner() {
   const [settings, setSettings] = useState(false);
   const [online, setOnline] = useState(true);
   const [plotAll, setPlotAll] = useState(true);
+  /**
+   * The neighbourhood whose places are showing, if any. Opening one is what
+   * takes the map from "which parts of the city" down to "what is in this
+   * part", and only one is open at a time so the map never goes back to being
+   * every pin at once.
+   */
+  const [openHood, setOpenHood] = useState<string | null>(null);
   // A plan being built on the map: the stops so far, and the hop on offer.
   const [draft, setDraft] = useState<Draft | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -499,6 +508,17 @@ export default function TripPlanner() {
         return;
       }
       for (const c of doc.cities) {
+        // A neighbourhood opens: the map goes down to it and its places
+        // appear. Tapping the open one again closes it back to the overview.
+        const hood = (c.hoods ?? []).find((h) => h.id === id);
+        if (hood) {
+          const open = openHood === id;
+          setOpenHood(open ? null : id);
+          setCityId(c.id);
+          const where = groupByHood(c).groups.find((g) => g.hood.id === id)?.ll;
+          if (!open && where) zoomTo(where, 14);
+          return;
+        }
         const place = c.places.find((p) => p.id === id);
         if (place) {
           // Tapping a place puts you over it. The route it asks for arrives a
@@ -514,7 +534,7 @@ export default function TripPlanner() {
         }
       }
     },
-    [doc.cities, selectCity, openPreview, showOnMap, zoomTo],
+    [doc.cities, selectCity, openPreview, showOnMap, zoomTo, openHood],
   );
 
   /**
@@ -719,7 +739,51 @@ export default function TripPlanner() {
       }
       // Every pinned place is plotted — they are only routed once scheduled.
       if (!focused && !plotAll) return;
-      c.places.forEach((p) => {
+
+      /*
+       * Where a city has neighbourhoods, it is drawn as neighbourhoods: one
+       * pin each, rather than ninety pins that read as a smear. The places
+       * inside one appear when that one is opened, so the detail is a tap
+       * away rather than gone. Anything that landed in no neighbourhood keeps
+       * its own pin, and so does anything already in the open day — a route
+       * with a gap in it would read as a bug.
+       */
+      const { groups, loose } = groupByHood(c);
+      const opened = groups.find((g) => g.hood.id === openHood);
+      const shownPlaces = groups.length
+        ? c.places.filter(
+            (p) =>
+              loose.includes(p) ||
+              (opened ? opened.places.includes(p) : false) ||
+              (p.ll ? stopIndex.has(p.ll.join(',')) : false),
+          )
+        : c.places;
+      if (groups.length) {
+        groups.forEach((g) => {
+          out.push({
+            id: g.hood.id,
+            name: g.hood.name,
+            sub: hoodLine(g),
+            ll: g.ll,
+            selected: g.hood.id === openHood,
+            kind: 'hood',
+            icon: 'ph-buildings',
+            hood: {
+              local: g.hood.local,
+              blurb: g.hood.blurb,
+              images: g.hood.images ?? [],
+              line: hoodLine(g),
+              total: g.places.length,
+              yes: g.yes.map((p) => {
+                const k = placeKind(p.kind);
+                return { name: p.name, icon: k.icon, color: k.color, band: p.band };
+              }),
+            },
+          });
+        });
+      }
+
+      shownPlaces.forEach((p) => {
         if (!p.ll || !p.name) return;
         // A place ruled out is off the map entirely; that is what a no is for.
         // A stop already in a day stays, whatever it was voted — the day is
@@ -764,7 +828,7 @@ export default function TripPlanner() {
       });
     });
     return out;
-  }, [doc.cities, cityId, plotAll, stops, tab, view, draft, arrivals]);
+  }, [doc.cities, cityId, plotAll, stops, tab, view, draft, arrivals, openHood]);
 
   // Each city carries how you got there, so the map can draw flown legs as flights.
   const route = useMemo<RouteStop[]>(
