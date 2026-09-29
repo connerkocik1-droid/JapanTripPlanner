@@ -1,8 +1,10 @@
 /* Service worker: makes the planner open instantly and survive a bad signal. */
 
-// Bumped when a cached-by-name asset changes under the same filename — the
-// icons did, and cache-first would otherwise serve the old ones forever.
-const VERSION = 'v2';
+// Everything below is served cache first, so a device that has taken a copy of
+// an asset keeps it until this version changes. Bump it whenever an asset
+// changes without its name changing — the icons did, and a cached copy of the
+// old one survived a deploy and a reinstall.
+const VERSION = 'v3';
 const SHELL = `shell-${VERSION}`;
 const TILES = `tiles-${VERSION}`;
 const ASSETS = `assets-${VERSION}`;
