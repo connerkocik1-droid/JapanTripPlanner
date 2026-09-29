@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { blankPlace } from './data.ts';
 import {
   cuisineFromTypes, detailsPatch, mealsLine, ratingLine, shortCuisine, suggestMeals, wantsDetails,
-  packCatchUp, packKey,
+  packCatchUp, packKey, placeTags, matchesTags,
 } from './placeDetails.ts';
 
 test('a short cuisine is left exactly as written', () => {
@@ -165,4 +165,29 @@ test('a sight gets its rating but never a meal', () => {
   assert.equal(patch.rating, 4.5);
   assert.equal(patch.meals, undefined);
   assert.equal(packCatchUp({ name: place.name, rating: 4.5 }, place).meals, undefined);
+});
+
+// The map filter.
+
+test('a place answers to its meals, a drinking place to bar, a sight to activity', () => {
+  assert.deepEqual(placeTags({ ...blankPlace('eat'), name: 'Ichiran', meals: ['lunch', 'dinner'] }), ['lunch', 'dinner']);
+  assert.deepEqual(placeTags({ ...blankPlace('eat'), name: 'Bar Benfiddich', meals: ['dinner'] }), ['dinner', 'bar']);
+  assert.deepEqual(placeTags({ ...blankPlace('eat'), name: 'Torikizoku', cuisine: 'Izakaya' }), ['dinner', 'bar']);
+  assert.deepEqual(placeTags({ ...blankPlace('do'), name: 'teamLab' }), ['activity']);
+  assert.deepEqual(placeTags({ ...blankPlace('stay'), name: 'A hotel' }), []);
+});
+
+test('a sushi bar is not a bar, and notes do not make one', () => {
+  const sushi = { ...blankPlace('eat'), name: 'Sushi Dai', cuisine: 'Sushi bar', meals: ['lunch' as const] };
+  assert.equal(placeTags(sushi).includes('bar'), false);
+  const noted = { ...blankPlace('eat'), name: 'Kyubey', cuisine: 'Sushi', note: 'great sake list', meals: ['dinner' as const] };
+  assert.equal(placeTags(noted).includes('bar'), false);
+});
+
+test('nothing ticked shows everything; ticks are any-of', () => {
+  const cafe = { ...blankPlace('eat'), name: 'Blue Bottle', cuisine: 'Cafe' };
+  assert.equal(matchesTags(cafe, []), true);
+  assert.equal(matchesTags(cafe, ['breakfast']), true);
+  assert.equal(matchesTags(cafe, ['dinner', 'bar']), false);
+  assert.equal(matchesTags({ ...blankPlace('do'), name: 'Senso-ji' }, ['dinner', 'activity']), true);
 });

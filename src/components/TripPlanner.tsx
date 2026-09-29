@@ -12,7 +12,7 @@ import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import { useAirportRoutes } from '@/lib/airportRoute';
 import { useAutoPacks } from '@/lib/autoPacks';
 import { usePlaceDetails } from '@/lib/usePlaceDetails';
-import { ratingLine } from '@/lib/placeDetails';
+import { PLACE_TAGS, type PlaceTag, matchesTags, ratingLine } from '@/lib/placeDetails';
 import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
@@ -108,6 +108,8 @@ export default function TripPlanner() {
   const [settings, setSettings] = useState(false);
   const [online, setOnline] = useState(true);
   const [plotAll, setPlotAll] = useState(true);
+  /** The map filter: nothing ticked shows every place. */
+  const [tags, setTags] = useState<PlaceTag[]>([]);
   /**
    * The neighbourhood whose places are showing, if any. Opening one is what
    * takes the map from "which parts of the city" down to "what is in this
@@ -705,14 +707,16 @@ export default function TripPlanner() {
        */
       const { groups, loose } = groupByHood(c);
       const opened = groups.find((g) => g.hood.id === openHood);
-      const shownPlaces = groups.length
-        ? c.places.filter(
-            (p) =>
-              loose.includes(p) ||
-              (opened ? opened.places.includes(p) : false) ||
-              (p.ll ? stopIndex.has(p.ll.join(',')) : false),
-          )
-        : c.places;
+      // With a filter ticked the matches are the point, so they are shown
+      // wherever they are rather than waiting inside a closed neighbourhood.
+      const inDay = (p: Place) => (p.ll ? stopIndex.has(p.ll.join(',')) : false);
+      const shownPlaces = (
+        groups.length && !tags.length
+          ? c.places.filter(
+              (p) => loose.includes(p) || (opened ? opened.places.includes(p) : false) || inDay(p),
+            )
+          : c.places
+      ).filter((p) => inDay(p) || matchesTags(p, tags));
       if (groups.length) {
         groups.forEach((g) => {
           out.push({
@@ -790,7 +794,7 @@ export default function TripPlanner() {
       });
     });
     return out;
-  }, [doc.cities, cityId, plotAll, stops, tab, view, draft, arrivals, openHood]);
+  }, [doc.cities, cityId, plotAll, stops, tab, view, draft, arrivals, openHood, tags]);
 
   const submitCity = async () => {
     const name = newCity.trim();
@@ -1153,6 +1157,27 @@ export default function TripPlanner() {
             <i className="ph ph-path" style={{ fontSize: 14 }} />
             Make a plan
           </button>
+        ) : null}
+
+        {tab === 'map' && d.cities.length > 0 && !draft && !preview ? (
+          <div className="map-filter" role="group" aria-label="Show only">
+            {PLACE_TAGS.map((t) => {
+              const on = tags.includes(t.id);
+              return (
+                <label key={t.id} className={on ? 'map-filter-chip tap is-on' : 'map-filter-chip tap'}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() =>
+                      setTags((cur) => (on ? cur.filter((x) => x !== t.id) : [...cur, t.id]))
+                    }
+                  />
+                  <i className={on ? 'ph-fill ph-check-square' : 'ph ph-square'} />
+                  {t.label}
+                </label>
+              );
+            })}
+          </div>
         ) : null}
 
         {tab === 'map' && d.cities.length > 1 && !draft && !preview ? (

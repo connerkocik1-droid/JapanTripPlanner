@@ -181,6 +181,52 @@ export function suggestMeals(input: { opens?: string; closes?: string; cuisine?:
   return mealsFromCuisine([input.cuisine, input.note].filter(Boolean).join(' '));
 }
 
+/** What the map can be filtered to: the three meals, a drink, or something to do. */
+export type PlaceTag = Meal | 'bar' | 'activity';
+
+export const PLACE_TAGS: { id: PlaceTag; label: string }[] = [
+  { id: 'breakfast', label: 'Breakfast' },
+  { id: 'lunch', label: 'Lunch' },
+  { id: 'dinner', label: 'Dinner' },
+  { id: 'bar', label: 'Bar' },
+  { id: 'activity', label: 'Activity' },
+];
+
+/**
+ * A counter that happens to be called a bar is not somewhere you go for a
+ * drink, so these are taken out before the drinking words are looked for.
+ */
+const NOT_A_BAR = /\b(sushi|oyster|noodle|ramen|salad|juice|snack|coffee|espresso|dessert|raw)\s+bars?\b/g;
+const BAR = /\b(bars?|pubs?|izakaya|cocktails?|speakeasy|brewery|brewpub|taproom|sake|whisk(?:e)?y|makgeolli|beer|wine)\b/;
+
+/**
+ * Which filters a place answers to.
+ *
+ * The meals are the ones on the place — typed, or suggested by the lookup —
+ * and where it has none yet, the same suggestion worked out on the spot, so a
+ * place still waiting for its hours is not missing from every meal. A bar is
+ * read off what it serves and what it is called, never its notes: "good sake
+ * list" on a sushi counter does not make it a bar. Something to do is an
+ * activity; a hotel and an unsorted pin answer to nothing.
+ */
+export function placeTags(place: Place): PlaceTag[] {
+  if (place.kind === 'do') return ['activity'];
+  if (place.kind !== 'eat') return [];
+  const meals: PlaceTag[] = (place.meals ?? []).length
+    ? [...place.meals]
+    : suggestMeals({ opens: place.opens, closes: place.closes, cuisine: place.cuisine, note: place.note });
+  const said = `${place.cuisine} ${place.name}`.toLowerCase().replace(NOT_A_BAR, ' ');
+  if (BAR.test(said)) meals.push('bar');
+  return meals;
+}
+
+/** Nothing ticked shows everything; otherwise a place needs any one of the ticks. */
+export function matchesTags(place: Place, on: PlaceTag[]): boolean {
+  if (!on.length) return true;
+  const tags = placeTags(place);
+  return on.some((t) => tags.includes(t));
+}
+
 /** "Lunch or dinner", "Breakfast, lunch or dinner", '' for nothing to say. */
 export function mealsLine(meals: Meal[]): string {
   const names = ALL_MEALS.filter((m) => meals?.includes(m));

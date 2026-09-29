@@ -370,6 +370,54 @@ input::placeholder { color: var(--color-neutral-600); }
 }
 .map-toggle i { font-size: 12px; }
 
+/*
+ * The "show only" row across the top of the map. It scrolls sideways rather
+ * than wrapping, so on a phone it stays one line tall over the map.
+ */
+.map-filter {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  gap: 6px;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  pointer-events: none;
+}
+.map-filter::-webkit-scrollbar { display: none; }
+/* Centred while it fits, and scrollable from its first chip when it does not. */
+.map-filter-chip:first-child { margin-left: auto; }
+.map-filter-chip:last-child { margin-right: auto; }
+.map-filter-chip {
+  pointer-events: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-neutral-800);
+  background: rgba(255, 253, 249, 0.94);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+  color: var(--color-neutral-400);
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.map-filter-chip input { position: absolute; opacity: 0; width: 0; height: 0; }
+.map-filter-chip i { font-size: 13px; }
+.map-filter-chip.is-on {
+  border-color: var(--color-accent-600);
+  color: var(--color-accent-200);
+}
+.map-filter-chip:focus-within { outline: 2px solid var(--color-accent-500); outline-offset: 1px; }
+
 .map-attrib {
   position: absolute;
   left: 8px;
