@@ -275,7 +275,7 @@ export default function CityPanel({
         value={city.foodPer}
         aria-label="Food budget per day"
         onChange={(e) => onCity('foodPer', Number(e.target.value))}
-        style={{ width: '100%', height: 32, accentColor: '#9184d9' }}
+        style={{ width: '100%', height: 32, accentColor: 'var(--color-accent)' }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <div className="mono" style={{ ...label, fontSize: 9, color: 'var(--color-neutral-600)' }}>$0</div>

@@ -127,7 +127,7 @@ export default function BuilderTab({
             onClick={onStartPlan}
             style={{
               width: '100%', minHeight: 44, marginBottom: 10, borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-accent-700)', background: 'rgba(145,132,217,.10)',
+              border: '1px solid var(--color-accent-700)', background: 'var(--tint-accent)',
               color: 'var(--color-accent-200)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
             }}
@@ -209,7 +209,7 @@ export default function BuilderTab({
             }}
           />
           {problem ? (
-            <div className="mono" style={{ fontSize: 9, color: '#ff8fae', marginTop: 6 }}>{problem}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--color-danger)', marginTop: 6 }}>{problem}</div>
           ) : null}
         </div>
       )}
@@ -276,7 +276,7 @@ function CustomPicker({
               style={{
                 minHeight: 32, padding: '0 11px', borderRadius: 9999, cursor: 'pointer', fontSize: 11,
                 border: '1px solid ' + (on ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
-                background: on ? 'rgba(145,132,217,.12)' : 'transparent',
+                background: on ? 'var(--tint-accent)' : 'transparent',
                 color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-500)',
               }}
             >

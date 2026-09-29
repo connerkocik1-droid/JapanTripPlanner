@@ -248,9 +248,9 @@ export default function TripSettings({
       </div>
       <div className="mono" style={{ ...label, fontSize: 8.5, lineHeight: 1.5 }}>
         {problem ? (
-          <span style={{ color: '#ff8fae' }}>{problem}</span>
+          <span style={{ color: 'var(--color-danger)' }}>{problem}</span>
         ) : syncState === 'error' ? (
-          <span style={{ color: '#ffd08a' }}>
+          <span style={{ color: 'var(--color-warn)' }}>
             Saved on this device · your other devices are not getting it right now
           </span>
         ) : syncState === 'off' ? (

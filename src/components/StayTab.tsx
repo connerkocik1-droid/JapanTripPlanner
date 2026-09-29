@@ -122,7 +122,7 @@ function StayCard({
       style={{
         borderRadius: 'var(--radius-md)',
         border: '1px solid ' + (active ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
-        background: active ? 'rgba(145,132,217,.10)' : 'var(--color-surface)',
+        background: active ? 'var(--tint-accent)' : 'var(--color-surface)',
         transition: 'background-color .16s ease, border-color .16s ease',
         ...(touchStyle(touch) ?? {}),
       }}
@@ -134,7 +134,7 @@ function StayCard({
             flex: 'none', width: 26, height: 26, borderRadius: 9999,
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13,
             // Grey until it is the active option, matching the map's pins.
-            color: active ? '#241f3d' : 'var(--color-neutral-400)',
+            color: active ? 'var(--color-on-accent)' : 'var(--color-neutral-400)',
             background: active ? 'var(--color-accent-400)' : 'var(--color-neutral-800)',
           }}
         >
@@ -199,7 +199,7 @@ function StayCard({
             flex: 1, minHeight: 40, borderRadius: 'var(--radius-sm)', cursor: 'pointer',
             border: '1px solid ' + (active ? 'var(--color-accent-400)' : 'var(--color-neutral-700)'),
             background: active ? 'var(--color-accent-400)' : 'transparent',
-            color: active ? '#241f3d' : 'var(--color-neutral-300)',
+            color: active ? 'var(--color-on-accent)' : 'var(--color-neutral-300)',
             fontSize: 12, fontWeight: 600,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}

@@ -59,9 +59,9 @@ const PlanBuilder = forwardRef<HTMLDivElement, PlanBuilderProps>(function PlanBu
       style={{
         position: 'absolute', left: 8, right: 8, bottom: 'calc(var(--safe-bottom) + 10px)', zIndex: 7,
         borderRadius: 'var(--radius-md)', overflow: 'hidden',
-        background: 'rgba(27,30,46,.97)', backdropFilter: 'blur(16px)',
+        background: 'var(--color-raised)', backdropFilter: 'blur(16px)',
         border: '1px solid var(--color-accent-700)',
-        boxShadow: '0 10px 40px rgba(0,0,0,.55)',
+        boxShadow: 'var(--shadow-float)',
         animation: 'fadeIn .18s ease both',
       }}
     >
@@ -213,7 +213,7 @@ const PlanBuilder = forwardRef<HTMLDivElement, PlanBuilderProps>(function PlanBu
           style={{
             padding: '9px 11px',
             borderTop: draft ? '1px solid var(--color-neutral-800)' : 'none',
-            background: 'rgba(145,132,217,.08)',
+            background: 'var(--tint-accent-soft)',
           }}
         >
           <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
@@ -257,7 +257,7 @@ const PlanBuilder = forwardRef<HTMLDivElement, PlanBuilderProps>(function PlanBu
               ) : null}
             </div>
           ) : (
-            <div className="mono" style={{ fontSize: 9.5, color: '#ff8fae', marginTop: 3 }}>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-danger)', marginTop: 3 }}>
               {preview.problem || 'No route found.'}
             </div>
           )}

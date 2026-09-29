@@ -43,7 +43,7 @@ export default function TripPicker({
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 50,
-        background: 'radial-gradient(70% 50% at 50% 30%, #1d2034 0%, #101220 70%)',
+        background: 'radial-gradient(150% 100% at 50% 0%, #fff9f0 0%, #fbf0e0 45%, #f3e4d2 100%)',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 22, padding: 24,
       }}
@@ -52,7 +52,9 @@ export default function TripPicker({
         <div className="mono" style={{ fontSize: 9.5, color: person.color }}>
           {person.name}
         </div>
-        <div style={{ fontSize: 22, fontWeight: 500, marginTop: 6 }}>Which trip?</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 600, marginTop: 6 }}>
+          Which trip?
+        </div>
       </div>
 
       <div
@@ -71,7 +73,7 @@ export default function TripPicker({
               minHeight: 52, padding: '0 14px', textAlign: 'left',
               borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--color-neutral-800)',
-              background: 'rgba(255,255,255,.03)',
+              background: 'var(--color-neutral-900)',
               color: 'inherit', cursor: 'pointer', fontSize: 14,
             }}
           >
@@ -118,7 +120,7 @@ export default function TripPicker({
               flex: 1, minWidth: 0, minHeight: 52, padding: '0 14px',
               borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--color-neutral-800)',
-              background: 'rgba(255,255,255,.03)',
+              background: 'var(--color-neutral-900)',
               color: 'inherit', fontSize: 14,
             }}
           />
@@ -141,7 +143,7 @@ export default function TripPicker({
         </div>
 
         {problem ? (
-          <div className="mono" style={{ fontSize: 9.5, color: '#ff8fae', textAlign: 'center' }}>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-danger)', textAlign: 'center' }}>
             {problem}
           </div>
         ) : null}
