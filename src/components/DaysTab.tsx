@@ -3,6 +3,8 @@
 import { City, DayItem, LatLng, Place, TravelMode } from '@/lib/data';
 import type { Preset } from '@/lib/presets';
 import DayFill from './DayFill';
+import { Local } from './CityMoney';
+import type { Rates } from '@/lib/money';
 import { DayEntry, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtDow, fmtUsd } from '@/lib/format';
 import { HopResult } from '@/lib/useDayRoute';
@@ -22,6 +24,8 @@ export interface DaysTabProps {
   city: City | null;
   /** Where the day currently ends, so a candidate stop can be timed from it. */
   anchor: { ll: LatLng; label: string } | null;
+  /** The day's exchange rates, for what the day costs where it is spent. */
+  rates: Rates | null;
   onSelectDay: (n: number) => void;
   onAddItem: (key: string) => void;
   onSetItem: <K extends keyof DayItem>(key: string, id: string, field: K, val: DayItem[K]) => void;
@@ -37,7 +41,7 @@ export interface DaysTabProps {
 }
 
 export default function DaysTab({
-  schedule, start, selected, hops, plan, fare, travelers, city, anchor, onSelectDay, onAddItem,
+  schedule, start, selected, hops, plan, fare, travelers, city, anchor, rates, onSelectDay, onAddItem,
   onSetItem, onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop, onAddStop,
   onApplyPreset, onSetFare, onStartPlan,
 }: DaysTabProps) {
@@ -87,8 +91,11 @@ export default function DaysTab({
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div style={{ fontSize: 17, fontWeight: 500 }}>{day.city.name}</div>
-        <div className="num" style={{ fontSize: 12.5, color: 'var(--color-neutral-400)' }}>
-          {total ? fmtUsd(total) : ''}
+        <div>
+          <div className="num" style={{ fontSize: 12.5, color: 'var(--color-neutral-400)', textAlign: 'right' }}>
+            {total ? fmtUsd(total) : ''}
+          </div>
+          <Local usd={total} city={city} rates={rates} />
         </div>
       </div>
       <div
@@ -124,6 +131,7 @@ export default function DaysTab({
           <Stat
             label="Fares"
             value={plan.transitCost ? fmtUsd(plan.transitCost) : fare ? '—' : 'set fare'}
+            below={<Local usd={plan.transitCost} city={city} rates={rates} align="left" />}
           />
         </div>
       ) : null}
@@ -238,6 +246,7 @@ export default function DaysTab({
         anchor={anchor}
         metroFare={fare}
         travelers={travelers}
+        rates={rates}
         onApplyPreset={onApplyPreset}
         onAddStop={onAddStop}
         onAddBlank={() => onAddItem(day.key)}
@@ -333,11 +342,12 @@ function HopStrip({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, below }: { label: string; value: string; below?: React.ReactNode }) {
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
       <div className="mono" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>{label}</div>
       <div className="num" style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>{value}</div>
+      {below}
     </div>
   );
 }

@@ -7,6 +7,8 @@ import { fmtSpan } from '@/lib/dayPlan';
 import { Preset, loadPreset, loadPresetIndex, normalizePreset } from '@/lib/presets';
 import { LegOptions, fmtDistance, fmtDuration, routeLeg } from '@/lib/routing';
 import { LatLng } from '@/lib/data';
+import { Local } from './CityMoney';
+import type { Rates } from '@/lib/money';
 
 export interface DayFillProps {
   city: City | null;
@@ -14,6 +16,8 @@ export interface DayFillProps {
   anchor: { ll: LatLng; label: string } | null;
   metroFare: number;
   travelers: number;
+  /** The day's exchange rates, for what a fare comes to at the gate. */
+  rates: Rates | null;
   onApplyPreset: (preset: Preset, replace: boolean) => void;
   onAddStop: (place: Place) => void;
   /** A stop that is not one of the city's pinned places — typed in by hand. */
@@ -33,7 +37,7 @@ export interface DayFillProps {
  * way of adding to it here.
  */
 export default function DayFill({
-  city, anchor, metroFare, travelers, onApplyPreset, onAddStop, onAddBlank, onSetFare,
+  city, anchor, metroFare, travelers, rates, onApplyPreset, onAddStop, onAddBlank, onSetFare,
   onZoom, onStartPlan,
 }: DayFillProps) {
   const [index, setIndex] = useState<{ id: string; name: string; city: string; summary?: string; file: string }[]>([]);
@@ -115,6 +119,10 @@ export default function DayFill({
         <span className="mono" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>
           / person
         </span>
+      </div>
+      {/* What that fare actually reads as on the machine you buy it from. */}
+      <div style={{ marginTop: -6, marginBottom: 10 }}>
+        <Local usd={metroFare} city={city} rates={rates} />
       </div>
 
       <CustomPicker

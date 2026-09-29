@@ -11,9 +11,15 @@ import AddPlace from './AddPlace';
 import PlacePacks from './PlacePacks';
 import TouchMark, { touchStyle } from './TouchMark';
 import { GeoStatus, NumField, boxed, label, useGeocodedAddress } from './fields';
+import CityMoney, { Local } from './CityMoney';
+import type { Rates } from '@/lib/money';
 
 export interface CityPanelProps {
   city: City;
+  /** The day's exchange rates, for showing what the city's figures come to there. */
+  rates: Rates | null;
+  /** Those rates are from an earlier day than today. */
+  ratesStale: boolean;
   spend: CitySpend;
   travelers: number;
   onCity: <K extends keyof City>(key: K, val: City[K]) => void;
@@ -28,7 +34,7 @@ export interface CityPanelProps {
 }
 
 export default function CityPanel({
-  city, spend, travelers, onCity, onOpenStay,
+  city, spend, travelers, rates, ratesStale, onCity, onOpenStay,
   onAddPlaces, onPlace, onRemovePlace, onZoom, touch,
 }: CityPanelProps) {
   const active = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
@@ -285,12 +291,17 @@ export default function CityPanel({
         <div className="mono" style={{ ...label, fontSize: 9, color: 'var(--color-neutral-600)' }}>$300</div>
       </div>
 
+      <CityMoney city={city} rates={rates} stale={ratesStale} onCity={onCity} />
+
       {/* Subtotal */}
       <div style={{ borderTop: '1px solid var(--color-divider)', margin: '12px 0 9px' }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ fontSize: 12.5, color: 'var(--color-neutral-400)' }}>{city.name} subtotal</div>
-        <div className="num" style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-accent-200)' }}>
-          {fmtUsd(spend.total)}
+        <div>
+          <div className="num" style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-accent-200)', textAlign: 'right' }}>
+            {fmtUsd(spend.total)}
+          </div>
+          <Local usd={spend.total} city={city} rates={rates} />
         </div>
       </div>
       {spend.activities ? (

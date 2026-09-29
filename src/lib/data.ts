@@ -93,6 +93,10 @@ export interface City {
   /** A single metro/bus fare here, per person — prices the day's transit legs. */
   metroFare: number;
   foodPer: number;
+  /** What this city spends in, as a code from `CURRENCIES` ('' = dollars only). */
+  currency: string;
+  /** Units of that currency per dollar, typed in by hand. 0 means use the day's. */
+  rate: number;
   places: Place[];
   /**
    * Ids of the ready-made shortlists this city has already been given. Kept so
@@ -182,6 +186,8 @@ export function blankCity(name: string, ll: LatLng | null = null): City {
     airportFare: 0,
     metroFare: 0,
     foodPer: 0,
+    currency: '',
+    rate: 0,
     places: [],
     packs: [],
   };

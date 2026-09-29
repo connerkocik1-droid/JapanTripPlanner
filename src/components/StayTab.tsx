@@ -6,9 +6,13 @@ import { fmtUsd, money } from '@/lib/format';
 import { Touch } from '@/lib/tripState';
 import TouchMark, { touchStyle } from './TouchMark';
 import { GeoStatus, NumField, ghostBtn, label, useGeocodedAddress } from './fields';
+import { Local } from './CityMoney';
+import type { Rates } from '@/lib/money';
 
 export interface StayTabProps {
   cities: City[];
+  /** The day's exchange rates, for what a night comes to where it is paid. */
+  rates: Rates | null;
   /** Nothing is active until someone presses the button on an option. */
   onSetActive: (cityId: string, hotelId: string | null) => void;
   onHotel: <K extends keyof Hotel>(cityId: string, hotelId: string, key: K, val: Hotel[K]) => void;
@@ -23,7 +27,7 @@ export interface StayTabProps {
  * is the one the budget counts and the one the map marks brightest.
  */
 export default function StayTab({
-  cities, onSetActive, onHotel, onAddHotel, onZoom, touch,
+  cities, rates, onSetActive, onHotel, onAddHotel, onZoom, touch,
 }: StayTabProps) {
   if (cities.length === 0) {
     return (
@@ -60,10 +64,15 @@ export default function StayTab({
                   {city.hotels.filter((h) => h.name.trim()).length || 'no'} options
                 </div>
               </div>
-              <div className="mono num" style={{ ...label, fontSize: 9, textAlign: 'right', flex: 'none' }}>
-                {active
-                  ? fmtUsd((Number(active.cost) || 0) * city.nights) + ' total'
-                  : 'none active'}
+              <div style={{ flex: 'none' }}>
+                <div className="mono num" style={{ ...label, fontSize: 9, textAlign: 'right' }}>
+                  {active
+                    ? fmtUsd((Number(active.cost) || 0) * city.nights) + ' total'
+                    : 'none active'}
+                </div>
+                {active ? (
+                  <Local usd={(Number(active.cost) || 0) * city.nights} city={city} rates={rates} />
+                ) : null}
               </div>
             </div>
 
@@ -74,6 +83,8 @@ export default function StayTab({
                   index={i}
                   hotel={h}
                   nights={city.nights}
+                  city={city}
+                  rates={rates}
                   active={city.hotelSel === h.id}
                   onToggle={() => {
                     const turningOn = city.hotelSel !== h.id;
@@ -101,11 +112,14 @@ export default function StayTab({
 }
 
 function StayCard({
-  index, hotel, nights, active, onToggle, onShow, onField, touch,
+  index, hotel, nights, city, rates, active, onToggle, onShow, onField, touch,
 }: {
   index: number;
   hotel: Hotel;
   nights: number;
+  /** The city this option is in — what its currency and rate are read from. */
+  city: City;
+  rates: Rates | null;
   active: boolean;
   onToggle: () => void;
   onShow: () => void;
@@ -264,8 +278,11 @@ function StayCard({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 44 }}>
             <div className="mono" style={{ ...label, flex: 'none' }}>$ / night</div>
             <NumField value={hotel.cost} onChange={(v) => onField('cost', v)} aria="Cost per night" />
-            <div className="mono num" style={{ ...label, marginLeft: 'auto' }}>
-              {fmtUsd(nightly * nights)} for {nights} {nights === 1 ? 'night' : 'nights'}
+            <div style={{ marginLeft: 'auto' }}>
+              <div className="mono num" style={{ ...label, textAlign: 'right' }}>
+                {fmtUsd(nightly * nights)} for {nights} {nights === 1 ? 'night' : 'nights'}
+              </div>
+              <Local usd={nightly * nights} city={city} rates={rates} />
             </div>
           </div>
 
