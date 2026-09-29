@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { City, DayItem, LatLng, Place, TravelMode } from '@/lib/data';
 import type { Preset } from '@/lib/presets';
 import DayFill from './DayFill';
@@ -10,7 +11,7 @@ import { DayEntry, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtDow, fmtUsd } from '@/lib/format';
 import { HopResult } from '@/lib/useDayRoute';
 import { fmtDistance, fmtDuration } from '@/lib/routing';
-import { DayPlan, fmtClock, fmtSpan } from '@/lib/dayPlan';
+import { DayPlan, fmtClock, fmtSpan, parseClock } from '@/lib/dayPlan';
 
 export interface DaysTabProps {
   schedule: DayEntry[];
@@ -46,6 +47,13 @@ export default function DaysTab({
   onSetItem, onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop, onAddStop,
   onApplyPreset, onSetFare, onStartPlan,
 }: DaysTabProps) {
+  /**
+   * Which stop is open for editing, if any. A day is read far more often than
+   * it is changed, so a stop shows its line and opens its controls on a tap —
+   * and only one at a time, which keeps the day one screen rather than four.
+   */
+  const [openStop, setOpenStop] = useState<string | null>(null);
+
   if (!schedule.length) {
     return <div style={empty}>Add a city on the Map tab and its nights show up here as days to plan.</div>;
   }
@@ -56,8 +64,6 @@ export default function DaysTab({
   const places = day.city.places;
   const hotel = selectedHotel(day.city);
   const hopFor = (id: string) => hops.find((h) => h.toId === id);
-
-  const moving = plan ? plan.movingMins * 60 : 0;
 
   // Read once for the whole day: which stops you cannot actually get into.
   // The per-stop line says what is wrong; this says that something is, at the
@@ -115,9 +121,12 @@ export default function DaysTab({
           gap: 8, margin: '3px 0 12px',
         }}
       >
+        {/*
+          * The strip above already says which day this is, and the stats row
+          * below already gives the moving time, so this is only the date.
+          */}
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)' }}>
-          Day {String(day.n).padStart(2, '0')} / {fmtDow(dt)} {fmtD(dt)}
-          {moving ? ` · ${fmtDuration(moving)} moving` : ''}
+          {fmtDow(dt)} {fmtD(dt)}
         </div>
         <button
           className="tap"
@@ -202,6 +211,8 @@ export default function DaysTab({
               <StopCard
                 index={i}
                 item={it}
+                open={openStop === it.id}
+                onOpen={() => setOpenStop((cur) => (cur === it.id ? null : it.id))}
                 weekday={weekday}
                 arrive={plan?.stops[i]?.arrive ?? null}
                 depart={plan?.stops[i]?.depart ?? null}
@@ -382,11 +393,14 @@ function Stat({ label, value, below }: { label: string; value: string; below?: R
 }
 
 function StopCard({
-  index, item, place, places, first, last, arrive, depart, weekday, onSet, onToggle, onRemove,
-  onMove, onZoom,
+  index, item, place, places, first, last, arrive, depart, weekday, open, onOpen, onSet,
+  onToggle, onRemove, onMove, onZoom,
 }: {
   index: number;
   item: DayItem;
+  /** Open for editing. One stop at a time, so the day stays readable. */
+  open: boolean;
+  onOpen: () => void;
   arrive: number | null;
   depart: number | null;
   /** The weekday this stop falls on, for checking it against the place's hours. */
@@ -430,25 +444,37 @@ function StopCard({
         >
           {item.done ? <i className="ph-fill ph-check" /> : <span className="num" style={{ color: 'var(--color-neutral-500)', fontSize: 10 }}>{index + 1}</span>}
         </button>
-        <span style={{ flex: 'none', width: 62 }}>
-          <input
-            type="time"
-            value={item.time}
-            aria-label="Time"
-            placeholder={arrive !== null ? fmtClock(arrive) : ''}
-            onChange={(e) => onSet('time', e.target.value)}
+        {open ? (
+          <span style={{ flex: 'none', width: 62 }}>
+            <input
+              type="time"
+              value={item.time}
+              aria-label="Time"
+              placeholder={arrive !== null ? fmtClock(arrive) : ''}
+              onChange={(e) => onSet('time', e.target.value)}
+              className="mono num"
+              style={{
+                width: '100%', fontSize: 10, background: 'transparent', border: 'none',
+                color: item.time ? 'var(--color-accent-200)' : 'var(--color-neutral-500)',
+              }}
+            />
+            {!item.time && arrive !== null ? (
+              <span className="mono num" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>
+                ~{fmtClock(arrive)}
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          <span
             className="mono num"
             style={{
-              width: '100%', fontSize: 10, background: 'transparent', border: 'none',
-              color: item.time ? 'var(--color-accent-200)' : 'var(--color-neutral-500)',
+              flex: 'none', fontSize: 10,
+              color: item.time ? 'var(--color-accent-200)' : 'var(--color-neutral-600)',
             }}
-          />
-          {!item.time && arrive !== null ? (
-            <span className="mono num" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>
-              ~{fmtClock(arrive)}
-            </span>
-          ) : null}
-        </span>
+          >
+            {item.time ? fmtClock(parseClock(item.time) ?? 0) : arrive !== null ? '~' + fmtClock(arrive) : '—'}
+          </span>
+        )}
         <input
           type="text"
           value={item.title}
@@ -460,20 +486,70 @@ function StopCard({
             color: item.done ? 'var(--color-neutral-600)' : 'var(--color-text)',
           }}
         />
-        <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-600)' }}>$</span>
-        <input
-          type="number"
-          min={0}
-          inputMode="decimal"
-          value={item.cost || ''}
-          placeholder="0"
-          aria-label="Cost"
-          onChange={(e) => onSet('cost', Number(e.target.value) || 0)}
-          className="num"
-          style={{ flex: 'none', width: 46, fontSize: 11.5, textAlign: 'right' }}
-        />
+        {open ? (
+          <>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-600)' }}>$</span>
+            <input
+              type="number"
+              min={0}
+              inputMode="decimal"
+              value={item.cost || ''}
+              placeholder="0"
+              aria-label="Cost"
+              onChange={(e) => onSet('cost', Number(e.target.value) || 0)}
+              className="num"
+              style={{ flex: 'none', width: 46, fontSize: 11.5, textAlign: 'right' }}
+            />
+          </>
+        ) : item.cost ? (
+          <span className="num" style={{ flex: 'none', fontSize: 11.5, color: 'var(--color-neutral-400)' }}>
+            {fmtUsd(item.cost)}
+          </span>
+        ) : null}
+        <button
+          className="tap"
+          onClick={onOpen}
+          aria-expanded={open}
+          aria-label={open ? 'Done editing this stop' : 'Edit this stop'}
+          style={{ ...iconBtn, width: 28, height: 28, color: 'var(--color-neutral-600)' }}
+        >
+          <i className={open ? 'ph ph-caret-up' : 'ph ph-caret-down'} style={{ fontSize: 12 }} />
+        </button>
       </div>
 
+      {/* Closed, a stop still says where it is and how long it has. */}
+      {!open ? (
+        <div
+          className="mono"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, paddingLeft: 29,
+            fontSize: 8.5, color: 'var(--color-neutral-600)',
+          }}
+        >
+          <span
+            style={{
+              minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              // A place's own name, not a label — it keeps its capitals.
+              textTransform: 'none', letterSpacing: 0, fontSize: 9.5,
+              color: place ? 'var(--color-accent-300)' : 'var(--color-neutral-700)',
+            }}
+          >
+            {place
+              ? place.name.trim() && place.name.trim() !== item.title.trim()
+                ? place.name
+                : ''
+              : 'No location'}
+          </span>
+          {item.dwell ? (
+            <span className="num" style={{ flex: 'none' }}>
+              {item.dwell} min{depart !== null ? ` · till ${fmtClock(depart)}` : ''}
+            </span>
+          ) : null}
+          {item.note.trim() ? <i className="ph ph-note" style={{ flex: 'none', fontSize: 10 }} /> : null}
+        </div>
+      ) : null}
+
+      {open ? (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
         <select
           value={item.placeId ?? ''}
@@ -525,7 +601,9 @@ function StopCard({
           <i className="ph ph-trash" style={{ fontSize: 12 }} />
         </button>
       </div>
+      ) : null}
 
+      {open ? (
       <input
         type="text"
         value={item.note}
@@ -533,6 +611,8 @@ function StopCard({
         onChange={(e) => onSet('note', e.target.value)}
         style={{ width: '100%', fontSize: 11, height: 28, color: 'var(--color-neutral-500)' }}
       />
+      ) : null}
+      {open ? (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span className="mono" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)', flex: 1 }}>
           stay
@@ -553,6 +633,7 @@ function StopCard({
           min{depart !== null ? ` · till ${fmtClock(depart)}` : ''}
         </span>
       </div>
+      ) : null}
       {clash ? (
         <div
           style={{
