@@ -63,7 +63,12 @@ export function usePlaceDetails(arg: PlaceDetailsArg): void {
         // report, so the run stops rather than asking about every place in
         // turn. It picks up on its own the first load after a key is added.
         if (answer === 'unconfigured') return;
-        const on = new Date().toISOString().slice(0, 10);
+        // The lookup itself failed — Google refused the key, or was down. That
+        // is not "nothing found", so nothing is stamped and the place is asked
+        // about again next load; and since the next one would fail the same
+        // way, the run stops here.
+        if (answer === 'failed') return;
+        const on = new Date().toISOString();
         latest.current.fill(item.cityId, item.place.id, detailsPatch(item.place, answer, on));
         // Paced the way the geocoder is. These are somebody else's servers and
         // the work is happening while the travelers look at the map anyway.
@@ -77,17 +82,17 @@ export function usePlaceDetails(arg: PlaceDetailsArg): void {
   }, [arg.ready, waiting]);
 }
 
-/** One lookup: the facts, `null` for nothing found, or that there is no key. */
-async function lookUp(place: Place): Promise<PlaceFacts | null | 'unconfigured'> {
+/** One lookup: the facts, `null` for nothing found, no key, or a failed call. */
+async function lookUp(place: Place): Promise<PlaceFacts | null | 'unconfigured' | 'failed'> {
   const params = new URLSearchParams({ name: place.name.trim() });
   if (place.addr.trim()) params.set('addr', place.addr.trim());
   try {
     const res = await fetch('/api/place-details?' + params.toString());
-    if (!res.ok) return null;
+    if (!res.ok) return 'failed';
     const body = (await res.json()) as { configured?: boolean; result?: PlaceFacts | null };
     if (body.configured === false) return 'unconfigured';
     return body.result ?? null;
   } catch {
-    return null;
+    return 'failed';
   }
 }

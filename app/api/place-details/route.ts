@@ -124,7 +124,17 @@ export async function GET(req: Request) {
       }),
       cache: 'force-cache',
     });
-    if (!res.ok) return NextResponse.json({ configured: true, result: null }, { status: 502 });
+    if (!res.ok) {
+      // Usually the key: Places API (New) not enabled on its project, or the
+      // key restricted to websites, which a server call can never satisfy.
+      // Google says which in the body, so it goes to the logs and the answer.
+      const detail = (await res.text()).slice(0, 500);
+      console.error('place-details: Google Places answered', res.status, detail);
+      return NextResponse.json(
+        { configured: true, result: null, error: `google ${res.status}`, detail },
+        { status: 502 },
+      );
+    }
 
     const body = (await res.json()) as { places?: Found[] };
     const hit = body.places?.[0];

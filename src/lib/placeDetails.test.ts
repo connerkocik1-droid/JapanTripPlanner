@@ -102,9 +102,15 @@ test('hours from the same answer decide that answer\'s meals', () => {
 
 test('a place with nothing found is still stamped, so it is asked about once', () => {
   const place = { ...blankPlace('do'), name: 'Somewhere' };
-  const patch = detailsPatch(place, null, '2026-09-29');
-  assert.deepEqual(patch, { lookedUp: '2026-09-29' });
+  const patch = detailsPatch(place, null, '2026-09-30T10:00:00.000Z');
+  assert.deepEqual(patch, { lookedUp: '2026-09-30T10:00:00.000Z' });
   assert.equal(wantsDetails({ ...place, ...patch }), false);
+});
+
+test('a day-only stamp from the first version is retried once if nothing landed', () => {
+  const place = { ...blankPlace('eat'), name: 'Ichiran', lookedUp: '2026-09-29' };
+  assert.equal(wantsDetails(place), true);
+  assert.equal(wantsDetails({ ...place, images: ['/api/place-photo?ref=x'] }), false);
 });
 
 test('the queue takes named eats and sights, once each', () => {

@@ -291,7 +291,14 @@ export function packKey(name: string): string {
 
 /** A place the lookup has not seen yet. Only eats and sights are worth asking about. */
 export function wantsDetails(place: Place): boolean {
-  if (place.lookedUp.trim()) return false;
   if (place.kind === 'stay') return false;
-  return Boolean(place.name.trim());
+  if (!place.name.trim()) return false;
+  const stamp = place.lookedUp.trim();
+  if (!stamp) return true;
+  // The first version stamped a bare date even when the lookup had failed —
+  // a key that was not yet live, an API not yet enabled — which left every
+  // place it touched blank for good. Those stamps are day-only; stamps written
+  // since carry the time. A day-only stamp on a place that never got a
+  // photograph is given one more go.
+  return /^\d{4}-\d{2}-\d{2}$/.test(stamp) && !place.images.some((s) => s.trim());
 }
