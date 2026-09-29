@@ -23,10 +23,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *  below the picture. */
 const FILM_BG = '#f3e9d7';
 
-const FILM = '/intro/trip-intro.3.mp4';
-const STILL = '/intro/trip-intro.3.jpg';
+const FILM = '/intro/trip-intro.4.mp4';
+const STILL = '/intro/trip-intro.4.jpg';
 /** The same film as an animated image, for a phone that will not play video. */
-const ANIMATED = '/intro/trip-intro.3.webp';
+const ANIMATED = '/intro/trip-intro.4.webp';
 
 /** How long the film runs. The animated copy announces no ending of its own. */
 const FILM_MS = 13600;
