@@ -5,6 +5,7 @@ import type { Preset } from '@/lib/presets';
 import DayFill from './DayFill';
 import { Local } from './CityMoney';
 import type { Rates } from '@/lib/money';
+import { clashFor } from '@/lib/hours';
 import { DayEntry, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtDow, fmtUsd } from '@/lib/format';
 import { HopResult } from '@/lib/useDayRoute';
@@ -57,6 +58,16 @@ export default function DaysTab({
   const hopFor = (id: string) => hops.find((h) => h.toId === id);
 
   const moving = plan ? plan.movingMins * 60 : 0;
+
+  // Read once for the whole day: which stops you cannot actually get into.
+  // The per-stop line says what is wrong; this says that something is, at the
+  // top, because a day is read by scrolling and a small line scrolls past.
+  const weekday = dt.getDay();
+  const shutStops = day.items.filter((it, i) => {
+    const p = places.find((pl) => pl.id === it.placeId) ?? null;
+    return clashFor(p, weekday, plan?.stops[i]?.arrive ?? null, plan?.stops[i]?.depart ?? null)
+      ?.weight === 'hard';
+  });
 
   return (
     <div>
@@ -136,6 +147,22 @@ export default function DaysTab({
         </div>
       ) : null}
 
+      {shutStops.length ? (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7, margin: '0 0 8px', padding: '8px 10px',
+            borderRadius: 'var(--radius-md)', border: '1px solid var(--color-danger)',
+            background: 'color-mix(in srgb, var(--color-danger) 8%, transparent)',
+            color: 'var(--color-danger)', fontSize: 11.5,
+          }}
+        >
+          <i className="ph-fill ph-warning-circle" style={{ fontSize: 14, flex: 'none' }} />
+          {shutStops.length === 1
+            ? `${shutStops[0].title || 'A stop'} is shut when you get there`
+            : `${shutStops.length} stops are shut when you get there`}
+        </div>
+      ) : null}
+
       {hotel?.ll ? (
         <div style={{ ...anchorRow }}>
           <i className="ph ph-bed" style={{ fontSize: 13, color: 'var(--color-accent-300)' }} />
@@ -175,6 +202,7 @@ export default function DaysTab({
               <StopCard
                 index={i}
                 item={it}
+                weekday={weekday}
                 arrive={plan?.stops[i]?.arrive ?? null}
                 depart={plan?.stops[i]?.depart ?? null}
                 place={place}
@@ -249,6 +277,7 @@ export default function DaysTab({
         rates={rates}
         onApplyPreset={onApplyPreset}
         onAddStop={onAddStop}
+        weekday={weekday}
         onAddBlank={() => onAddItem(day.key)}
         onSetFare={onSetFare}
         onZoom={onZoomStop}
@@ -353,12 +382,15 @@ function Stat({ label, value, below }: { label: string; value: string; below?: R
 }
 
 function StopCard({
-  index, item, place, places, first, last, arrive, depart, onSet, onToggle, onRemove, onMove, onZoom,
+  index, item, place, places, first, last, arrive, depart, weekday, onSet, onToggle, onRemove,
+  onMove, onZoom,
 }: {
   index: number;
   item: DayItem;
   arrive: number | null;
   depart: number | null;
+  /** The weekday this stop falls on, for checking it against the place's hours. */
+  weekday: number;
   place: Place | null;
   places: Place[];
   first: boolean;
@@ -369,10 +401,15 @@ function StopCard({
   onMove: (dir: number) => void;
   onZoom: () => void;
 }) {
+  const clash = clashFor(place, weekday, arrive, depart);
+  const hard = clash?.weight === 'hard';
   return (
     <div
       style={{
-        borderRadius: 'var(--radius-md)', border: '1px solid var(--color-neutral-800)',
+        borderRadius: 'var(--radius-md)',
+        // A stop you cannot get into is outlined, not just annotated: the day
+        // is read by scrolling, and a line of small text scrolls past.
+        border: '1px solid ' + (hard ? 'var(--color-danger)' : 'var(--color-neutral-800)'),
         background: 'var(--color-surface)', padding: '8px 9px', marginTop: 6,
         animation: 'riseIn .3s ease both', animationDelay: index * 40 + 'ms',
       }}
@@ -516,6 +553,20 @@ function StopCard({
           min{depart !== null ? ` · till ${fmtClock(depart)}` : ''}
         </span>
       </div>
+      {clash ? (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 10.5,
+            color: hard ? 'var(--color-danger)' : 'var(--color-warn)',
+          }}
+        >
+          <i
+            className={hard ? 'ph-fill ph-warning-circle' : 'ph ph-clock-countdown'}
+            style={{ fontSize: 12, flex: 'none' }}
+          />
+          {clash.text}
+        </div>
+      ) : null}
     </div>
   );
 }

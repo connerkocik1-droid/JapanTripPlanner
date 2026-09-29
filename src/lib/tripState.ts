@@ -96,6 +96,11 @@ function fillCity(city: City): City {
       ...p,
       images: strings(p?.images),
       url: typeof p?.url === 'string' ? p.url : '',
+      // Weekday indices only: anything else in the slot would reach
+      // `WEEKDAYS_LONG[d]` and print "Closed on undefined".
+      shutDays: Array.isArray(p?.shutDays)
+        ? p.shutDays.filter((n): n is number => Number.isInteger(n) && n >= 0 && n <= 6)
+        : [],
     })),
     packs: strings(city?.packs),
   };

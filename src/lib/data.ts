@@ -62,10 +62,18 @@ export interface Place {
   /** Where to read more — a listing, a menu, a map link. */
   url: string;
   ll: LatLng | null;
+  /** Weekdays it is shut all day, 0 = Sunday, as `Date.getDay()` counts them. */
+  shutDays: number[];
+  /** "09:00" / "17:00"; blank means the hours are not known. */
+  opens: string;
+  closes: string;
 }
 
 export function blankPlace(kind: PlaceKind = 'eat'): Place {
-  return { id: uid(), name: '', addr: '', note: '', kind, band: '', images: [], url: '', ll: null };
+  return {
+    id: uid(), name: '', addr: '', note: '', kind, band: '', images: [], url: '', ll: null,
+    shutDays: [], opens: '', closes: '',
+  };
 }
 
 export interface City {
