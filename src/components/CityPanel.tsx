@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { City, LatLng, MAX_NIGHTS, PLACE_KINDS, Place, placeKind } from '@/lib/data';
+import { City, LatLng, MAX_NIGHTS, PLACE_KINDS, Place, VOTES, Vote, placeKind } from '@/lib/data';
 import { fmtUsd, walkLabel } from '@/lib/format';
 import { CitySpend } from '@/lib/derive';
 import { isFlightLeg } from '@/lib/legKind';
@@ -348,14 +348,24 @@ function PlaceCard({
   const kind = placeKind(place.kind);
   const shot = place.images.find((src) => src.trim()) ?? '';
   return (
-    <div style={{ ...boxed, padding: '4px 8px 8px', ...(touchStyle(touch) ?? {}) }}>
+    <div
+      style={{
+        ...boxed, padding: '4px 8px 8px',
+        // The head row's select, inputs and buttons together are wider than a
+        // phone, and without this the card grew to fit them and ran off the
+        // right edge, taking anything full-width inside it with it.
+        width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box',
+        opacity: place.vote === 'no' ? 0.55 : 1,
+        ...(touchStyle(touch) ?? {}),
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <select
           value={place.kind}
           aria-label="Kind of place"
           onChange={(e) => onField('kind', e.target.value as Place['kind'])}
           style={{
-            flex: 'none', width: 58, height: 34, fontSize: 11, padding: '0 4px',
+            flex: 'none', width: 58, minWidth: 0, height: 34, fontSize: 11, padding: '0 4px',
             borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-neutral-800)',
             background: 'var(--color-bg)', color: kind.color,
           }}
@@ -378,7 +388,10 @@ function PlaceCard({
           value={place.band}
           placeholder="$$"
           onChange={(e) => onField('band', e.target.value)}
-          style={{ width: 44, height: 38, fontSize: 11.5, color: 'var(--color-accent-300)' }}
+          style={{
+            flex: 'none', width: 44, minWidth: 0, height: 38, fontSize: 11.5,
+            color: 'var(--color-accent-300)',
+          }}
         />
         <button
           className="tap"
@@ -405,6 +418,7 @@ function PlaceCard({
           <i className="ph ph-trash" style={{ fontSize: 13 }} />
         </button>
       </div>
+      <VoteRow vote={place.vote} onVote={(v) => onField('vote', v)} />
       <input
         type="text"
         value={place.addr}
@@ -566,6 +580,57 @@ function Hours({
           {summary}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+
+/**
+ * Yes, maybe or no on a place.
+ *
+ * The point of it is the map: a yes is plotted, a maybe is plotted faintly,
+ * and a no is not plotted at all, so the map shows the trip still under
+ * consideration rather than everything anyone has ever pinned. Pressing the
+ * answer already showing takes it back to undecided, which plots like a yes.
+ */
+function VoteRow({ vote, onVote }: { vote: Vote; onVote: (v: Vote) => void }) {
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 5, margin: '5px 0 2px',
+        width: '100%', boxSizing: 'border-box',
+      }}
+    >
+      {VOTES.map((v) => {
+        const on = vote === v.id;
+        const tone =
+          v.id === 'yes'
+            ? 'var(--color-accent-400)'
+            : v.id === 'maybe'
+              ? 'var(--color-warn)'
+              : 'var(--color-danger)';
+        return (
+          <button
+            key={v.id}
+            className="tap"
+            aria-pressed={on}
+            aria-label={v.label}
+            onClick={() => onVote(on ? '' : v.id)}
+            style={{
+              flex: '1 1 0', minWidth: 0, minHeight: 34,
+              borderRadius: 'var(--radius-sm)', cursor: 'pointer', boxSizing: 'border-box',
+              border: '1px solid ' + (on ? tone : 'var(--color-neutral-800)'),
+              background: on ? tone : 'transparent',
+              color: on ? 'var(--color-on-accent)' : 'var(--color-neutral-500)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              fontSize: 11.5, fontWeight: on ? 600 : 500,
+            }}
+          >
+            <i className={'ph ' + v.icon} style={{ fontSize: 13 }} />
+            {v.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

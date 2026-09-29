@@ -57,6 +57,8 @@ export interface MapPin {
   hotel?: HotelDetail;
   /** Present on place pins — hovering or tapping one opens this card. */
   place?: PlaceDetail;
+  /** Drawn faintly: a place nobody has said yes to yet. */
+  faded?: boolean;
 }
 
 /** One routed hop of the planned day, drawn on the map in its own colour. */
@@ -412,6 +414,9 @@ export default function TripMap({
       el.classList.toggle('is-pick', p.kind === 'hotel' && !!p.hotel?.pick);
       el.classList.toggle('is-open', cardId.current === p.id);
       el.classList.toggle('is-place', p.kind === 'place');
+      // A maybe is on the map but not competing with the places you have
+      // actually chosen, so it is the same pin at a lower contrast.
+      el.classList.toggle('is-faded', !!p.faded);
       // Hotels are purple whatever else they are, so the lodging options read
       // as one set at a glance; the budgeted one is the brighter of them.
       const hotelDot = p.kind === 'hotel' ? ' tp-hotel' + (p.hotel?.pick ? ' is-pick' : '') : '';

@@ -115,6 +115,7 @@ export function packPlaceToPlace(entry: PackPlace): Place {
     images: entry.images ?? [],
     // Packs do not carry hours yet; a place with none simply never warns.
     shutDays: [],
+    vote: '',
     opens: '',
     closes: '',
     url: entry.url ?? '',

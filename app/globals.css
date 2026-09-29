@@ -791,3 +791,13 @@ input::placeholder { color: var(--color-neutral-600); }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/*
+ * A place still being argued over. It stays on the map — that is the point of
+ * a maybe — but it steps back from the places already settled, and it comes
+ * back to full strength under the pointer so it can still be read.
+ */
+.trip-pin.is-faded { opacity: 0.45; }
+.trip-pin.is-faded:hover,
+.trip-pin.is-faded.is-open,
+.trip-pin.is-faded.is-sel { opacity: 1; }

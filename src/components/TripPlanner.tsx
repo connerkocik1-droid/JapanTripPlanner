@@ -685,11 +685,12 @@ export default function TripPlanner() {
           kind: 'city',
         });
       }
-      // Every located option is pinned, not just the budgeted one — the whole
-      // shortlist is what you are comparing on the map.
+      // Only the option that counts is pinned. The shortlist is compared on
+      // the Stay tab, where the options sit side by side with their prices and
+      // photos; on the map three pins a city only crowd the places.
       if (focused || plotAll) {
         c.hotels.forEach((h) => {
-          if (!h.ll || !h.name) return;
+          if (!h.ll || !h.name || h.id !== c.hotelSel) return;
           const nightly = Number(h.cost) || 0;
           const pick = h.id === c.hotelSel;
           out.push({
@@ -720,6 +721,10 @@ export default function TripPlanner() {
       if (!focused && !plotAll) return;
       c.places.forEach((p) => {
         if (!p.ll || !p.name) return;
+        // A place ruled out is off the map entirely; that is what a no is for.
+        // A stop already in a day stays, whatever it was voted — the day is
+        // the decision, and a route with a gap in it would be a lie.
+        if (p.vote === 'no' && !stopIndex.has(p.ll.join(','))) return;
         const kind = placeKind(p.kind);
         out.push({
           id: p.id,
@@ -729,6 +734,7 @@ export default function TripPlanner() {
           selected: false,
           kind: 'place',
           icon: kind.icon,
+          faded: p.vote === 'maybe',
           stopNumber: stopIndex.get(p.ll.join(',')),
           place: {
             kindLabel: kind.label,
