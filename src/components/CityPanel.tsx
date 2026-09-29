@@ -642,7 +642,9 @@ function Facts({
         <input
           type="text"
           value={place.cuisine}
-          placeholder="Cuisine — sushi, KBBQ"
+          // Worded as a state, not an example: "sushi, KBBQ" in grey read as
+          // though every blank place had been labelled with it.
+          placeholder={place.lookedUp.trim() ? 'Cuisine not found — type one' : 'Cuisine — looking it up…'}
           aria-label={`What ${place.name || 'this place'} serves`}
           onChange={(e) => onField('cuisine', e.target.value)}
           style={{ flex: 1, minWidth: 0, height: 34, fontSize: 11.5 }}
