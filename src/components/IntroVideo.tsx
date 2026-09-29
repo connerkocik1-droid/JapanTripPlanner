@@ -6,10 +6,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * The title card that plays over the app each time it is opened, in the
  * browser and installed to the home screen alike.
  *
- * It is a curtain, never a gate: the planner renders and boots underneath it
- * from the first frame, so a video that is slow, blocked or missing costs
- * nothing but the moment it takes to notice. Muted and inline so iOS lets it
- * start on its own, and a tap anywhere gets past it.
+ * An iPhone in Low Power Mode refuses to start a video on its own, and a web
+ * page cannot talk it out of it — which is what kept this blank for Conner.
+ * Animated images are not blocked, though, so a refused film falls back to an
+ * animated copy of itself rather than being skipped. The still frame sits
+ * behind both as the curtain's own background, so the card is on screen from
+ * the first moment whichever path is taken, and Skip is always there.
  *
  * The files carry a number in their names. They are served cache first, so a
  * phone that has taken a copy keeps it for good: a re-cut film has to arrive
@@ -17,15 +19,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * number rather than replacing a file in place.
  */
 
-/** The flat colour the film opens on, so its edges are invisible on a wide
- *  window, where the whole frame is shown rather than filling the screen. */
+/** The flat colour the film opens on, so its edges are invisible above and
+ *  below the picture. */
 const FILM_BG = '#f3e9d7';
+
+const FILM = '/intro/trip-intro.3.mp4';
+const STILL = '/intro/trip-intro.3.jpg';
+/** The same film as an animated image, for a phone that will not play video. */
+const ANIMATED = '/intro/trip-intro.3.webp';
+
+/** How long the film runs. The animated copy announces no ending of its own. */
+const FILM_MS = 13600;
 
 /**
  * How long the film gets to *start*. Only the start is on a clock: once a
- * frame has played the curtain waits for the film however slowly it buffers,
- * because cutting a film off mid-sentence is worse than a pause. Generous,
- * since a phone on a bad signal is the case this is for.
+ * frame has played it is left alone, however slowly the rest buffers.
  */
 const START_GRACE_MS = 8000;
 
@@ -35,6 +43,8 @@ const FADE_MS = 340;
 export default function IntroVideo() {
   const [leaving, setLeaving] = useState(false);
   const [gone, setGone] = useState(false);
+  /** Set once the video has been refused and the animated copy takes over. */
+  const [animated, setAnimated] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
 
   const dismiss = useCallback(() => setLeaving(true), []);
@@ -47,7 +57,7 @@ export default function IntroVideo() {
   }, [leaving]);
 
   useEffect(() => {
-    if (gone) return;
+    if (gone || animated) return;
 
     const el = video.current;
     if (!el) {
@@ -56,31 +66,34 @@ export default function IntroVideo() {
     }
 
     // React sets `muted` as a property after mount, which can land after the
-    // browser has already decided whether this is allowed to autoplay. Saying
-    // it again here, before asking, is what keeps iOS from refusing.
+    // browser has already decided whether this may autoplay. Saying it again
+    // before asking is what keeps a phone from refusing on that alone.
     el.muted = true;
     el.defaultMuted = true;
 
-    let grace: ReturnType<typeof setTimeout> | undefined;
+    const grace = setTimeout(() => {
+      if (el.readyState < 3) setAnimated(true);
+    }, START_GRACE_MS);
 
-    // A frame has played: the film is running and owns the screen until it ends.
-    const started = () => clearTimeout(grace);
-    el.addEventListener('playing', started);
+    const playing = () => clearTimeout(grace);
+    el.addEventListener('playing', playing);
 
-    // A refusal is worth one more ask once there is something to play — the
-    // first attempt can land before the browser has data and be turned down
-    // for that alone.
-    const retry = () => el.play().catch(dismiss);
-    el.play().catch(() => el.addEventListener('canplay', retry, { once: true }));
-
-    grace = setTimeout(dismiss, START_GRACE_MS);
+    // Refused, unsupported, or a file this phone will not decode: here they
+    // all mean the same thing, which is that the animation takes over.
+    el.play().catch(() => setAnimated(true));
 
     return () => {
       clearTimeout(grace);
-      el.removeEventListener('playing', started);
-      el.removeEventListener('canplay', retry);
+      el.removeEventListener('playing', playing);
     };
-  }, [gone, dismiss]);
+  }, [gone, animated]);
+
+  // The animated copy reports nothing, so it is given the film's own length.
+  useEffect(() => {
+    if (!animated || gone) return;
+    const t = setTimeout(dismiss, FILM_MS);
+    return () => clearTimeout(t);
+  }, [animated, gone, dismiss]);
 
   if (gone) return null;
 
@@ -90,6 +103,11 @@ export default function IntroVideo() {
       style={{
         position: 'fixed', inset: 0, zIndex: 200,
         background: FILM_BG,
+        // The card is on screen while whatever will play it is still loading.
+        backgroundImage: `url(${STILL})`,
+        backgroundSize: 'contain',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         opacity: leaving ? 0 : 1,
         transition: `opacity ${FADE_MS}ms ease`,
@@ -97,19 +115,23 @@ export default function IntroVideo() {
         pointerEvents: leaving ? 'none' : 'auto',
       }}
     >
-      <video
-        ref={video}
-        src="/intro/trip-intro.2.mp4"
-        poster="/intro/trip-intro.2.jpg"
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        onEnded={dismiss}
-        onError={dismiss}
-        aria-hidden
-        className="intro-film"
-      />
+      {animated ? (
+        <img src={ANIMATED} alt="" className="intro-film" onError={dismiss} />
+      ) : (
+        <video
+          ref={video}
+          src={FILM}
+          poster={STILL}
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          onEnded={dismiss}
+          onError={() => setAnimated(true)}
+          aria-hidden
+          className="intro-film"
+        />
+      )}
       <button
         className="tap mono"
         onClick={dismiss}
