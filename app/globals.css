@@ -172,32 +172,40 @@ input::placeholder { color: var(--color-neutral-600); }
 }
 
 /* --- tabs --------------------------------------------------------------- */
-/* Navigation is a strip under the header rather than a menu over the map. */
+/*
+ * Navigation is a strip under the header rather than a menu over the map.
+ *
+ * Every tab has to be on screen at once. Side by side, an icon and a label
+ * ran to about 95px a tab, so four of the seven fitted across a phone and
+ * Days — the tab the trip is planned in — was behind a sideways swipe. Icon
+ * over label is the shape that fits seven, and it is what a phone's own tab
+ * bars do, so nothing has to be discovered.
+ */
 .tab-strip {
   display: flex;
-  gap: 2px;
+  gap: 0;
   margin-top: 10px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
 }
 .tab-btn {
-  flex: none;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 5px;
-  min-height: 42px;
-  padding: 0 11px;
+  justify-content: center;
+  gap: 2px;
+  min-height: 46px;
+  padding: 0 2px;
   border: none;
   border-bottom: 2px solid transparent;
   background: none;
   color: var(--color-neutral-500);
-  font-size: 12px;
+  font-size: 9.5px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  scroll-snap-align: center;
 }
-.tab-btn i { font-size: 14px; }
+.tab-btn i { font-size: 17px; }
 .tab-btn:hover { color: var(--color-neutral-300); }
 .tab-btn.is-on {
   color: var(--color-accent-200);

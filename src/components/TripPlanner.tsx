@@ -53,7 +53,7 @@ const TABS: [Tab, string, string][] = [
   ['cities', 'Cities', 'ph-buildings'],
   ['stay', 'Stay', 'ph-bed'],
   ['days', 'Days', 'ph-calendar-blank'],
-  ['list', 'Checklist', 'ph-check-square'],
+  ['list', 'List', 'ph-check-square'],
   ['notes', 'Notes', 'ph-chat-teardrop-text'],
 ];
 
@@ -856,7 +856,13 @@ export default function TripPlanner() {
             }}
           />
           {doc.trip.travelers} {doc.trip.travelers === 1 ? 'traveler' : 'travelers'}
-          {d.schedule.length ? ` · ${d.schedule.length} days` : ' · nothing planned yet'}
+          {/*
+            * The date range says how many days the trip is, so it is here
+            * rather than on a line of its own saying the same thing twice.
+            */}
+          {d.schedule.length
+            ? ` · ${fmtD(dateOf(doc.trip.start, 0))} – ${fmtD(dateOf(doc.trip.start, d.schedule.length - 1))}`
+            : ' · nothing planned yet'}
           <span style={{ flex: 1 }} />
           {!online ? (
             <span
@@ -929,15 +935,6 @@ export default function TripPlanner() {
           </div>
         </div>
 
-        {d.schedule.length ? (
-          <div
-            className="mono"
-            style={{ fontSize: 9.5, color: 'var(--color-neutral-400)', marginTop: 5, whiteSpace: 'nowrap' }}
-          >
-            {fmtD(dateOf(doc.trip.start, 0))} – {fmtD(dateOf(doc.trip.start, d.schedule.length - 1))}
-          </div>
-        ) : null}
-
         {/* The running total; the breakdown it opens lives on the Cities tab. */}
         <button
           className="tap"
@@ -962,16 +959,6 @@ export default function TripPlanner() {
                   : fmtUsd(planned - totalWithItems) + ' left'
                 : 'no budget set'}
             </span>
-          </div>
-          <div
-            style={{
-              display: 'flex', height: 4, borderRadius: 9999, overflow: 'hidden',
-              background: 'var(--color-neutral-900)', marginTop: 7,
-            }}
-          >
-            {segments.map((s) => (
-              <div key={s.label} style={{ width: s.pct, background: SEG_FILL[s.label] }} />
-            ))}
           </div>
         </button>
 
