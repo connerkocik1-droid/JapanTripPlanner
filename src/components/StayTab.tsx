@@ -16,7 +16,8 @@ export interface StayTabProps {
   /** Nothing is active until someone presses the button on an option. */
   onSetActive: (cityId: string, hotelId: string | null) => void;
   onHotel: <K extends keyof Hotel>(cityId: string, hotelId: string, key: K, val: Hotel[K]) => void;
-  onAddHotel: (cityId: string) => void;
+  /** Adds a blank option and returns its id, so it can be opened straight away. */
+  onAddHotel: (cityId: string) => string;
   onZoom: (ll: LatLng, zoom: number) => void;
   touch: (path: string) => Touch | undefined;
 }
@@ -29,6 +30,14 @@ export interface StayTabProps {
 export default function StayTab({
   cities, rates, onSetActive, onHotel, onAddHotel, onZoom, touch,
 }: StayTabProps) {
+  /**
+   * Blank options the traveler has asked to see. A city ships with three empty
+   * slots and they are not drawn until there is something to put in one, so
+   * "another option" either opens a slot that already exists or makes one.
+   */
+  const [opened, setOpened] = useState<string[]>([]);
+  const reveal = (id: string) => setOpened((ids) => (ids.includes(id) ? ids : [...ids, id]));
+
   if (cities.length === 0) {
     return (
       <div
@@ -49,6 +58,17 @@ export default function StayTab({
     <>
       {cities.map((city) => {
         const active = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
+        /*
+         * Every city ships with three blank slots. A slot nobody has filled in
+         * is not an option, so it is not drawn as one — the button below adds
+         * a card when there is something to put in it. A blank slot that is
+         * somehow active stays, so nothing can make the budget's hotel vanish.
+         */
+        const filled = (h: Hotel) =>
+          Boolean(h.name.trim() || h.cost || h.addr.trim() || h.url.trim());
+        const options = city.hotels.filter(
+          (h) => filled(h) || h.id === city.hotelSel || opened.includes(h.id),
+        );
         return (
           <div key={city.id} style={{ marginBottom: 16 }}>
             <div
@@ -61,7 +81,7 @@ export default function StayTab({
                 <div style={{ fontSize: 15, fontWeight: 500 }}>{city.name}</div>
                 <div className="mono" style={{ ...label, fontSize: 9 }}>
                   {city.nights} {city.nights === 1 ? 'night' : 'nights'} ·{' '}
-                  {city.hotels.filter((h) => h.name.trim()).length || 'no'} options
+                  {options.length || 'no'} {options.length === 1 ? 'option' : 'options'}
                 </div>
               </div>
               <div style={{ flex: 'none' }}>
@@ -77,7 +97,7 @@ export default function StayTab({
             </div>
 
             <div style={{ display: 'grid', gap: 7 }}>
-              {city.hotels.map((h, i) => (
+              {options.map((h, i) => (
                 <StayCard
                   key={h.id}
                   index={i}
@@ -101,7 +121,14 @@ export default function StayTab({
               ))}
             </div>
 
-            <button className="tap" onClick={() => onAddHotel(city.id)} style={ghostBtn}>
+            <button
+              className="tap"
+              onClick={() => {
+                const spare = city.hotels.find((h) => !options.includes(h));
+                reveal(spare ? spare.id : onAddHotel(city.id));
+              }}
+              style={ghostBtn}
+            >
               <i className="ph ph-plus" style={{ fontSize: 12 }} /> Another option in {city.name}
             </button>
           </div>
