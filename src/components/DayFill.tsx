@@ -2,17 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { City, DEFAULT_DWELL, PLACE_KINDS, Place, placeKind } from '@/lib/data';
-import { DayEntry } from '@/lib/derive';
 import { fmtUsd } from '@/lib/format';
 import { fmtSpan } from '@/lib/dayPlan';
 import { Preset, loadPreset, loadPresetIndex, normalizePreset } from '@/lib/presets';
 import { LegOptions, fmtDistance, fmtDuration, routeLeg } from '@/lib/routing';
 import { LatLng } from '@/lib/data';
 
-type Source = 'preset' | 'custom';
-
-export interface BuilderTabProps {
-  day: DayEntry | null;
+export interface DayFillProps {
   city: City | null;
   /** Where the day currently ends — new stops are routed from here. */
   anchor: { ll: LatLng; label: string } | null;
@@ -20,18 +16,29 @@ export interface BuilderTabProps {
   travelers: number;
   onApplyPreset: (preset: Preset, replace: boolean) => void;
   onAddStop: (place: Place) => void;
+  /** A stop that is not one of the city's pinned places — typed in by hand. */
+  onAddBlank: () => void;
   onSetFare: (fare: number) => void;
   onZoom: (ll: LatLng) => void;
   /** Hand the day over to the map, where stops are picked by tapping them. */
   onStartPlan: () => void;
 }
 
-export default function BuilderTab({
-  day, city, anchor, metroFare, travelers, onApplyPreset, onAddStop, onSetFare, onZoom, onStartPlan,
-}: BuilderTabProps) {
-  const [source, setSource] = useState<Source>('custom');
+/**
+ * The ways of putting a stop into the day you are looking at.
+ *
+ * This used to be its own Build tab, one tab away from the day it filled, so
+ * planning a day meant going back and forth between two tabs that each showed
+ * half of it. It now sits under the day itself: the itinerary above, and every
+ * way of adding to it here.
+ */
+export default function DayFill({
+  city, anchor, metroFare, travelers, onApplyPreset, onAddStop, onAddBlank, onSetFare,
+  onZoom, onStartPlan,
+}: DayFillProps) {
   const [index, setIndex] = useState<{ id: string; name: string; city: string; summary?: string; file: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [presetsOpen, setPresetsOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState('');
   const file = useRef<HTMLInputElement | null>(null);
@@ -48,9 +55,7 @@ export default function BuilderTab({
     };
   }, []);
 
-  if (!day || !city) {
-    return <div style={empty}>Add a city first — the builder fills in one of its days.</div>;
-  }
+  if (!city) return null;
 
   const forCity = index.filter(
     (p) => !p.city || p.city.toLowerCase() === city.name.toLowerCase(),
@@ -69,31 +74,24 @@ export default function BuilderTab({
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9999, background: 'var(--color-bg)', marginBottom: 12 }}>
-        {(['custom', 'preset'] as Source[]).map((s) => {
-          const on = source === s;
-          return (
-            <button
-              key={s}
-              className="tap"
-              onClick={() => setSource(s)}
-              style={{
-                flex: 1, minHeight: 40, borderRadius: 9999, border: 'none', cursor: 'pointer',
-                background: on ? 'var(--color-accent-800)' : 'transparent',
-                color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-500)',
-                fontSize: 12.5, fontWeight: 500,
-              }}
-            >
-              {s === 'custom' ? 'Build your own' : 'Presets'}
-            </button>
-          );
-        })}
+    <div style={{ marginTop: 18 }}>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)', marginBottom: 8 }}>
+        Add to this day
       </div>
 
-      <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)', marginBottom: 8 }}>
-        Day {String(day.n).padStart(2, '0')} · {city.name} · {day.items.length}{' '}
-        {day.items.length === 1 ? 'stop' : 'stops'}
+      <div style={{ display: 'flex', gap: 7, marginBottom: 10 }}>
+        <button className="tap" onClick={onStartPlan} style={{ ...pill, flex: 1, minHeight: 44, background: 'var(--tint-accent)' }}>
+          <i className="ph ph-path" style={{ fontSize: 14 }} />
+          Plan on the map
+        </button>
+        <button
+          className="tap"
+          onClick={onAddBlank}
+          style={{ ...pill, flex: 1, minHeight: 44, borderColor: 'var(--color-neutral-700)', color: 'var(--color-neutral-400)' }}
+        >
+          <i className="ph ph-plus" style={{ fontSize: 14 }} />
+          Something else
+        </button>
       </div>
 
       {/* Fares price every metro leg of the day. */}
@@ -119,39 +117,39 @@ export default function BuilderTab({
         </span>
       </div>
 
-      {source === 'custom' ? (
-        <>
-          {/* The same day, built by tapping the map instead of this list. */}
-          <button
-            className="tap"
-            onClick={onStartPlan}
-            style={{
-              width: '100%', minHeight: 44, marginBottom: 10, borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-accent-700)', background: 'var(--tint-accent)',
-              color: 'var(--color-accent-200)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-            }}
-          >
-            <i className="ph ph-path" style={{ fontSize: 14 }} />
-            Make a plan on the map
-          </button>
-          <CustomPicker
-            city={city}
-            anchor={anchor}
-            metroFare={metroFare}
-            travelers={travelers}
-            onAddStop={onAddStop}
-            onZoom={onZoom}
-          />
-        </>
-      ) : (
-        <div>
+      <CustomPicker
+        city={city}
+        anchor={anchor}
+        metroFare={metroFare}
+        travelers={travelers}
+        onAddStop={onAddStop}
+        onZoom={onZoom}
+      />
+
+      {/* A whole day someone else worked out. Folded away, because most days
+          are built a stop at a time from the list above. */}
+      <button
+        className="tap"
+        onClick={() => setPresetsOpen((v) => !v)}
+        style={{
+          width: '100%', minHeight: 40, marginTop: 12, borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--color-neutral-800)', background: 'transparent',
+          color: 'var(--color-neutral-400)', fontSize: 11.5, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        }}
+      >
+        <i className={presetsOpen ? 'ph ph-caret-up' : 'ph ph-caret-down'} style={{ fontSize: 12 }} />
+        Ready-made days
+      </button>
+
+      {presetsOpen ? (
+        <div style={{ marginTop: 8 }}>
           {loading ? (
-            <div style={empty}>Looking for presets…</div>
+            <div style={empty}>Looking for ready-made days…</div>
           ) : forCity.length === 0 ? (
             <div style={empty}>
-              No presets for {city.name} yet. Drop day files in <code>public/presets/</code> and
-              list them in <code>index.json</code>, or import one below.
+              No ready-made days for {city.name} yet. Import one below, or drop day files in{' '}
+              <code>public/presets/</code> and list them in <code>index.json</code>.
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 7 }}>
@@ -187,7 +185,7 @@ export default function BuilderTab({
           )}
 
           <button className="tap" onClick={() => file.current?.click()} style={{ ...pill, width: '100%', marginTop: 10 }}>
-            <i className="ph ph-upload-simple" style={{ fontSize: 13 }} /> Import a preset file
+            <i className="ph ph-upload-simple" style={{ fontSize: 13 }} /> Import a day file
           </button>
           <input
             ref={file}
@@ -212,7 +210,7 @@ export default function BuilderTab({
             <div className="mono" style={{ fontSize: 9, color: 'var(--color-danger)', marginTop: 6 }}>{problem}</div>
           ) : null}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
