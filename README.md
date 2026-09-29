@@ -81,13 +81,36 @@ builder prices it, without committing to anything.
 geocoded through `/api/geocode` (Nominatim, proxied server-side and cached), so the
 pin, the camera, and the walking times all reflect the real location.
 
-A typed address rarely matches first time — a floor and a building name mean
-something to a person and nothing to a gazetteer — so the query is tried in widening
-steps: as written, then without the floor and building, then the road without the
-house number, then the district. The answer says which step matched, and the card
-says so too: `Pinned from address` when it found the door, `Approximate — matched
-the road, not the number` or `— only the district matched` when it did not. A pin
-that is a guess is never dressed up as one that is not.
+A typed address rarely matches first time, and a Korean or Japanese one almost never
+does as written. A Seoul restaurant arrives as "2F Hilltop Bldg, 19 Dosan-daero
+67-gil, Gangnam-gu, Seoul", or in the older lot form "Donggyo-dong 150-2, Mapo-gu,
+Seoul", or with a postcode welded to the city; a Tokyo one as "1-2-3 Jingumae,
+Shibuya-ku, Tokyo", or the same thing in Japanese. Nominatim knows all of those
+places. It just does not recognise most of those spellings, and answers with the
+ward.
+
+So `src/lib/addressNormalize.ts` takes the address apart before anything is searched:
+it works out which country's conventions it follows, sets aside the floors, building
+names and prose, lifts out the postcode, flattens macrons, puts a lot number in front
+of its neighbourhood where a gazetteer expects it, offers a multi-word Korean road as
+the single word it is indexed under, and names the country — which on its own fixes
+most romanised Korean addresses. Then the queries are tried in widening steps: as
+written, tidied, the block, the road without the house number, the postcode, the
+district. It never edits the address itself; the text on the card stays what the
+listing said, because that is what you read out to a taxi driver.
+
+The answer says which step matched, and the card says so too: `Pinned from address`
+when it found the door, `Approximate — matched the block, not the building`, `—
+matched the road, not the number`, or `— only the district matched` when it did not.
+A pin that is a guess is never dressed up as one that is not — and where the address
+says of itself that it is not a point ("mountain — no single street address", "exact
+street number unconfirmed"), it stays marked approximate however confidently the
+gazetteer replies.
+
+`npm run addresses` prints what every address in `data/` will be asked, and how exact
+an answer about it could be, without spending an hour of Nominatim's patience finding
+out. `npm test` runs the normaliser against the addresses that made each rule
+necessary.
 
 **Walking times** are haversine distance × 1.25 for street grid, at 4.8 km/h; over
 35 minutes it says "transit" instead. They appear once the selected hotel and the
@@ -305,6 +328,7 @@ src/lib/
   people.ts      # Conner / Anasophia
   format.ts      # money, dates, walking distance
   geocode.ts     # client side of the geocoder
+  addressNormalize.ts  # Korean and Japanese addresses → queries a gazetteer matches
 src/components/
   TripPlanner.tsx  TripMap.tsx  CityPanel.tsx  TripSettings.tsx
   DaysTab.tsx  ChecklistTab.tsx  NotesTab.tsx
