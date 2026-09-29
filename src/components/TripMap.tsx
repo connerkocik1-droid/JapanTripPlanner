@@ -136,6 +136,8 @@ export default function TripMap({
   const cardId = useRef<string | null>(null);
   const cardSticky = useRef(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Where the pointer was last seen, so a card cannot be shut under it. */
+  const pointer = useRef({ x: -1, y: -1 });
   cardId.current = card?.id ?? null;
   cardSticky.current = !!card?.sticky;
   const cardPin = card ? pins.find((p) => p.id === card.id) ?? null : null;
@@ -160,16 +162,40 @@ export default function TripMap({
     holdCard();
     setCard(null);
   };
-  /** A short grace period so the pointer can travel from the pin to the card. */
+  /** True while the pointer is inside the open card. */
+  const pointerOnCard = () => {
+    const el = cardBox.current;
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const { x, y } = pointer.current;
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  };
+  /**
+   * A short grace period so the pointer can travel from the pin to the card.
+   *
+   * A card that opened over its own pin takes the pointer off the pin without
+   * the pointer having moved, which fires the pin's mouseleave — so the close
+   * has to ask where the pointer actually is rather than trust that leaving
+   * the pin means leaving the card.
+   */
   const closeSoon = () => {
     holdCard();
-    hideTimer.current = setTimeout(() => setCard((cur) => (cur?.sticky ? cur : null)), 160);
+    hideTimer.current = setTimeout(() => {
+      if (pointerOnCard()) return;
+      setCard((cur) => (cur?.sticky ? cur : null));
+    }, 160);
   };
 
   /**
-   * Park the card over its pin: above it by preference, below it when the
-   * header would cover it, and clamped into the band of map the header and the
-   * bottom sheet leave uncovered so it is never half-hidden behind the chrome.
+   * Park the card beside its pin: above it by preference, below it when there
+   * is more room that way, and never on top of it.
+   *
+   * It used to be clamped into the band of map the header and the sheet leave
+   * clear, which on a pin near the middle of a phone screen put the card
+   * squarely over the pin. The pointer was then on the card rather than the
+   * pin, so the pin reported the pointer leaving, the card closed, the pin was
+   * under the pointer again and the card reopened — several times a second,
+   * fading in each time, for as long as you held still.
    */
   const placeCard = () => {
     const m = map.current;
@@ -182,18 +208,32 @@ export default function TripMap({
     const w = holder.current?.clientWidth ?? 0;
     const h = holder.current?.clientHeight ?? 0;
     const cardW = el.offsetWidth;
-    const cardH = el.offsetHeight;
-    const ceiling = Math.min(150, Math.round(h * 0.17)) + 8;
+    // The card may already be carrying a max-height from the last call, so its
+    // natural size is the larger of what it is showing and what it holds.
+    const border = el.offsetHeight - el.clientHeight;
+    const cardH = Math.max(el.offsetHeight, el.scrollHeight + border);
+    // The top of the map is clear — the header and the tabs are in the flow
+    // above it, not floating over it — so the card may use all of it bar a
+    // margin. The old reserve of a sixth of the screen was left from when the
+    // header did float, and it squeezed cards that had room to spare.
+    const ceiling = 10;
     const covered = Math.max(latest.current.sheetPx, latest.current.overlayPx);
     const floor = h - Math.min(covered, Math.round(h * 0.6)) - 8;
 
-    let top = pt.y - 22 - cardH;
-    if (top < ceiling) top = pt.y + 30;
-    top = Math.min(top, Math.max(ceiling, floor - cardH));
-    top = Math.max(top, ceiling);
+    // How much clear map there is on each side of the pin.
+    const above = pt.y - 22 - ceiling;
+    const below = floor - (pt.y + 30);
+    // Above by preference; below once the card no longer fits above and there
+    // is more room down there.
+    const useAbove = cardH <= above || above >= below;
+    const room = Math.max(120, Math.round(useAbove ? above : below));
+    // When neither side can hold the whole card it is squeezed and scrolls,
+    // which is still better than covering the thing it describes.
+    el.style.maxHeight = room + 'px';
+    const shown = Math.min(cardH, room);
 
     el.style.left = Math.round(Math.max(cardW / 2 + 10, Math.min(pt.x, w - cardW / 2 - 10))) + 'px';
-    el.style.top = Math.round(top) + 'px';
+    el.style.top = Math.round(useAbove ? pt.y - 22 - shown : pt.y + 30) + 'px';
   };
   const reposition = useRef(placeCard);
   reposition.current = placeCard;
@@ -303,6 +343,14 @@ export default function TripMap({
       m.once('remove', () => clearInterval(pulse));
 
       m.on('move', () => reposition.current());
+
+      // On the window, not the map: the card is a sibling of the canvas, and
+      // the close needs to know when the pointer is over the card itself.
+      const track = (ev: MouseEvent) => {
+        pointer.current = { x: ev.clientX, y: ev.clientY };
+      };
+      window.addEventListener('mousemove', track, { passive: true });
+      m.once('remove', () => window.removeEventListener('mousemove', track));
 
       sync();
       frameTrip(0);
