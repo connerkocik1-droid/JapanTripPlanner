@@ -25,6 +25,11 @@ export interface DaysTabProps {
   travelers: number;
   /** The city this day is spent in — what the day is filled from. */
   city: City | null;
+  /**
+   * Rendered inside the Plan timeline, which already says which day this is
+   * and what city it is in — so the day strip and that heading are left out.
+   */
+  embedded?: boolean;
   /** Where the day currently ends, so a candidate stop can be timed from it. */
   anchor: { ll: LatLng; label: string } | null;
   /** The day's exchange rates, for what the day costs where it is spent. */
@@ -44,7 +49,8 @@ export interface DaysTabProps {
 }
 
 export default function DaysTab({
-  schedule, start, selected, hops, plan, fare, travelers, city, anchor, rates, onSelectDay, onAddItem,
+  schedule, start, selected, hops, plan, fare, travelers, city, anchor, rates, embedded = false,
+  onSelectDay, onAddItem,
   onSetItem, onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop, onAddStop,
   onApplyPreset, onSetFare, onStartPlan,
 }: DaysTabProps) {
@@ -78,6 +84,7 @@ export default function DaysTab({
 
   return (
     <div>
+      {embedded ? null : (
       <div
         style={{
           position: 'sticky', top: 0, zIndex: 2, display: 'flex', gap: 6,
@@ -106,7 +113,9 @@ export default function DaysTab({
           );
         })}
       </div>
+      )}
 
+      {embedded ? null : (
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div style={{ fontSize: 17, fontWeight: 500 }}>{day.city.name}</div>
         <div>
@@ -116,6 +125,7 @@ export default function DaysTab({
           <Local usd={total} city={city} rates={rates} />
         </div>
       </div>
+      )}
       <div
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -123,11 +133,11 @@ export default function DaysTab({
         }}
       >
         {/*
-          * The strip above already says which day this is, and the stats row
+          * Whatever is above already says which day this is, and the stats row
           * below already gives the moving time, so this is only the date.
           */}
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)' }}>
-          {fmtDow(dt)} {fmtD(dt)}
+          {embedded ? '' : fmtDow(dt) + ' ' + fmtD(dt)}
         </div>
         <button
           className="tap"
