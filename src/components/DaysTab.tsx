@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { City, DayItem, LatLng, Place, TravelMode } from '@/lib/data';
 import { hotelName } from '@/lib/hotelTier';
 import type { Preset } from '@/lib/presets';
@@ -30,6 +30,12 @@ export interface DaysTabProps {
    * and what city it is in — so the day strip and that heading are left out.
    */
   embedded?: boolean;
+  /**
+   * What Claude can do for this day, rendered above the ways of adding a stop
+   * by hand. Passed in rather than built here so the day planner stays a day
+   * planner and knows nothing about trip codes or the network.
+   */
+  assist?: ReactNode;
   /** Where the day currently ends, so a candidate stop can be timed from it. */
   anchor: { ll: LatLng; label: string } | null;
   /** The day's exchange rates, for what the day costs where it is spent. */
@@ -50,6 +56,7 @@ export interface DaysTabProps {
 
 export default function DaysTab({
   schedule, start, selected, hops, plan, fare, travelers, city, anchor, rates, embedded = false,
+  assist,
   onSelectDay, onAddItem,
   onSetItem, onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop, onAddStop,
   onApplyPreset, onSetFare, onStartPlan,
@@ -290,6 +297,8 @@ export default function DaysTab({
           </span>
         </div>
       ) : null}
+
+      {assist}
 
       <DayFill
         city={city}
