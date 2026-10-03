@@ -10,8 +10,8 @@ import {
   Found, Pick, WeatherHint, askPicks, endsAt, goNowUrl, itemFromPick, lookUpPick,
 } from '@/lib/decide';
 import {
-  QUESTIONS, type Answers, type QuestionId,
-  flowFor, nextUnanswered, question,
+  QUESTIONS, REROLL, REROLL_ASK, type Answers, type QuestionId, type RerollId,
+  flowFor, nextUnanswered, question, reroll,
 } from '../../supabase/functions/draft-day/questions.ts';
 
 export interface DecideSheetProps {
@@ -41,7 +41,7 @@ export interface DecideSheetProps {
   onAddPlace: (place: Place) => void;
 }
 
-type Phase = 'diet' | 'ask' | 'thinking' | 'results';
+type Phase = 'diet' | 'ask' | 'thinking' | 'results' | 'reroll';
 
 const BUDGET_KEY = 'trip-planner:decide-budget:';
 
@@ -62,7 +62,22 @@ export default function DecideSheet(props: DecideSheetProps) {
   const [picks, setPicks] = useState<Pick[]>([]);
   const [phase, setPhase] = useState<Phase>('ask');
   const [problem, setProblem] = useState('');
+  /**
+   * The one question a re-roll asks, which is not the same as the next
+   * unanswered one. "Surprise me" answers nothing, so walking the flow would
+   * turn "Not the vibe" into the whole questionnaire.
+   */
+  const [onlyAsk, setOnlyAsk] = useState<QuestionId | null>(null);
   const [added, setAdded] = useState<Set<string>>(new Set());
+  /**
+   * Everything offered so far this sitting, so a re-roll comes back with
+   * three others. Saved places are excluded by the server, which builds the
+   * list it offers; somewhere new has no id to exclude by, so its search
+   * phrase is dropped here instead.
+   */
+  const shown = useRef<{ ids: string[]; queries: Set<string> }>({ ids: [], queries: new Set() });
+  /** Once a re-roll has started, every later ask keeps the exclusions. */
+  const rerolling = useRef(false);
   const abort = useRef<AbortController | null>(null);
 
   /** A budget answer given earlier today is reused rather than asked again. */
@@ -89,6 +104,9 @@ export default function DecideSheet(props: DecideSheetProps) {
     setPicks([]);
     setProblem('');
     setAdded(new Set());
+    shown.current = { ids: [], queries: new Set() };
+    rerolling.current = false;
+    setOnlyAsk(null);
     setPhase(unasked.length ? 'diet' : 'ask');
     // `unasked` is derived from props.diets, which this does not change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,7 +115,7 @@ export default function DecideSheet(props: DecideSheetProps) {
   useEffect(() => () => abort.current?.abort(), []);
 
   const ask = useCallback(
-    async (final: Answers) => {
+    async (final: Answers, again = false) => {
       if (!code) {
         setProblem('This trip has no code yet, so there is nothing to ask against.');
         setPhase('results');
@@ -118,6 +136,12 @@ export default function DecideSheet(props: DecideSheetProps) {
         city.places,
         {
           onPick: (pick) => {
+            // A new place has no id for the server to exclude by, so a repeat
+            // of one already turned down is dropped here.
+            const q = pick.query.trim().toLowerCase();
+            if (q && shown.current.queries.has(q)) return;
+            if (q) shown.current.queries.add(q);
+            if (pick.placeId) shown.current.ids.push(pick.placeId);
             setPhase('results');
             setPicks((cur) => [...cur, pick]);
           },
@@ -130,7 +154,7 @@ export default function DecideSheet(props: DecideSheetProps) {
             setProblem(message);
           },
         },
-        { nowMins, weather, exclude: [] },
+        { nowMins, weather, exclude: again ? shown.current.ids : [] },
         ctrl.signal,
       );
     },
@@ -140,17 +164,47 @@ export default function DecideSheet(props: DecideSheetProps) {
   if (!open) return null;
 
   const flow = flowFor(answers, skips);
-  const current = nextUnanswered(answers, skips);
+  const current = onlyAsk ?? nextUnanswered(answers, skips);
   const step = current ? flow.indexOf(current) : flow.length;
 
   const answer = (id: QuestionId, value: string) => {
     const next = { ...answers, [id]: value };
     setAnswers(next);
     if (id === 'budget') writeBudget(date, value);
-    if (!nextUnanswered(next, skips)) void ask(next);
+    if (onlyAsk) {
+      // The one question a re-roll asked. Whatever else is unanswered stays
+      // that way: they asked for three different ones, not a questionnaire.
+      setOnlyAsk(null);
+      void ask(next, true);
+      return;
+    }
+    if (!nextUnanswered(next, skips)) void ask(next, rerolling.current);
+  };
+
+  /**
+   * Turning all three down. One answer moves, and the next three come back
+   * without the ones already seen. "Not the vibe" is the only one that has to
+   * ask anything, because it is the only one that cannot be guessed from the
+   * complaint.
+   */
+  const again = (how: RerollId) => {
+    const next = reroll(answers, how);
+    rerolling.current = true;
+    setAnswers(next);
+    if (how === 'vibe') {
+      setOnlyAsk('vibe');
+      setPhase('ask');
+      return;
+    }
+    void ask(next, true);
   };
 
   const back = () => {
+    if (phase === 'reroll' || onlyAsk) {
+      setOnlyAsk(null);
+      setPhase('results');
+      return;
+    }
     if (phase === 'results' || phase === 'thinking') {
       abort.current?.abort();
       const last = flow[flow.length - 1];
@@ -190,7 +244,7 @@ export default function DecideSheet(props: DecideSheetProps) {
           <button className="tap" onClick={back} aria-label="Back" style={iconBtn}>
             <i className="ph ph-arrow-left" style={{ fontSize: 16 }} />
           </button>
-          {phase === 'ask' ? (
+          {phase === 'ask' && !onlyAsk ? (
             <div style={{ display: 'flex', gap: 5, flex: 1, justifyContent: 'center' }}>
               {flow.map((id, i) => (
                 <span key={id} style={{ ...dot, opacity: i === step ? 1 : i < step ? 0.55 : 0.2 }} />
@@ -221,7 +275,7 @@ export default function DecideSheet(props: DecideSheetProps) {
                 </button>
               ))}
             </div>
-            {step === 0 ? (
+            {step === 0 && !onlyAsk ? (
               <button
                 className="tap"
                 onClick={() => void ask({})}
@@ -256,6 +310,32 @@ export default function DecideSheet(props: DecideSheetProps) {
             {problem ? (
               <div style={{ ...fromLine, color: 'var(--color-warn)', padding: '16px 0' }}>{problem}</div>
             ) : null}
+            {picks.length ? (
+              <button
+                className="tap"
+                onClick={() => setPhase('reroll')}
+                style={{ ...chip, width: '100%', marginTop: 12, borderStyle: 'dashed' }}
+              >
+                <i className="ph ph-arrows-clockwise" style={{ fontSize: 13, marginRight: 6 }} />
+                Not these
+              </button>
+            ) : null}
+          </>
+        ) : null}
+
+        {phase === 'reroll' ? (
+          <>
+            <div style={askLine}>{REROLL_ASK}</div>
+            <div className="mono" style={fromLine}>
+              Three different ones, without the ones you just saw.
+            </div>
+            <div style={chips}>
+              {REROLL.map((o) => (
+                <button key={o.id} className="tap" onClick={() => again(o.id)} style={chip}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
           </>
         ) : null}
       </div>

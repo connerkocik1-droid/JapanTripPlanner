@@ -166,6 +166,53 @@ export function cleanAnswers(raw: unknown, skips: Skips = {}): Answers {
   return out;
 }
 
+/**
+ * "Not these" — the one question asked when all three picks are wrong.
+ *
+ * It is one tap rather than the whole flow again, because the answers were
+ * nearly right or the three cards would not have been close enough to reject
+ * for a reason. Each answer moves exactly one input, which is also what makes
+ * the next three visibly different rather than a reshuffle.
+ */
+export type RerollId = 'far' | 'pricey' | 'vibe' | 'different';
+
+export const REROLL: { id: RerollId; label: string }[] = [
+  { id: 'far', label: 'Too far' },
+  { id: 'pricey', label: 'Too pricey' },
+  { id: 'vibe', label: 'Not the vibe' },
+  { id: 'different', label: 'Just different' },
+];
+
+export const REROLL_ASK = 'What was wrong with those?';
+
+/** Each ladder from most generous to least, so a step is a step inwards. */
+const TIGHTER: Record<string, string> = { far: 'short', short: 'walk', walk: 'walk' };
+const CHEAPER: Record<string, string> = { splurge: 'normal', normal: 'cheap', cheap: 'cheap' };
+
+/**
+ * The answers to ask again with, and whether anything still needs asking.
+ *
+ * "Too far" and "Too pricey" move one step and go straight back to Claude —
+ * the traveler has already said what was wrong, so asking them to say it again
+ * in a different form would be rude. "Not the vibe" is the one that cannot be
+ * guessed, so the vibe question comes back. "Just different" changes nothing
+ * and relies on the exclusions alone.
+ */
+export function reroll(answers: Answers, how: RerollId): Answers {
+  if (how === 'far') {
+    return { ...answers, distance: TIGHTER[answers.distance ?? 'far'] ?? 'walk' };
+  }
+  if (how === 'pricey') {
+    return { ...answers, budget: CHEAPER[answers.budget ?? 'splurge'] ?? 'cheap' };
+  }
+  if (how === 'vibe') {
+    const next = { ...answers };
+    delete next.vibe;
+    return next;
+  }
+  return { ...answers };
+}
+
 /** The answers as a chip strip: "Real meal · Cheap · Walkable". */
 export function summaryChips(answers: Answers): { id: QuestionId; label: string }[] {
   return QUESTIONS.filter((q) => answers[q.id]).map((q) => ({
