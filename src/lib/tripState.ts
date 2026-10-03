@@ -232,6 +232,8 @@ export interface TripStore {
   applyPreset: (cityId: string, dayKey: string, preset: Preset, replace: boolean) => void;
   /** Commit a plan built on the map into one of the city's days. */
   applyPlan: (cityId: string, dayKey: string, plan: PlanCommit, replace: boolean) => void;
+  /** Append stops that are already in day-item shape — what accepting a draft does. */
+  addDayItems: (dayKey: string, items: DayItem[]) => void;
   /** Log what was actually spent. The rate is the one that applies right now. */
   addExpense: (e: {
     on: string; cityId: string; category: ExpenseCategory; amount: number;
@@ -837,6 +839,25 @@ export function useTripStore(): TripStore {
     [edit],
   );
 
+  /**
+   * Put ready-made stops into a day.
+   *
+   * Accepting a drafted suggestion lands here: the stop has already been
+   * turned into a day item, with a pinned place behind it, so there is nothing
+   * left to work out. It appends rather than replaces, so accepting one card
+   * at a time builds the day up in the order you accept them.
+   */
+  const addDayItems = useCallback(
+    (key: string, items: DayItem[]) => {
+      if (!items.length) return;
+      edit(`day/${key}`, (d) => ({
+        ...d,
+        days: { ...d.days, [key]: [...(d.days[key] ?? []), ...items] },
+      }));
+    },
+    [edit],
+  );
+
   const addExpense = useCallback(
     (e: {
       on: string; cityId: string; category: ExpenseCategory; amount: number;
@@ -972,7 +993,7 @@ export function useTripStore(): TripStore {
       addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck,
       addExpense, removeExpense,
-      applyPreset, applyPlan, addComment, toggleComment, removeComment, reset,
+      applyPreset, applyPlan, addDayItems, addComment, toggleComment, removeComment, reset,
     }),
     [
       doc, booted, ready, saveState, lastSaved, persisted, syncState, deviceLink,
@@ -983,6 +1004,7 @@ export function useTripStore(): TripStore {
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
       addPlace, addPlaces, setPlace, fillPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck, addExpense, removeExpense, applyPreset, applyPlan,
+      addDayItems,
       addComment, toggleComment, removeComment, reset,
     ],
   );
