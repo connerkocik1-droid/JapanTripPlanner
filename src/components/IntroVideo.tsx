@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * The title card that plays over the app each time it is opened, in the
- * browser and installed to the home screen alike.
+ * The title card that plays over the app the first time it is opened, in the
+ * browser and installed to the home screen alike. Once it has been watched or
+ * skipped the flag below is kept, and every later open goes straight into the
+ * planner: no film, no animation, no pause, and none of the files fetched.
  *
  * An iPhone in Low Power Mode refuses to start a video on its own, and a web
  * page cannot talk it out of it — which is what kept this blank for Conner.
@@ -28,6 +30,14 @@ const STILL = '/intro/trip-intro.4.jpg';
 /** The same film as an animated image, for a phone that will not play video. */
 const ANIMATED = '/intro/trip-intro.4.webp';
 
+/**
+ * Where "they have seen it" is kept. The same key is read by the little script
+ * in the page's head, which hides the curtain before the browser has painted
+ * anything — this component cannot do that itself, because the markup is sent
+ * from the server and shown before any of this code runs.
+ */
+export const INTRO_SEEN_KEY = 'introSeen';
+
 /** How long the film runs. The animated copy announces no ending of its own. */
 const FILM_MS = 13600;
 
@@ -40,14 +50,49 @@ const START_GRACE_MS = 8000;
 /** The fade, matched to the CSS transition below. */
 const FADE_MS = 340;
 
+/** Private browsing and a locked-down browser both throw here rather than
+ *  returning nothing, so every touch of the store is wrapped. */
+function introSeen(): boolean {
+  try {
+    return window.localStorage.getItem(INTRO_SEEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberIntroSeen() {
+  try {
+    window.localStorage.setItem(INTRO_SEEN_KEY, '1');
+  } catch {
+    // Nothing to be done; they get the intro again next time.
+  }
+}
+
 export default function IntroVideo() {
   const [leaving, setLeaving] = useState(false);
   const [gone, setGone] = useState(false);
+  /**
+   * Set once we know this is a first visit. The film and the animation hang off
+   * it, so a returning visitor never has either in the page and the browser is
+   * never asked for the files.
+   */
+  const [armed, setArmed] = useState(false);
   /** Set once the video has been refused and the animated copy takes over. */
   const [animated, setAnimated] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
 
-  const dismiss = useCallback(() => setLeaving(true), []);
+  const dismiss = useCallback(() => {
+    rememberIntroSeen();
+    setLeaving(true);
+  }, []);
+
+  // First thing on the client: have they already seen it? The curtain is in the
+  // markup either way, so a returning visitor's copy is dropped here, and the
+  // head script has already kept it from being painted.
+  useEffect(() => {
+    if (introSeen()) setGone(true);
+    else setArmed(true);
+  }, []);
 
   // Lift the curtain after the fade, whatever ended it.
   useEffect(() => {
@@ -57,7 +102,7 @@ export default function IntroVideo() {
   }, [leaving]);
 
   useEffect(() => {
-    if (gone || animated) return;
+    if (!armed || gone || animated) return;
 
     const el = video.current;
     if (!el) {
@@ -86,7 +131,7 @@ export default function IntroVideo() {
       clearTimeout(grace);
       el.removeEventListener('playing', playing);
     };
-  }, [gone, animated]);
+  }, [armed, gone, animated]);
 
   // The animated copy reports nothing, so it is given the film's own length.
   useEffect(() => {
@@ -99,12 +144,15 @@ export default function IntroVideo() {
 
   return (
     <div
+      className="intro-curtain"
       onPointerDown={dismiss}
       style={{
         position: 'fixed', inset: 0, zIndex: 200,
         background: FILM_BG,
         // The card is on screen while whatever will play it is still loading.
-        backgroundImage: `url(${STILL})`,
+        // A returning visitor's curtain is hidden before paint, and a hidden
+        // element's background is never fetched.
+        backgroundImage: armed ? `url(${STILL})` : undefined,
         backgroundSize: 'contain',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -115,7 +163,7 @@ export default function IntroVideo() {
         pointerEvents: leaving ? 'none' : 'auto',
       }}
     >
-      {animated ? (
+      {armed && (animated ? (
         <img src={ANIMATED} alt="" className="intro-film" onError={dismiss} />
       ) : (
         <video
@@ -131,7 +179,7 @@ export default function IntroVideo() {
           aria-hidden
           className="intro-film"
         />
-      )}
+      ))}
       <button
         className="tap mono"
         onClick={dismiss}
