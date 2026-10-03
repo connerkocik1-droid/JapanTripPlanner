@@ -1,5 +1,6 @@
 'use client';
 
+import { ReactNode, useState } from 'react';
 import { City, Hotel } from '@/lib/data';
 import { fmtUsd } from '@/lib/format';
 import { splitTier } from '@/lib/hotelTier';
@@ -13,16 +14,20 @@ import type { Rates } from '@/lib/money';
  * because that is what the trip actually is. The shortlist is still worth a
  * look while reading the plan, so it slides up over it rather than sending you
  * to another tab and losing your place. It compares and switches; filling the
- * options in is still the Stay tab's job.
+ * options in is folded away behind one button, so the sheet opens on the
+ * comparison rather than on a form.
  */
 export default function StaySheet({
-  city, rates, onSetActive, onClose,
+  city, rates, editor, onSetActive, onClose,
 }: {
   city: City;
   rates: Rates | null;
+  /** The editor for this city's options, folded away until it is asked for. */
+  editor?: ReactNode;
   onSetActive: (hotelId: string | null) => void;
   onClose: () => void;
 }) {
+  const [open, setOpen] = useState(false);
   const filled = (h: Hotel) =>
     Boolean(h.name.trim() || h.cost || h.addr.trim() || h.url.trim());
   const options = city.hotels.filter((h) => filled(h) || h.id === city.hotelSel);
@@ -78,7 +83,9 @@ export default function StaySheet({
           </button>
         </div>
 
-        {options.length === 0 ? (
+        {/* The editor draws every option itself, so comparing and editing do
+            not stack the same list twice. */}
+        {open ? null : options.length === 0 ? (
           <div
             style={{
               padding: '18px 14px', borderRadius: 'var(--radius-md)', textAlign: 'center',
@@ -86,7 +93,7 @@ export default function StaySheet({
               color: 'var(--color-neutral-500)',
             }}
           >
-            No options for {city.name} yet. Add them on the Stay tab and they show up here.
+            No options for {city.name} yet. &ldquo;Edit these options&rdquo; below adds the first one.
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 8 }}>
@@ -103,6 +110,26 @@ export default function StaySheet({
             ))}
           </div>
         )}
+
+        {editor ? (
+          <>
+            <button
+              className="tap"
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+              style={{
+                width: '100%', minHeight: 38, marginTop: 9, borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--color-neutral-800)', background: 'transparent',
+                color: 'var(--color-neutral-400)', fontSize: 11.5, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}
+            >
+              <i className={open ? 'ph ph-caret-up' : 'ph ph-pencil-simple'} style={{ fontSize: 12 }} />
+              {open ? 'Done editing' : 'Edit these options'}
+            </button>
+            {open ? <div style={{ marginTop: 8 }}>{editor}</div> : null}
+          </>
+        ) : null}
       </div>
     </div>
   );

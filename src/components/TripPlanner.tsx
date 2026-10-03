@@ -15,9 +15,10 @@ import { hotelName, splitTier } from '@/lib/hotelTier';
 import { usePlaceDetails } from '@/lib/usePlaceDetails';
 import { PLACE_TAGS, type PlaceTag, matchesTags, ratingLine } from '@/lib/placeDetails';
 import { geocode, hitToLatLng } from '@/lib/geocode';
-import { PEOPLE, PERSON_LIST } from '@/lib/people';
+import { PEOPLE, PERSON_LIST, isPersonId } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
 import { useRates } from '@/lib/money';
+import { useWeather } from '@/lib/weather';
 import type { MapFocus, MapPin } from './TripMap';
 import { useDayRoute, type Stop } from '@/lib/useDayRoute';
 import {
@@ -26,19 +27,16 @@ import {
 import CityPanel from './CityPanel';
 import PlanBuilder, { type Preview } from './PlanBuilder';
 import DaysTab from './DaysTab';
-import DayAssist from './DayAssist';
-import { useWeather } from '@/lib/weather';
-import { isPersonId } from '@/lib/people';
 import PlanTab from './PlanTab';
 import IdeasSheet from './IdeasSheet';
 import TodayTab from './TodayTab';
+import DayAssist from './DayAssist';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
 import TripPicker from './TripPicker';
 import NotesTab from './NotesTab';
 import StayTab from './StayTab';
 import PrintSheet from './PrintSheet';
-import TouchMark, { touchStyle } from './TouchMark';
 import TripSettings from './TripSettings';
 
 // MapLibre touches window on import — keep it off the server render.
@@ -51,15 +49,13 @@ const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
  */
 const HOVER_SETTLE_MS = 220;
 
-type Tab = 'map' | 'today' | 'cities' | 'stay' | 'plan';
+type Tab = 'plan' | 'map' | 'today';
 
 /** The tab strip, in order. The map is first and is the default view. */
 const TABS: [Tab, string, string][] = [
+  ['plan', 'Plan', 'ph-calendar-blank'],
   ['map', 'Map', 'ph-map-trifold'],
   ['today', 'Today', 'ph-sun-horizon'],
-  ['cities', 'Cities', 'ph-buildings'],
-  ['stay', 'Stay', 'ph-bed'],
-  ['plan', 'Plan', 'ph-calendar-blank'],
 ];
 
 export default function TripPlanner() {
@@ -299,12 +295,6 @@ export default function TripPlanner() {
     [zoomTo],
   );
 
-  /** How many cities have an option made active — the Stay tab's tally. */
-  const stayPicked = useMemo(
-    () => doc.cities.filter((c) => c.hotels.some((h) => h.id === c.hotelSel)).length,
-    [doc.cities],
-  );
-
   const dayEntry = d.schedule[Math.min(Math.max(1, day), Math.max(1, d.schedule.length)) - 1] ?? null;
 
   /**
@@ -377,22 +367,10 @@ export default function TripPlanner() {
 
   const dayCity = dayEntry?.city ?? null;
 
-  const plan = useMemo(
-    () =>
-      dayEntry
-        ? planDay(dayEntry.items, hops, {
-            metroFare: dayCity?.metroFare ?? 0,
-            travelers: doc.trip.travelers,
-            back: returnHop,
-          })
-        : null,
-    [dayEntry, hops, returnHop, dayCity?.metroFare, doc.trip.travelers],
-  );
-
   /**
-   * What Claude can do for the day that is open, built once and shown in both
-   * places a day is looked at: under the day in Plan, and under today's stops
-   * on Today.
+   * What Claude is offered for the day on screen, built once and shown in the
+   * two places a day is worked on: under the open day in Plan, and under
+   * today's stops on Today.
    *
    * The clock and the weather are only passed on the day being lived. A
    * forecast for next Tuesday is not something this app has, and a suggestion
@@ -422,6 +400,18 @@ export default function TripPlanner() {
       />
     ) : null;
 
+  const plan = useMemo(
+    () =>
+      dayEntry
+        ? planDay(dayEntry.items, hops, {
+            metroFare: dayCity?.metroFare ?? 0,
+            travelers: doc.trip.travelers,
+            back: returnHop,
+          })
+        : null,
+    [dayEntry, hops, returnHop, dayCity?.metroFare, doc.trip.travelers],
+  );
+
   /** Where the day currently ends — what the builder routes new stops from. */
   const buildAnchor = useMemo(() => {
     const last = stops[stops.length - 1];
@@ -443,13 +433,25 @@ export default function TripPlanner() {
     return d.schedule.find((e) => e.city.id === draft.cityId) ?? null;
   }, [draft, d.schedule, day]);
 
-  const startPlan = useCallback((cityId: string) => {
-    setDraft({ cityId, startMins: DEFAULT_START_MINS, stops: [] });
-    setPreview(null);
-    setBackLeg(null);
-    // A plan is built by tapping the map, so that is where it happens.
-    setTab('map');
-  }, []);
+  const startPlan = useCallback(
+    (cityId: string) => {
+      setDraft({ cityId, startMins: DEFAULT_START_MINS, stops: [] });
+      setPreview(null);
+      setBackLeg(null);
+      /*
+       * A plan is built by tapping the map, so that is where it happens — and
+       * on the right part of it. Arriving on whatever the camera was left on,
+       * often the whole trip or another country, meant panning to the city you
+       * had just been reading before you could tap anything in it.
+       */
+      const current = d.schedule[day - 1];
+      const entry =
+        current?.city.id === cityId ? current : d.schedule.find((e) => e.city.id === cityId);
+      if (entry) showDay(entry.n);
+      else setTab('map');
+    },
+    [d.schedule, day, showDay],
+  );
 
   /**
    * Tapping a place works the same whether a plan is open or not: it routes
@@ -695,7 +697,7 @@ export default function TripPlanner() {
         });
       }
       // Only the option that counts is pinned. The shortlist is compared on
-      // the Stay tab, where the options sit side by side with their prices and
+      // the stay sheet, where the options sit side by side with their prices and
       // photos; on the map three pins a city only crowd the places.
       if (focused || plotAll) {
         c.hotels.forEach((h) => {
@@ -845,24 +847,6 @@ export default function TripPlanner() {
     if (hit) zoomTo(hitToLatLng(hit), 11.5);
   };
 
-  const cityNotes = useMemo(() => {
-    const out: Record<string, number> = {};
-    doc.comments.forEach((c) => {
-      if (c.city && !c.resolved) out[c.city] = (out[c.city] ?? 0) + 1;
-    });
-    return out;
-  }, [doc.comments]);
-
-  /** The most recent edit anyone made inside a city, for its row outline. */
-  const cityTouch = useMemo(() => {
-    const out: Record<string, { by: 'conner' | 'anasophia'; at: number }> = {};
-    Object.entries(doc.touches).forEach(([path, t]) => {
-      const c = path.split('/')[0];
-      if (!out[c] || t.at > out[c].at) out[c] = t;
-    });
-    return out;
-  }, [doc.touches]);
-
   const blank = <div style={{ position: 'fixed', inset: 0, background: 'var(--color-bg)' }} />;
   if (!store.booted) return blank;
   if (!store.user) return <Login onPick={store.signIn} />;
@@ -947,7 +931,7 @@ export default function TripPlanner() {
             className="tap"
             onClick={() => {
               setSettings((v) => !v);
-              setTab('cities');
+              setTab('plan');
             }}
             style={{
               flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none',
@@ -1132,7 +1116,7 @@ export default function TripPlanner() {
             </div>
             <button
               className="tap"
-              onClick={() => setTab('cities')}
+              onClick={() => setTab('plan')}
               style={{
                 minHeight: 40, padding: '0 16px', borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--color-accent-500)', background: 'transparent',
@@ -1219,8 +1203,96 @@ export default function TripPlanner() {
               padding: '11px calc(var(--safe-right) + 11px) calc(var(--safe-bottom) + 28px) calc(var(--safe-left) + 11px)',
             }}
           >
-{tab === 'cities' ? (
-            <>
+{tab === 'today' ? (
+            <TodayTab
+              schedule={d.schedule}
+              start={doc.trip.start}
+              todayN={todayN}
+              dayEntry={dayEntry}
+              plan={plan}
+              hotel={dayCity ? selectedHotel(dayCity) : null}
+              city={dayCity}
+              rates={rates}
+              ratesStale={ratesStale}
+              onRefreshRates={refreshRates}
+              currencies={doc.cities.map((c) => c.currency).filter(Boolean)}
+              travelers={doc.trip.travelers}
+              expenses={doc.expenses}
+              onZoomStop={(ll) => showOnMap(ll, 16.5)}
+              onToggleItem={store.toggleDayItem}
+              onAddExpense={store.addExpense}
+              onRemoveExpense={store.removeExpense}
+              checklist={doc.checklist}
+              onToggleCheck={store.toggleCheck}
+              onOpenIdeas={() => setIdeas(true)}
+              assist={assist}
+              onEditDay={() => setTab('plan')}
+              onStartToday={() => {
+                const t = new Date();
+                store.setTrip(
+                  'start',
+                  [t.getFullYear(), String(t.getMonth() + 1).padStart(2, '0'), String(t.getDate()).padStart(2, '0')].join('-'),
+                );
+                // Today is now day one: show it, in its city.
+                setDay(1);
+                const c = d.schedule[0]?.city;
+                if (c) setCityId(c.id);
+              }}
+            />
+          ) : null}
+
+          {tab === 'plan' ? (
+            <PlanTab
+              cities={d.cities}
+              schedule={d.schedule}
+              span={d.span}
+              spend={d.spend}
+              start={doc.trip.start}
+              selected={day}
+              rates={rates}
+              onSelectDay={(n) => {
+                setDay(n);
+                const c = d.schedule[n - 1]?.city;
+                if (c) setCityId(c.id);
+              }}
+              onSetActive={(cityId_, hotelId) => store.setCity(cityId_, 'hotelSel', hotelId)}
+              onOpenIdeas={() => setIdeas(true)}
+              cityEditor={(c, { openStay }) => (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginBottom: 4 }}>
+                    <IconBtn icon="ph-arrow-up" label={`Move ${c.name} earlier`} onClick={() => store.moveCity(c.id, -1)} />
+                    <IconBtn icon="ph-arrow-down" label={`Move ${c.name} later`} onClick={() => store.moveCity(c.id, 1)} />
+                    <IconBtn icon="ph-trash" label={`Remove ${c.name}`} onClick={() => store.removeCity(c.id)} />
+                  </div>
+                  <CityPanel
+                    city={c}
+                    spend={d.spend[c.id]}
+                    travelers={doc.trip.travelers}
+                    rates={rates}
+                    ratesStale={ratesStale}
+                    onCity={(key, val) => store.setCity(c.id, key, val)}
+                    onOpenStay={openStay}
+                    onAddPlaces={(places) => store.addPlaces(c.id, places)}
+                    onPlace={(pid, key, val) => store.setPlace(c.id, pid, key, val)}
+                    onRemovePlace={(pid) => store.removePlace(c.id, pid)}
+                    onZoom={showOnMap}
+                    touch={(suffix) => store.touch(`${c.id}/${suffix}`)}
+                  />
+                </>
+              )}
+              stayEditor={(c) => (
+                <StayTab
+                  cities={[c]}
+                  rates={rates}
+                  onSetActive={(cid, hid) => store.setCity(cid, 'hotelSel', hid)}
+                  onHotel={(cid, hid, key, val) => store.setHotel(cid, hid, key, val)}
+                  onAddHotel={(cid) => store.addHotelSlot(cid)}
+                  onZoom={showOnMap}
+                  touch={store.touch}
+                />
+              )}
+              footer={
+                <div style={{ marginTop: 14 }}>
               {settings ? (
                 <TripSettings
                   trip={doc.trip}
@@ -1238,53 +1310,6 @@ export default function TripPlanner() {
                   deviceLink={store.deviceLink}
                 />
               ) : null}
-
-              {d.cities.length === 0 && !adding ? (
-                <div
-                  style={{
-                    padding: '22px 16px', borderRadius: 'var(--radius-md)',
-                    border: '1px dashed var(--color-neutral-800)', textAlign: 'center',
-                  }}
-                >
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>Nothing planned yet</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', margin: '6px 0 2px', lineHeight: 1.5 }}>
-                    Add a city and it gets pinned on the map. Then fill in hotels,
-                    how you&rsquo;re getting there, food and what you&rsquo;ll do each day.
-                  </div>
-                </div>
-              ) : null}
-
-              {doc.cities.map((c, i) => (
-                <CityRow
-                  key={c.id}
-                  city={c}
-                  index={i}
-                  open={cityId === c.id}
-                  start={doc.trip.start}
-                  startDay={d.span[c.id].start}
-                  total={d.spend[c.id].total}
-                  notes={cityNotes[c.id] ?? 0}
-                  touch={cityTouch[c.id]}
-                  onSelect={() => selectCity(c.id)}
-                  onMove={(dir) => store.moveCity(c.id, dir)}
-                  onRemove={() => store.removeCity(c.id)}
-                >
-                  <CityPanel
-                    city={c}
-                    spend={d.spend[c.id]}
-                    travelers={doc.trip.travelers}
-                    rates={rates}
-                    ratesStale={ratesStale}
-                    onCity={(key, val) => store.setCity(c.id, key, val)}
-                    onOpenStay={() => setTab('stay')}
-                    onAddPlaces={(places) => store.addPlaces(c.id, places)}
-                    onPlace={(pid, key, val) => store.setPlace(c.id, pid, key, val)}
-                    onRemovePlace={(pid) => store.removePlace(c.id, pid)}
-                    onZoom={showOnMap}
-                    touch={(suffix) => store.touch(`${c.id}/${suffix}`)}
-                  />
-                </CityRow>
-              ))}
 
               {adding ? (
                 <div
@@ -1354,72 +1379,8 @@ export default function TripPlanner() {
                   Add a city
                 </button>
               )}
-            </>
-          ) : null}
-
-{tab === 'stay' ? (
-            <StayTab
-              cities={doc.cities}
-              rates={rates}
-              onSetActive={(cid, hid) => store.setCity(cid, 'hotelSel', hid)}
-              onHotel={(cid, hid, key, val) => store.setHotel(cid, hid, key, val)}
-              onAddHotel={(cid) => store.addHotelSlot(cid)}
-              onZoom={showOnMap}
-              touch={store.touch}
-            />
-          ) : null}
-
-          {tab === 'today' ? (
-            <TodayTab
-              schedule={d.schedule}
-              start={doc.trip.start}
-              todayN={todayN}
-              dayEntry={dayEntry}
-              plan={plan}
-              hotel={dayCity ? selectedHotel(dayCity) : null}
-              city={dayCity}
-              rates={rates}
-              ratesStale={ratesStale}
-              onRefreshRates={refreshRates}
-              currencies={doc.cities.map((c) => c.currency).filter(Boolean)}
-              travelers={doc.trip.travelers}
-              expenses={doc.expenses}
-              onZoomStop={(ll) => showOnMap(ll, 16.5)}
-              onToggleItem={store.toggleDayItem}
-              onAddExpense={store.addExpense}
-              onRemoveExpense={store.removeExpense}
-              assist={assist}
-              onEditDay={() => setTab('plan')}
-              onStartToday={() => {
-                const t = new Date();
-                store.setTrip(
-                  'start',
-                  [t.getFullYear(), String(t.getMonth() + 1).padStart(2, '0'), String(t.getDate()).padStart(2, '0')].join('-'),
-                );
-                // Today is now day one: show it, in its city.
-                setDay(1);
-                const c = d.schedule[0]?.city;
-                if (c) setCityId(c.id);
-              }}
-            />
-          ) : null}
-
-          {tab === 'plan' ? (
-            <PlanTab
-              cities={d.cities}
-              schedule={d.schedule}
-              span={d.span}
-              spend={d.spend}
-              start={doc.trip.start}
-              selected={day}
-              rates={rates}
-              onSelectDay={(n) => {
-                setDay(n);
-                const c = d.schedule[n - 1]?.city;
-                if (c) setCityId(c.id);
-              }}
-              onSetActive={(cityId_, hotelId) => store.setCity(cityId_, 'hotelSel', hotelId)}
-              onOpenIdeas={() => setIdeas(true)}
+                </div>
+              }
               openCounts={{
                 todos: doc.checklist.filter((c) => !c.done).length,
                 ideas: d.openNotes,
@@ -1495,84 +1456,6 @@ export default function TripPlanner() {
   );
 }
 
-function CityRow({
-  city, index, open, start, startDay, total, notes, touch, onSelect, onMove, onRemove, children,
-}: {
-  city: City;
-  index: number;
-  open: boolean;
-  start: string;
-  startDay: number;
-  total: number;
-  notes: number;
-  touch?: { by: 'conner' | 'anasophia'; at: number };
-  onSelect: () => void;
-  onMove: (dir: number) => void;
-  onRemove: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={{ marginBottom: 7 }}>
-      <button
-        className="tap"
-        onClick={onSelect}
-        style={{
-          width: '100%', minHeight: 56, padding: 14, textAlign: 'left',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid ' + (open ? 'var(--color-accent-500)' : 'var(--color-neutral-800)'),
-          background: open ? 'var(--tint-accent)' : 'var(--color-surface)',
-          color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
-          animation: 'riseIn .34s ease both', animationDelay: index * 60 + 'ms',
-          ...(touchStyle(touch) ?? {}),
-        }}
-      >
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 16, fontWeight: 500 }}>{city.name}</span>
-          {!city.ll ? (
-            <span className="mono" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>
-              no coordinates — not on the map
-            </span>
-          ) : null}
-        </span>
-        <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)', flex: 'none' }}>
-          {fmtD(dateOf(start, startDay - 1))} – {fmtD(dateOf(start, startDay + city.nights - 2))}
-        </span>
-        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flex: 'none' }}>
-          <span className="num" style={{ fontSize: 12 }}>{total ? fmtUsd(total) : '—'}</span>
-          <TouchMark touch={touch} align="right" />
-        </span>
-        {notes ? (
-          <span
-            className="mono"
-            style={{
-              fontSize: 8.5, color: 'var(--color-accent-300)', flex: 'none',
-              border: '1px solid var(--color-accent-700)', borderRadius: 9999, padding: '2px 6px',
-            }}
-          >
-            {notes}
-          </span>
-        ) : null}
-        <i
-          className={open ? 'ph ph-caret-up' : 'ph ph-caret-down'}
-          style={{ fontSize: 13, color: 'var(--color-neutral-600)', flex: 'none' }}
-        />
-      </button>
-
-      {open ? (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
-            <IconBtn icon="ph-arrow-up" label={`Move ${city.name} earlier`} onClick={() => onMove(-1)} />
-            <IconBtn icon="ph-arrow-down" label={`Move ${city.name} later`} onClick={() => onMove(1)} />
-            <IconBtn icon="ph-trash" label={`Remove ${city.name}`} onClick={onRemove} />
-          </div>
-          {children}
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-/** Quiet unless something is wrong — travelers shouldn't have to wonder. */
 function SaveChip({ state, error }: { state: string; error: boolean }) {
   if (error) {
     return (
