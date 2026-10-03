@@ -142,6 +142,35 @@ export function nextUnanswered(answers: Answers, skips: Skips = {}): QuestionId 
 }
 
 /**
+ * Questions that can hold more than one answer at once, joined with '+'.
+ *
+ * Only the vibe. When two travelers ask together, "chill" and "something
+ * weird" can both be true of the same bar and either would do; two budgets
+ * cannot both be true of one bill.
+ */
+const MULTI: QuestionId[] = ['vibe'];
+
+/** The option ids an answer holds — one, or several when two were merged. */
+export function optionIds(value: string | undefined): string[] {
+  return (value ?? '').split('+').filter(Boolean);
+}
+
+/**
+ * An answer with everything the question does not offer taken out of it.
+ *
+ * The survivors come back in the order the question lists them, so the same
+ * pair of answers always reads the same way round, and a question that holds
+ * only one answer keeps only the first.
+ */
+function keepValid(id: QuestionId, value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const asked = new Set(optionIds(value));
+  const kept = (question(id)?.options ?? []).map((o) => o.id).filter((o) => asked.has(o));
+  if (!kept.length) return '';
+  return MULTI.includes(id) ? kept.join('+') : kept[0];
+}
+
+/**
  * Keep only answers that are real: a question that is part of this flow, and
  * an option that question actually offers.
  *
@@ -154,14 +183,11 @@ export function cleanAnswers(raw: unknown, skips: Skips = {}): Answers {
   const given = raw as Record<string, unknown>;
   const out: Answers = {};
   // Two passes: `after` decides which of the others are in the flow at all.
-  const after = given.after;
-  if (typeof after === 'string' && QUESTIONS[0].options.some((o) => o.id === after)) {
-    out.after = after;
-  }
+  const after = keepValid('after', given.after);
+  if (after) out.after = after;
   for (const id of flowFor(out, skips)) {
-    const value = given[id];
-    if (typeof value !== 'string') continue;
-    if (question(id)?.options.some((o) => o.id === value)) out[id] = value;
+    const value = keepValid(id, given[id]);
+    if (value) out[id] = value;
   }
   return out;
 }
@@ -217,14 +243,69 @@ export function reroll(answers: Answers, how: RerollId): Answers {
 export function summaryChips(answers: Answers): { id: QuestionId; label: string }[] {
   return QUESTIONS.filter((q) => answers[q.id]).map((q) => ({
     id: q.id,
-    label: q.options.find((o) => o.id === answers[q.id])?.label ?? '',
+    label: chosen(q, answers[q.id]).map((o) => o.label).join(' + '),
   }));
 }
 
 /** The answers as sentences, which is how Claude is told about them. */
 export function answerLines(answers: Answers): string[] {
   return QUESTIONS.filter((q) => answers[q.id]).map((q) => {
-    const option = q.options.find((o) => o.id === answers[q.id]);
-    return `- ${q.ask} ${option?.says ?? ''}`;
+    const says = chosen(q, answers[q.id]).map((o) => o.says);
+    return `- ${q.ask} ${says.join(' or ')}`;
   });
+}
+
+/** The options an answer names, in the order the question lists them. */
+function chosen(q: Question, value: string | undefined): Option[] {
+  const ids = new Set(optionIds(value));
+  return q.options.filter((o) => ids.has(o.id));
+}
+
+/**
+ * Where two travelers answered one question differently, which answer counts.
+ *
+ * All of these but one are limits rather than tastes, so the tighter of the two
+ * wins: a dinner one of them cannot afford, or a walk one of them has not got
+ * the energy for, is a worse evening than a dull one. Hunger is the exception
+ * and goes the other way, because somewhere that will serve a feast will also
+ * serve a snack, and the reverse is not true.
+ */
+const RANK: Partial<Record<QuestionId, { order: string[]; keep: 'first' | 'last' }>> = {
+  hunger: { order: ['snack', 'meal', 'starving', 'feast'], keep: 'last' },
+  energy: { order: ['empty', 'normal', 'high'], keep: 'first' },
+  budget: { order: ['cheap', 'normal', 'splurge'], keep: 'first' },
+  distance: { order: ['walk', 'short', 'far'], keep: 'first' },
+  time: { order: ['hour', 'few', 'rest'], keep: 'first' },
+};
+
+/**
+ * Both travelers' answers as the one set Claude is asked with.
+ *
+ * `asker` is whoever tapped "Ask … too". Where the two of them want different
+ * things altogether — one to eat and one to wander — the asker's answer stands,
+ * because they are the one holding the phone and waiting on an answer.
+ */
+export function mergeAnswers(asker: Answers, other: Answers): Answers {
+  const out: Answers = { ...asker };
+  for (const q of QUESTIONS) {
+    const mine = asker[q.id];
+    const theirs = other[q.id];
+    if (!theirs) continue;
+    if (!mine || mine === theirs) {
+      out[q.id] = theirs;
+      continue;
+    }
+    if (MULTI.includes(q.id)) {
+      out[q.id] = keepValid(q.id, `${mine}+${theirs}`);
+      continue;
+    }
+    const rank = RANK[q.id];
+    if (!rank) continue;
+    const both = rank.order.filter((o) => o === mine || o === theirs);
+    out[q.id] = (rank.keep === 'first' ? both[0] : both[both.length - 1]) ?? mine;
+  }
+  // The two of them were asked different questions — one about hunger, the
+  // other about energy — so an answer that is no part of the merged flow is
+  // dropped rather than shown back as something they said.
+  return cleanAnswers(out, {});
 }

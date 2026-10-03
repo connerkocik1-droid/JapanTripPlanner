@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { City, DayItem, Place } from '@/lib/data';
+import { askFor, myAsk, plainAnswers, theOther, type Ask } from '@/lib/asks';
+import { PEOPLE, type PersonId } from '@/lib/people';
 import { decideConfigured } from '@/lib/decide';
 import type { WeatherHint } from '@/lib/decide';
 import DecideSheet from './DecideSheet';
@@ -26,6 +28,14 @@ export interface DayAssistProps {
   onAdd: (items: DayItem[]) => void;
   /** Save a place the trip did not have, when a suggestion names a new one. */
   onAddPlace: (cityId: string, place: Place) => void;
+
+  /** Who is holding the phone. Null before anybody has picked a face. */
+  me: PersonId | null;
+  /** Invitations to decide together, from either traveler. */
+  asks: Ask[];
+  onStartAsk: (dayKey: string, answers: Record<string, string>) => void;
+  onAnswerAsk: (id: string, answers: Record<string, string>) => void;
+  onEndAsk: (id: string) => void;
 }
 
 /**
@@ -40,10 +50,17 @@ export interface DayAssistProps {
  * part of the plan only when somebody accepts one.
  */
 export default function DayAssist(props: DayAssistProps) {
-  const { code, dayKey, city, items, weekday, date, nowMins, weather } = props;
-  const [deciding, setDeciding] = useState(false);
+  const { code, dayKey, city, items, weekday, date, nowMins, weather, me } = props;
+  /** 'mine' is my own question; 'join' is answering theirs. */
+  const [deciding, setDeciding] = useState<'mine' | 'join' | null>(null);
 
   if (!decideConfigured()) return null;
+
+  const other = me ? theOther(me) : null;
+  const mine = me ? myAsk(props.asks, dayKey, me) : null;
+  /** Their question, waiting on me. Shown until it is answered or it lapses. */
+  const incoming = me ? askFor(props.asks, dayKey, me) : null;
+  const asker = incoming ? PEOPLE[incoming.by] : null;
 
   return (
     <>
@@ -51,9 +68,26 @@ export default function DayAssist(props: DayAssistProps) {
         <DraftDay code={code} dayKey={dayKey} city={city} onAccept={props.onAdd} />
       ) : null}
 
+      {incoming && asker ? (
+        <button
+          className="tap"
+          onClick={() => setDeciding('join')}
+          style={{
+            width: '100%', minHeight: 44, marginTop: 8, borderRadius: 9999,
+            border: `1px solid ${asker.color}`, background: asker.glow,
+            color: 'var(--color-text)', fontSize: 12.5, fontWeight: 500,
+            cursor: 'pointer', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: 7,
+          }}
+        >
+          <i className="ph ph-users-two" style={{ fontSize: 14 }} />
+          {asker.name} is deciding — answer too
+        </button>
+      ) : null}
+
       <button
         className="tap"
-        onClick={() => setDeciding(true)}
+        onClick={() => setDeciding('mine')}
         style={{
           width: '100%', minHeight: 44, marginTop: 8, borderRadius: 9999,
           border: '1px solid var(--color-accent-600)', background: 'transparent',
@@ -67,8 +101,8 @@ export default function DayAssist(props: DayAssistProps) {
       </button>
 
       <DecideSheet
-        open={deciding}
-        onClose={() => setDeciding(false)}
+        open={deciding !== null}
+        onClose={() => setDeciding(null)}
         code={code}
         dayKey={dayKey}
         city={city}
@@ -81,6 +115,12 @@ export default function DayAssist(props: DayAssistProps) {
         onSetDiet={props.onSetDiet}
         onAdd={(item) => props.onAdd([item])}
         onAddPlace={(place) => props.onAddPlace(city.id, place)}
+        other={other}
+        mine={mine}
+        joining={deciding === 'join' ? incoming : null}
+        onStartAsk={(answers) => props.onStartAsk(dayKey, plainAnswers(answers))}
+        onAnswerAsk={(id, answers) => props.onAnswerAsk(id, plainAnswers(answers))}
+        onEndAsk={props.onEndAsk}
       />
     </>
   );
