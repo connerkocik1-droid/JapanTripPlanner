@@ -8,7 +8,8 @@ import { clashFor } from '@/lib/hours';
 import { PERSON_LIST, type Person } from '@/lib/people';
 import type { Ask } from '@/lib/asks';
 import {
-  Found, Pick, WeatherHint, askPicks, endsAt, goNowUrl, itemFromPick, lookUpPick,
+  Found, Pick, WeatherHint, askPicks, endsAt, goNowUrl, itemFromPick, logRound, lookUpPick,
+  markTaken,
 } from '@/lib/decide';
 import {
   QUESTIONS, REROLL, REROLL_ASK, type Answers, type QuestionId, type RerollId,
@@ -41,6 +42,8 @@ export interface DecideSheetProps {
    */
   onAddPlace: (place: Place) => void;
 
+  /** Who is holding the phone, for the record of what gets chosen. */
+  me: string | null;
   /** The other traveler, when there is one to ask. */
   other: Person | null;
   /** My own invitation on this day, which is what the waiting screen watches. */
@@ -94,6 +97,12 @@ export default function DecideSheet(props: DecideSheetProps) {
    * phrase is dropped here instead.
    */
   const shown = useRef<{ ids: string[]; queries: Set<string> }>({ ids: [], queries: new Set() });
+  /**
+   * The row this round was written down as, and an acceptance that arrived
+   * before the row did. Tapping Add to day a second after the cards appear is
+   * normal, and that tap is the whole point of keeping the record.
+   */
+  const round = useRef<{ id: string | null; took: { pick: Pick; name: string } | null }>({ id: null, took: null });
   /** Once a re-roll has started, every later ask keeps the exclusions. */
   const rerolling = useRef(false);
   const abort = useRef<AbortController | null>(null);
@@ -127,6 +136,7 @@ export default function DecideSheet(props: DecideSheetProps) {
     setAdded(new Set());
     shown.current = { ids: [], queries: new Set() };
     rerolling.current = false;
+    round.current = { id: null, took: null };
     setOnlyAsk(null);
     setSent({});
     setTogether(false);
@@ -136,6 +146,26 @@ export default function DecideSheet(props: DecideSheetProps) {
   }, [open, dayKey, budgetToday]);
 
   useEffect(() => () => abort.current?.abort(), []);
+
+  /**
+   * Keep the round. It is a note to ourselves and nothing on screen depends on
+   * it, so a failure here is silent on purpose: the three cards are already up
+   * and there is nothing a traveler could do about a log that did not land.
+   */
+  const write = useCallback(
+    async (final: Answers, got: Pick[]) => {
+      if (!code || !got.length) return;
+      const id = await logRound(code, dayKey, props.me ?? '', final, got);
+      round.current.id = id;
+      const took = round.current.took;
+      // Accepted while the row was still being written.
+      if (id && took) {
+        round.current.took = null;
+        markTaken(code, id, took.pick, took.name);
+      }
+    },
+    [code, dayKey, props.me],
+  );
 
   const ask = useCallback(
     async (final: Answers, again = false) => {
@@ -151,6 +181,9 @@ export default function DecideSheet(props: DecideSheetProps) {
       setPicks([]);
       setProblem('');
       setPhase('thinking');
+      round.current = { id: null, took: null };
+      /** This round's three, kept here rather than in state so `onDone` has them. */
+      const got: Pick[] = [];
 
       await askPicks(
         code,
@@ -165,12 +198,14 @@ export default function DecideSheet(props: DecideSheetProps) {
             if (q && shown.current.queries.has(q)) return;
             if (q) shown.current.queries.add(q);
             if (pick.placeId) shown.current.ids.push(pick.placeId);
+            got.push(pick);
             setPhase('results');
             setPicks((cur) => [...cur, pick]);
           },
           onDone: (count) => {
             setPhase('results');
             if (!count) setProblem('Nothing here fits that right now. Try a different answer.');
+            if (count) void write(final, got);
           },
           onError: (message) => {
             setPhase('results');
@@ -181,7 +216,9 @@ export default function DecideSheet(props: DecideSheetProps) {
         ctrl.signal,
       );
     },
-    [code, dayKey, city.places, nowMins, weather],
+    // `write` is a ref-only helper and does not change between renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [code, dayKey, city.places, nowMins, weather, props.me],
   );
 
   /**
@@ -327,6 +364,10 @@ export default function DecideSheet(props: DecideSheetProps) {
     if (found) props.onAddPlace(found);
     props.onAdd(item);
     setAdded((cur) => new Set(cur).add(pick.id));
+    // Which of the three was taken is the one fact worth keeping about a round.
+    const name = item.title;
+    if (code && round.current.id) markTaken(code, round.current.id, pick, name);
+    else round.current.took = { pick, name };
   };
 
   return (

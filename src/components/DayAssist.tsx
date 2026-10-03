@@ -115,6 +115,7 @@ export default function DayAssist(props: DayAssistProps) {
         onSetDiet={props.onSetDiet}
         onAdd={(item) => props.onAdd([item])}
         onAddPlace={(place) => props.onAddPlace(city.id, place)}
+        me={me}
         other={other}
         mine={mine}
         joining={deciding === 'join' ? incoming : null}
