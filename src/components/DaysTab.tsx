@@ -309,6 +309,11 @@ export default function DaysTab({
         onApplyPreset={onApplyPreset}
         onAddStop={onAddStop}
         weekday={weekday}
+        inDay={pinned(day.items)}
+        inDayKinds={pinned(day.items)
+          .map((id) => day.city.places.find((p) => p.id === id)?.kind)
+          .filter((k): k is Place['kind'] => Boolean(k))}
+        elsewhere={schedule.filter((e) => e.key !== day.key).flatMap((e) => pinned(e.items))}
         onAddBlank={() => onAddItem(day.key)}
         onSetFare={onSetFare}
         onZoom={onZoomStop}
@@ -316,6 +321,11 @@ export default function DaysTab({
       />
     </div>
   );
+}
+
+/** The places a list of stops stands on — a typed-in stop stands on none. */
+function pinned(items: DayItem[]): string[] {
+  return items.map((it) => it.placeId).filter((id): id is string => Boolean(id));
 }
 
 /** The travel strip between two stops: walk vs metro, with the better one marked. */

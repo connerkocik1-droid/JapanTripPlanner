@@ -22,6 +22,12 @@ export interface DayFillProps {
   rates: Rates | null;
   /** The weekday the day being filled falls on, for marking what is shut. */
   weekday: number;
+  /** Places already in this day, which are not what it needs more of. */
+  inDay: string[];
+  /** What kinds those are, so the day's gaps can be seen. */
+  inDayKinds: string[];
+  /** Places in some other day of the trip — still ideas, just not new ones. */
+  elsewhere: string[];
   onApplyPreset: (preset: Preset, replace: boolean) => void;
   onAddStop: (place: Place) => void;
   /** A stop that is not one of the city's pinned places — typed in by hand. */
@@ -41,8 +47,8 @@ export interface DayFillProps {
  * way of adding to it here.
  */
 export default function DayFill({
-  city, anchor, metroFare, travelers, rates, weekday, onApplyPreset, onAddStop, onAddBlank,
-  onSetFare, onZoom, onStartPlan,
+  city, anchor, metroFare, travelers, rates, weekday, inDay, inDayKinds, elsewhere,
+  onApplyPreset, onAddStop, onAddBlank, onSetFare, onZoom, onStartPlan,
 }: DayFillProps) {
   const [index, setIndex] = useState<{ id: string; name: string; city: string; summary?: string; file: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,6 +139,9 @@ export default function DayFill({
         city={city}
         anchor={anchor}
         weekday={weekday}
+        inDay={inDay}
+        inDayKinds={inDayKinds}
+        elsewhere={elsewhere}
         metroFare={metroFare}
         travelers={travelers}
         onAddStop={onAddStop}
@@ -230,11 +239,14 @@ export default function DayFill({
 
 /** Pick from the city's pinned places, each priced and timed from where the day currently ends. */
 function CustomPicker({
-  city, anchor, weekday, metroFare, travelers, onAddStop, onZoom,
+  city, anchor, weekday, inDay, inDayKinds, elsewhere, metroFare, travelers, onAddStop, onZoom,
 }: {
   city: City;
   anchor: { ll: LatLng; label: string } | null;
   weekday: number;
+  inDay: string[];
+  inDayKinds: string[];
+  elsewhere: string[];
   metroFare: number;
   travelers: number;
   onAddStop: (place: Place) => void;
@@ -247,7 +259,13 @@ function CustomPicker({
   // deciding it by putting it in a day is exactly how a maybe gets settled.
   const shown = orderPlaces(
     city.places.filter((p) => p.vote !== 'no' && (filter === 'all' ? true : p.kind === filter)),
-    { seconds: Object.fromEntries(Object.entries(legs).map(([id, o]) => [id, o?.walk?.seconds])) },
+    {
+      seconds: Object.fromEntries(Object.entries(legs).map(([id, o]) => [id, o?.walk?.seconds])),
+      weekday,
+      inDay,
+      inDayKinds,
+      elsewhere,
+    },
   );
 
   // Cost and time for adding each candidate, from the day's current end.
