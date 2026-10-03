@@ -15,7 +15,9 @@ import {
   answerLines, optionIds,
 } from '../../supabase/functions/draft-day/questions.ts';
 import { ASK_GOOD_FOR_MS, askFor, myAsk, plainAnswers, theOther, type Ask } from './asks.ts';
-import { validatePick } from '../../supabase/functions/draft-day/suggestions.ts';
+import { validatePick, validateWhy } from '../../supabase/functions/draft-day/suggestions.ts';
+import { whyBriefFor } from '../../supabase/functions/draft-day/why.ts';
+import { whySig } from './placeWhy.ts';
 import { pickBriefFor } from '../../supabase/functions/draft-day/picks.ts';
 
 function place(over: Partial<Place> = {}): Place {
@@ -517,5 +519,74 @@ describe('an invitation to decide together', () => {
 
   it('writes down only the questions that were answered', () => {
     assert.deepEqual(plainAnswers({ after: 'eat', vibe: undefined, budget: '' }), { after: 'eat' });
+  });
+});
+
+describe('the line under the top few places', () => {
+  const allowed = new Set(['p1', 'p2']);
+
+  it('takes a line about a place that was asked about', () => {
+    const line = validateWhy({ place_id: 'p1', why: '  Cheap, five minutes,  and open late. ' }, allowed, new Set());
+    assert.deepEqual(line, { placeId: 'p1', why: 'Cheap, five minutes, and open late.' });
+  });
+
+  it('refuses a place nobody asked about, and a repeat', () => {
+    assert.equal(validateWhy({ place_id: 'nope', why: 'A line' }, allowed, new Set()), null);
+    assert.equal(validateWhy({ place_id: 'p1', why: 'A line' }, allowed, new Set(['p1'])), null);
+  });
+
+  it('refuses a line that says nothing', () => {
+    assert.equal(validateWhy({ place_id: 'p1', why: '   ' }, allowed, new Set()), null);
+    assert.equal(validateWhy({ place_id: 'p1' }, allowed, new Set()), null);
+  });
+
+  it('cuts a line that turned into a paragraph', () => {
+    const long = validateWhy({ place_id: 'p1', why: 'x'.repeat(400) }, allowed, new Set());
+    assert.ok((long?.why.length ?? 0) <= 140);
+  });
+
+  it('asks only about places of that day, and at most three', () => {
+    const doc = {
+      trip: { start: '2026-10-03' },
+      cities: [{
+        id: 'tokyo', name: 'Tokyo', nights: 2, hotels: [], hotelSel: null,
+        places: [
+          { id: 'a', name: 'A', kind: 'eat', vote: 'yes' },
+          { id: 'b', name: 'B', kind: 'do', vote: 'yes' },
+          { id: 'c', name: 'C', kind: 'do', vote: 'yes' },
+          { id: 'd', name: 'D', kind: 'do', vote: 'yes' },
+        ],
+      }],
+      days: {},
+    };
+    const brief = whyBriefFor(doc, 'tokyo:0', { answers: { after: 'eat' }, ids: ['a', 'b', 'c', 'd'] });
+    assert.ok(brief);
+    assert.deepEqual([...(brief?.allowed ?? [])].sort(), ['a', 'b', 'c']);
+    assert.ok(brief?.prompt.includes('Tokyo'), brief?.prompt);
+
+    // A place id that is not this trip's gets nothing at all.
+    assert.equal(whyBriefFor(doc, 'tokyo:0', { answers: {}, ids: ['elsewhere'] }), null);
+    assert.equal(whyBriefFor(doc, 'kyoto:0', { answers: {}, ids: ['a'] }), null);
+  });
+});
+
+describe('what a line is cached against', () => {
+  it('changes when the day, the mood or the places change', () => {
+    const base = whySig('tokyo:0', { budget: 'cheap' }, ['a', 'b']);
+    assert.notEqual(base, whySig('tokyo:1', { budget: 'cheap' }, ['a', 'b']));
+    assert.notEqual(base, whySig('tokyo:0', { budget: 'splurge' }, ['a', 'b']));
+    assert.notEqual(base, whySig('tokyo:0', { budget: 'cheap' }, ['a', 'c']));
+    assert.notEqual(base, whySig('tokyo:0', { budget: 'cheap' }, ['b', 'a']));
+  });
+
+  it('does not change on the order the answers happen to be in', () => {
+    assert.equal(
+      whySig('tokyo:0', { budget: 'cheap', after: 'eat' }, ['a']),
+      whySig('tokyo:0', { after: 'eat', budget: 'cheap' }, ['a']),
+    );
+  });
+
+  it('ignores anything past the top three', () => {
+    assert.equal(whySig('tokyo:0', {}, ['a', 'b', 'c']), whySig('tokyo:0', {}, ['a', 'b', 'c', 'd']));
   });
 });

@@ -13,6 +13,7 @@ import { bandRest, legToShow, photoOf, priceTier, ratingOf } from '@/lib/placeCa
 import { orderPlaces } from '@/lib/placeOrder';
 import { clashFor as clashAt } from '@/lib/hours';
 import MoodLens from './MoodLens';
+import { TOP, useWhy } from '@/lib/placeWhy';
 import type { Answers } from '../../supabase/functions/draft-day/questions';
 
 export interface DayFillProps {
@@ -36,6 +37,10 @@ export interface DayFillProps {
   /** The mood this list is being read through, and how to change it. */
   lens: Answers;
   onLens: (next: Answers) => void;
+  /** The trip's own code, for the one line Claude writes under the top few. */
+  code: string | null;
+  /** `cityId:nightIndex`, which that line is about. */
+  dayKey: string;
   /** Places in some other day of the trip — still ideas, just not new ones. */
   elsewhere: string[];
   onApplyPreset: (preset: Preset, replace: boolean) => void;
@@ -58,7 +63,7 @@ export interface DayFillProps {
  */
 export default function DayFill({
   city, anchor, metroFare, travelers, rates, weekday, inDay, inDayKinds, elsewhere,
-  endMins, diets, lens, onLens,
+  endMins, diets, lens, onLens, code, dayKey,
   onApplyPreset, onAddStop, onAddBlank, onSetFare, onZoom, onStartPlan,
 }: DayFillProps) {
   const [index, setIndex] = useState<{ id: string; name: string; city: string; summary?: string; file: string }[]>([]);
@@ -157,6 +162,8 @@ export default function DayFill({
         diets={diets}
         lens={lens}
         onLens={onLens}
+        code={code}
+        dayKey={dayKey}
         metroFare={metroFare}
         travelers={travelers}
         onAddStop={onAddStop}
@@ -255,7 +262,7 @@ export default function DayFill({
 /** Pick from the city's pinned places, each priced and timed from where the day currently ends. */
 function CustomPicker({
   city, anchor, weekday, inDay, inDayKinds, elsewhere, endMins, diets, lens, onLens,
-  metroFare, travelers, onAddStop, onZoom,
+  code, dayKey, metroFare, travelers, onAddStop, onZoom,
 }: {
   city: City;
   anchor: { ll: LatLng; label: string } | null;
@@ -267,6 +274,8 @@ function CustomPicker({
   diets: Record<string, string>;
   lens: Answers;
   onLens: (next: Answers) => void;
+  code: string | null;
+  dayKey: string;
   metroFare: number;
   travelers: number;
   onAddStop: (place: Place) => void;
@@ -291,6 +300,9 @@ function CustomPicker({
       shutAt: (place, at) => clashAt(place, weekday, at, at + 60)?.weight === 'hard',
     },
   );
+
+  /** The one line Claude writes, for the top few only. Empty until it lands. */
+  const why = useWhy(code, dayKey, lens, shown.slice(0, TOP).map((p) => p.id));
 
   // Cost and time for adding each candidate, from the day's current end.
   useEffect(() => {
@@ -391,6 +403,18 @@ function CustomPicker({
                   <span style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>
                     {p.name || 'Unnamed place'}
                   </span>
+                  {/* Why this one, for this day — the top few only, and only
+                      once it has landed. The card is complete without it. */}
+                  {why[p.id] ? (
+                    <span
+                      style={{
+                        display: 'block', fontSize: 11, lineHeight: 1.4, marginTop: 3,
+                        color: 'var(--color-neutral-400)',
+                      }}
+                    >
+                      {why[p.id]}
+                    </span>
+                  ) : null}
                   {/* Only what is actually known about it. */}
                   {rated || tier || p.cuisine.trim() || rest ? (
                     <span
