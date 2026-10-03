@@ -1,6 +1,12 @@
 /**
- * "Draft this day" — Claude lays out an empty day from the places the
- * travellers have already saved, and the cards appear one at a time.
+ * The one place this app talks to Claude.
+ *
+ * It answers two questions. "Draft this day" lays out an empty day from the
+ * places the travellers have already saved. "Help me decide" takes a handful
+ * of tapped chips and comes back with three things to do next. They share
+ * everything that matters — the key, the trip check, the rate limit, the
+ * line-by-line stream — and differ only in the brief, the tool and the
+ * checking, so a safeguard cannot be added to one and forgotten on the other.
  *
  * The Anthropic key lives here and only here. It is read from the function's
  * own secrets, so it is never in the bundle the browser downloads and never in
@@ -12,16 +18,17 @@
  *
  *   1. A caller must hold a trip code that actually names a saved trip. The
  *      check is a real read of that trip, not a shape test.
- *   2. The caller sends no text. It names a day — a city id and a night — and
- *      every word the model sees is built here from the saved trip. There is
- *      no field a prompt of someone else's choosing could arrive in.
+ *   2. The caller sends no prose. It names a day, and for a suggestion a few
+ *      answer ids out of `questions.ts` and some numbers; every word the model
+ *      reads is built here from the saved trip. There is no field a prompt of
+ *      someone else's choosing could arrive in.
  *   3. Calls are counted, per trip and per caller, and refused past a
  *      sensible rate.
  *
- * What comes back is one JSON object per line: a `stop` as each one is
- * finished, then a single `done`. Streaming line by line rather than returning
- * a day is the point — on a phone the first card lands in a second or two
- * instead of the whole thing landing in fifteen.
+ * What comes back is one JSON object per line: a `stop` or a `pick` as each
+ * one is finished, then a single `done`. Streaming line by line rather than
+ * returning the lot is the point — on a phone the first card lands in a second
+ * or two instead of everything landing in fifteen.
  */
 
 import Anthropic from 'npm:@anthropic-ai/sdk@^0.131.0';
@@ -110,7 +117,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return refuse(405, 'Use POST.');
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!apiKey) return refuse(503, 'Drafting a day is not set up on this trip yet.');
+  if (!apiKey) return refuse(503, 'Asking Claude is not set up on this trip yet.');
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const code = typeof body?.code === 'string' ? body.code.trim() : '';
@@ -121,7 +128,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const caller = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
   if (!withinRate(`trip:${code}`, PER_TRIP) || !withinRate(`ip:${caller}`, PER_CALLER)) {
-    return refuse(429, 'That is a lot of drafting. Give it a few minutes.');
+    return refuse(429, 'That is a lot of asking. Give it a few minutes.');
   }
 
   // The code has to name a real trip before a single token is spent.
