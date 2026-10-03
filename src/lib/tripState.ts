@@ -47,6 +47,15 @@ export interface TripDoc {
   expenses: Expense[];
   /** Who last changed each field, keyed by field path. */
   touches: Record<string, Touch>;
+  /**
+   * What each traveler does not eat, in their own words.
+   *
+   * It lives on the trip rather than on an account because there are no
+   * accounts — a traveler is one of the faces in `people.ts`, and the trip
+   * document is the only thing that follows you between devices. Asked once,
+   * the first time somebody uses "Help me decide", and never again.
+   */
+  diets: Record<string, string>;
 }
 
 const USER_KEY = 'trip-planner:user';
@@ -64,7 +73,10 @@ export type SyncState = 'off' | 'syncing' | 'synced' | 'error';
 const PULL_EVERY_MS = 20_000;
 
 export function emptyDoc(): TripDoc {
-  return { trip: newTrip(), cities: [], days: {}, checklist: [], comments: [], expenses: [], touches: {} };
+  return {
+    trip: newTrip(), cities: [], days: {}, checklist: [], comments: [], expenses: [],
+    touches: {}, diets: {},
+  };
 }
 
 export function dayKey(cityId: string, n: number): string {
@@ -148,7 +160,19 @@ export function normalize(input: unknown): TripDoc {
     // them is normal rather than broken; each one is filled the way a city is.
     expenses: Array.isArray(p.expenses) ? p.expenses.map(fillExpense) : [],
     touches: p.touches ?? {},
+    // Saved before anybody was asked what they do not eat.
+    diets: plainStrings(p.diets),
   };
+}
+
+/** A string-to-string map, with anything else in it thrown away. */
+function plainStrings(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'string') out[k] = v;
+  }
+  return out;
 }
 
 /** A plan built on the map, ready to become day items. */
@@ -234,6 +258,8 @@ export interface TripStore {
   applyPlan: (cityId: string, dayKey: string, plan: PlanCommit, replace: boolean) => void;
   /** Append stops that are already in day-item shape — what accepting a draft does. */
   addDayItems: (dayKey: string, items: DayItem[]) => void;
+  /** Remember what a traveler does not eat, asked once and kept on the trip. */
+  setDiet: (who: PersonId, text: string) => void;
   /** Log what was actually spent. The rate is the one that applies right now. */
   addExpense: (e: {
     on: string; cityId: string; category: ExpenseCategory; amount: number;
@@ -858,6 +884,14 @@ export function useTripStore(): TripStore {
     [edit],
   );
 
+  /** What a traveler does not eat. Blank clears it. */
+  const setDiet = useCallback(
+    (who: PersonId, text: string) => {
+      edit('diets', (d) => ({ ...d, diets: { ...d.diets, [who]: text.trim() } }));
+    },
+    [edit],
+  );
+
   const addExpense = useCallback(
     (e: {
       on: string; cityId: string; category: ExpenseCategory; amount: number;
@@ -993,7 +1027,8 @@ export function useTripStore(): TripStore {
       addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck,
       addExpense, removeExpense,
-      applyPreset, applyPlan, addDayItems, addComment, toggleComment, removeComment, reset,
+      applyPreset, applyPlan, addDayItems, setDiet, addComment, toggleComment, removeComment,
+      reset,
     }),
     [
       doc, booted, ready, saveState, lastSaved, persisted, syncState, deviceLink,
@@ -1004,7 +1039,7 @@ export function useTripStore(): TripStore {
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
       addPlace, addPlaces, setPlace, fillPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck, addExpense, removeExpense, applyPreset, applyPlan,
-      addDayItems,
+      addDayItems, setDiet,
       addComment, toggleComment, removeComment, reset,
     ],
   );

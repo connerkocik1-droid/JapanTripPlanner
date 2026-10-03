@@ -13,14 +13,10 @@
  * `applyPlan`-shaped path a hand-built day does.
  */
 
+import { CLOCK_RE, postLines, readLine } from './aiStream.ts';
 import { DEFAULT_DWELL, uid, type DayItem, type Place } from './data.ts';
 
-const FUNCTION_URL = (() => {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  return base ? `${base.replace(/\/+$/, '')}/functions/v1/draft-day` : '';
-})();
-
-const TIMEOUT_MS = 90_000;
+export { aiConfigured as draftingConfigured } from './aiStream.ts';
 
 /** A stop Claude proposed: a saved place, a time, how long, and why. */
 export interface Suggestion {
@@ -31,11 +27,6 @@ export interface Suggestion {
   startTime: string;
   durationMin: number;
   reason: string;
-}
-
-/** Whether a build can draft a day at all — the same gate sync uses. */
-export function draftingConfigured(): boolean {
-  return Boolean(FUNCTION_URL);
 }
 
 export interface DraftHandlers {
@@ -63,78 +54,44 @@ export async function draftDay(
   handlers: DraftHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!FUNCTION_URL) {
-    handlers.onError('Drafting a day is not set up on this trip yet.');
-    return;
-  }
-
   const ids = new Set(known.map((p) => p.id));
   const seen = new Set<string>();
   let count = 0;
+  let failed = false;
 
-  const timeout = AbortSignal.timeout(TIMEOUT_MS);
-  const abort = signal ? anyOf([signal, timeout]) : timeout;
-
-  let res: Response;
-  try {
-    res = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, dayKey }),
-      signal: abort,
-    });
-  } catch {
-    handlers.onError('Could not reach the planner. Check your signal and try again.');
-    return;
-  }
-
-  if (!res.ok || !res.body) {
-    const said = await res
-      .json()
-      .then((j: unknown) => (j as { error?: unknown })?.error)
-      .catch(() => null);
-    handlers.onError(typeof said === 'string' && said ? said : 'Could not draft that day.');
-    return;
-  }
-
-  const reader = res.body.getReader();
-  const decode = new TextDecoder();
-  let buf = '';
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decode.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      // Whatever follows the last newline is half a line; keep it for next time.
-      buf = lines.pop() ?? '';
-      for (const line of lines) {
-        const message = parseLine(line);
-        if (!message) continue;
-        if (message.type === 'error') {
-          handlers.onError(message.message);
-          return;
-        }
-        if (message.type === 'done') {
-          handlers.onDone(count);
-          return;
-        }
-        const stop = message.stop;
-        if (!ids.has(stop.placeId) || seen.has(stop.placeId)) continue;
-        seen.add(stop.placeId);
-        count += 1;
-        handlers.onStop(stop);
+  const result = await postLines(
+    { action: 'draft', code, dayKey },
+    (raw) => {
+      const message = readMessage(raw);
+      if (!message) return true;
+      if (message.type === 'error') {
+        failed = true;
+        handlers.onError(message.message);
+        return false;
       }
-    }
-    // The stream ended without saying so — whatever arrived still counts.
-    handlers.onDone(count);
-  } catch {
+      if (message.type === 'done') {
+        handlers.onDone(count);
+        return false;
+      }
+      const stop = message.stop;
+      if (!ids.has(stop.placeId) || seen.has(stop.placeId)) return true;
+      seen.add(stop.placeId);
+      count += 1;
+      handlers.onStop(stop);
+      return true;
+    },
+    signal,
+  );
+
+  if (failed) return;
+  if (!result.ok) {
+    // Whatever arrived before it broke is still a day worth looking at.
     if (count) handlers.onDone(count);
-    else handlers.onError('That draft stopped partway. Try it again.');
-  } finally {
-    reader.releaseLock();
+    else handlers.onError(result.message);
+    return;
   }
+  // The stream ended without saying so — whatever arrived still counts.
+  handlers.onDone(count);
 }
 
 type Message =
@@ -144,17 +101,12 @@ type Message =
 
 /** One line of the stream, or null for a blank or unreadable one. */
 export function parseLine(line: string): Message | null {
-  const text = line.trim();
-  if (!text) return null;
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
+  const raw = readLine(line);
+  return raw ? readMessage(raw) : null;
+}
 
+/** One already-parsed line, as something the caller can act on. */
+function readMessage(o: Record<string, unknown>): Message | null {
   if (o.type === 'done') return { type: 'done' };
   if (o.type === 'error') {
     return {
@@ -168,7 +120,7 @@ export function parseLine(line: string): Message | null {
 
   const s = o.stop as Record<string, unknown> | undefined;
   if (!s || typeof s.placeId !== 'string' || !s.placeId) return null;
-  if (typeof s.startTime !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(s.startTime)) return null;
+  if (typeof s.startTime !== 'string' || !CLOCK_RE.test(s.startTime)) return null;
   const mins = Number(s.durationMin);
   if (!Number.isFinite(mins) || mins <= 0) return null;
 
@@ -213,17 +165,4 @@ export function itemsFrom(stops: Suggestion[], known: Place[]): DayItem[] {
       dwell: s.durationMin || DEFAULT_DWELL[place.kind] || 60,
     };
   });
-}
-
-/** The first of several signals to fire. `AbortSignal.any` is too new to rely on. */
-function anyOf(signals: AbortSignal[]): AbortSignal {
-  const ctrl = new AbortController();
-  for (const s of signals) {
-    if (s.aborted) {
-      ctrl.abort(s.reason);
-      break;
-    }
-    s.addEventListener('abort', () => ctrl.abort(s.reason), { once: true });
-  }
-  return ctrl.signal;
 }
