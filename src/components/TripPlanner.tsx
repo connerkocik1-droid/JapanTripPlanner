@@ -407,13 +407,25 @@ export default function TripPlanner() {
     return d.schedule.find((e) => e.city.id === draft.cityId) ?? null;
   }, [draft, d.schedule, day]);
 
-  const startPlan = useCallback((cityId: string) => {
-    setDraft({ cityId, startMins: DEFAULT_START_MINS, stops: [] });
-    setPreview(null);
-    setBackLeg(null);
-    // A plan is built by tapping the map, so that is where it happens.
-    setTab('map');
-  }, []);
+  const startPlan = useCallback(
+    (cityId: string) => {
+      setDraft({ cityId, startMins: DEFAULT_START_MINS, stops: [] });
+      setPreview(null);
+      setBackLeg(null);
+      /*
+       * A plan is built by tapping the map, so that is where it happens — and
+       * on the right part of it. Arriving on whatever the camera was left on,
+       * often the whole trip or another country, meant panning to the city you
+       * had just been reading before you could tap anything in it.
+       */
+      const current = d.schedule[day - 1];
+      const entry =
+        current?.city.id === cityId ? current : d.schedule.find((e) => e.city.id === cityId);
+      if (entry) showDay(entry.n);
+      else setTab('map');
+    },
+    [d.schedule, day, showDay],
+  );
 
   /**
    * Tapping a place works the same whether a plan is open or not: it routes
