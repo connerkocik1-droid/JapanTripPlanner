@@ -11,8 +11,10 @@ import { describe, it } from 'node:test';
 import { blankCity, blankPlace, type City, type Place } from './data.ts';
 import { endsAt, goNowUrl, itemFromPick, readPick, type Pick } from './decide.ts';
 import {
-  QUESTIONS, cleanAnswers, flowFor, nextUnanswered, reroll, summaryChips, answerLines,
+  QUESTIONS, cleanAnswers, flowFor, mergeAnswers, nextUnanswered, reroll, summaryChips,
+  answerLines, optionIds,
 } from '../../supabase/functions/draft-day/questions.ts';
+import { ASK_GOOD_FOR_MS, askFor, myAsk, plainAnswers, theOther, type Ask } from './asks.ts';
 import { validatePick } from '../../supabase/functions/draft-day/suggestions.ts';
 import { pickBriefFor } from '../../supabase/functions/draft-day/picks.ts';
 
@@ -386,5 +388,134 @@ describe('turning all three down', () => {
     const was = { distance: 'far' };
     reroll(was, 'far');
     assert.equal(was.distance, 'far');
+  });
+});
+
+function ask(over: Partial<Ask> = {}): Ask {
+  return {
+    id: 'a1',
+    dayKey: 'tokyo:1',
+    by: 'conner',
+    at: Date.now(),
+    answers: { after: 'eat' },
+    reply: null,
+    repliedAt: null,
+    ...over,
+  };
+}
+
+describe('deciding together', () => {
+  it('takes the tighter of two budgets and two distances', () => {
+    const merged = mergeAnswers(
+      { after: 'eat', budget: 'splurge', distance: 'far' },
+      { after: 'eat', budget: 'normal', distance: 'walk' },
+    );
+    assert.equal(merged.budget, 'normal');
+    assert.equal(merged.distance, 'walk');
+    // And the same whichever way round the two of them are.
+    const other = mergeAnswers(
+      { budget: 'normal', distance: 'walk' },
+      { budget: 'splurge', distance: 'far' },
+    );
+    assert.equal(other.budget, 'normal');
+    assert.equal(other.distance, 'walk');
+  });
+
+  it('takes the shorter time and the lower energy, because both are limits', () => {
+    const merged = mergeAnswers(
+      { after: 'wander', time: 'rest', energy: 'high' },
+      { after: 'wander', time: 'hour', energy: 'empty' },
+    );
+    assert.equal(merged.time, 'hour');
+    assert.equal(merged.energy, 'empty');
+  });
+
+  it('takes the hungrier of the two, which is the one that cannot be fixed later', () => {
+    const both = (a: string, b: string) =>
+      mergeAnswers({ after: 'eat', hunger: a }, { after: 'eat', hunger: b }).hunger;
+    assert.equal(both('snack', 'feast'), 'feast');
+    assert.equal(both('starving', 'meal'), 'starving');
+  });
+
+  it('combines the vibes rather than choosing between them', () => {
+    const merged = mergeAnswers({ vibe: 'chill' }, { vibe: 'weird' });
+    assert.deepEqual(optionIds(merged.vibe), ['chill', 'weird']);
+    // In the order the question lists them, so it reads the same both ways.
+    assert.equal(mergeAnswers({ vibe: 'weird' }, { vibe: 'chill' }).vibe, merged.vibe);
+  });
+
+  it('keeps the asker\'s answer when the two of them want different things', () => {
+    assert.equal(mergeAnswers({ after: 'eat' }, { after: 'wander' }).after, 'eat');
+  });
+
+  it('drops an answer that is no part of the merged flow', () => {
+    // He is wandering, so her answer about hunger is not a thing he was asked
+    // and not a thing to show him back.
+    const merged = mergeAnswers({ after: 'wander', energy: 'high' }, { after: 'eat', hunger: 'feast' });
+    assert.equal(merged.hunger, undefined);
+    assert.equal(merged.energy, 'high');
+  });
+
+  it('takes an answer the asker never gave', () => {
+    assert.equal(mergeAnswers({ after: 'eat' }, { after: 'eat', vibe: 'local' }).vibe, 'local');
+  });
+
+  it('leaves both sets of answers alone', () => {
+    const mine = { budget: 'splurge' };
+    const theirs = { budget: 'cheap' };
+    mergeAnswers(mine, theirs);
+    assert.equal(mine.budget, 'splurge');
+    assert.equal(theirs.budget, 'cheap');
+  });
+
+  it('shows a combined vibe as both chips and tells Claude about both', () => {
+    const answers = { after: 'eat', vibe: 'chill+weird' };
+    assert.equal(summaryChips(answers).find((c) => c.id === 'vibe')?.label, 'Chill + Something weird');
+    const line = answerLines(answers).find((l) => l.includes('vibe'));
+    assert.ok(line?.includes('calm and unhurried or'), line);
+  });
+
+  it('accepts a combined vibe off the wire, and still refuses nonsense', () => {
+    assert.equal(cleanAnswers({ after: 'eat', vibe: 'chill+weird' }).vibe, 'chill+weird');
+    assert.equal(cleanAnswers({ after: 'eat', vibe: 'chill+nonsense' }).vibe, 'chill');
+    assert.equal(cleanAnswers({ after: 'eat', vibe: 'nonsense' }).vibe, undefined);
+    // One answer only, for a question that holds one.
+    assert.equal(cleanAnswers({ after: 'eat', budget: 'cheap+splurge' }).budget, 'cheap');
+    assert.equal(cleanAnswers({ after: 'eat+wander' }).after, 'eat');
+  });
+});
+
+describe('an invitation to decide together', () => {
+  it('offers the other traveler\'s question, not my own', () => {
+    const asks = [ask()];
+    assert.equal(askFor(asks, 'tokyo:1', 'anasophia')?.id, 'a1');
+    assert.equal(askFor(asks, 'tokyo:1', 'conner'), null);
+    assert.equal(myAsk(asks, 'tokyo:1', 'conner')?.id, 'a1');
+  });
+
+  it('is only about the day it was asked on', () => {
+    assert.equal(askFor([ask()], 'seoul:0', 'anasophia'), null);
+  });
+
+  it('is finished once it has been answered', () => {
+    const asks = [ask({ reply: { after: 'eat' }, repliedAt: Date.now() })];
+    assert.equal(askFor(asks, 'tokyo:1', 'anasophia'), null);
+    // The asker still sees it: their phone is what merges and takes it down.
+    assert.equal(myAsk(asks, 'tokyo:1', 'conner')?.reply?.after, 'eat');
+  });
+
+  it('lapses, because it was a question about the next hour', () => {
+    const old = [ask({ at: Date.now() - ASK_GOOD_FOR_MS - 1000 })];
+    assert.equal(askFor(old, 'tokyo:1', 'anasophia'), null);
+    assert.equal(myAsk(old, 'tokyo:1', 'conner'), null);
+  });
+
+  it('names whoever is not holding the phone', () => {
+    assert.equal(theOther('conner')?.name, 'Anasophia');
+    assert.equal(theOther('anasophia')?.name, 'Conner');
+  });
+
+  it('writes down only the questions that were answered', () => {
+    assert.deepEqual(plainAnswers({ after: 'eat', vibe: undefined, budget: '' }), { after: 'eat' });
   });
 });

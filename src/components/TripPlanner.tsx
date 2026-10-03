@@ -398,6 +398,11 @@ export default function TripPlanner() {
         onSetDiet={(who, text) => isPersonId(who) && store.setDiet(who, text)}
         onAdd={(items) => store.addDayItems(dayEntry.key, items)}
         onAddPlace={(cid, place) => store.addPlaces(cid, [place])}
+        me={store.user}
+        asks={doc.asks}
+        onStartAsk={store.startAsk}
+        onAnswerAsk={store.answerAsk}
+        onEndAsk={store.endAsk}
       />
     ) : null;
 

@@ -5,13 +5,14 @@ import { City, DayItem, Place, placeKind } from '@/lib/data';
 import { fmtUsd } from '@/lib/format';
 import { fmtSpan, parseClock } from '@/lib/dayPlan';
 import { clashFor } from '@/lib/hours';
-import { PERSON_LIST } from '@/lib/people';
+import { PERSON_LIST, type Person } from '@/lib/people';
+import type { Ask } from '@/lib/asks';
 import {
   Found, Pick, WeatherHint, askPicks, endsAt, goNowUrl, itemFromPick, lookUpPick,
 } from '@/lib/decide';
 import {
   QUESTIONS, REROLL, REROLL_ASK, type Answers, type QuestionId, type RerollId,
-  flowFor, nextUnanswered, question, reroll,
+  cleanAnswers, flowFor, mergeAnswers, nextUnanswered, question, reroll, summaryChips,
 } from '../../supabase/functions/draft-day/questions.ts';
 
 export interface DecideSheetProps {
@@ -39,9 +40,22 @@ export interface DecideSheetProps {
    * somebody accepts the card, so a suggestion nobody took leaves no trace.
    */
   onAddPlace: (place: Place) => void;
+
+  /** The other traveler, when there is one to ask. */
+  other: Person | null;
+  /** My own invitation on this day, which is what the waiting screen watches. */
+  mine: Ask | null;
+  /**
+   * Their invitation, when the sheet was opened to answer it rather than to
+   * ask. The questions are the same; what happens at the end is not.
+   */
+  joining: Ask | null;
+  onStartAsk: (answers: Answers) => void;
+  onAnswerAsk: (id: string, answers: Answers) => void;
+  onEndAsk: (id: string) => void;
 }
 
-type Phase = 'diet' | 'ask' | 'thinking' | 'results' | 'reroll';
+type Phase = 'diet' | 'ask' | 'thinking' | 'results' | 'reroll' | 'waiting' | 'sent';
 
 const BUDGET_KEY = 'trip-planner:decide-budget:';
 
@@ -69,6 +83,10 @@ export default function DecideSheet(props: DecideSheetProps) {
    */
   const [onlyAsk, setOnlyAsk] = useState<QuestionId | null>(null);
   const [added, setAdded] = useState<Set<string>>(new Set());
+  /** What was sent to the asker, for the one line the sender is left with. */
+  const [sent, setSent] = useState<Answers>({});
+  /** True once both travelers' answers are what the picks were found from. */
+  const [together, setTogether] = useState(false);
   /**
    * Everything offered so far this sitting, so a re-roll comes back with
    * three others. Saved places are excluded by the server, which builds the
@@ -79,6 +97,9 @@ export default function DecideSheet(props: DecideSheetProps) {
   /** Once a re-roll has started, every later ask keeps the exclusions. */
   const rerolling = useRef(false);
   const abort = useRef<AbortController | null>(null);
+  /** The answers as they stand, for the effect that merges theirs into them. */
+  const answersRef = useRef<Answers>({});
+  answersRef.current = answers;
 
   /** A budget answer given earlier today is reused rather than asked again. */
   const budgetToday = useMemo(() => (open ? readBudget(date) : ''), [open, date]);
@@ -107,6 +128,8 @@ export default function DecideSheet(props: DecideSheetProps) {
     shown.current = { ids: [], queries: new Set() };
     rerolling.current = false;
     setOnlyAsk(null);
+    setSent({});
+    setTogether(false);
     setPhase(unasked.length ? 'diet' : 'ask');
     // `unasked` is derived from props.diets, which this does not change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,11 +184,74 @@ export default function DecideSheet(props: DecideSheetProps) {
     [code, dayKey, city.places, nowMins, weather],
   );
 
+  /**
+   * Their answers landing, which is the one thing this screen is waiting for.
+   *
+   * It arrives on a pull from the other phone, so it shows up as a changed
+   * prop rather than as anything happening here. The invitation comes down at
+   * the same moment: it has been answered, and leaving it standing would offer
+   * the other phone a second go at a question already settled.
+   */
+  const reply = props.mine?.reply ?? null;
+  const mineId = props.mine?.id ?? null;
+  useEffect(() => {
+    if (phase !== 'waiting' || !reply || !mineId) return;
+    // Their answers arrived from another device, so they are checked against
+    // the question table before they are merged — with nothing skipped, since
+    // what this phone already knew is no reason to drop what they said.
+    const merged = mergeAnswers(answersRef.current, cleanAnswers(reply, {}));
+    setAnswers(merged);
+    setTogether(true);
+    props.onEndAsk(mineId);
+    void ask(merged, rerolling.current);
+    // Their answers are the trigger; everything else is read at the moment it
+    // fires rather than being a reason to fire again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, reply, mineId]);
+
   if (!open) return null;
 
   const flow = flowFor(answers, skips);
   const current = onlyAsk ?? nextUnanswered(answers, skips);
   const step = current ? flow.indexOf(current) : flow.length;
+
+  /**
+   * The end of the questions, which is two different things.
+   *
+   * Answering your own question asks Claude. Answering somebody else's sends
+   * your answers to their phone, because they are the one standing there
+   * waiting and three picks on both phones would be three different sets.
+   */
+  const finish = (final: Answers) => {
+    if (props.joining) {
+      props.onAnswerAsk(props.joining.id, final);
+      setSent(final);
+      setPhase('sent');
+      return;
+    }
+    void ask(final, rerolling.current);
+  };
+
+  /** Put the question to the other traveler, with mine already answered. */
+  const askTogether = () => {
+    props.onStartAsk(answers);
+    setPhase('waiting');
+  };
+
+  /** Done waiting. The three already on screen were always there. */
+  const goAlone = () => {
+    if (props.mine) props.onEndAsk(props.mine.id);
+    setPhase(picks.length ? 'results' : 'ask');
+  };
+
+  /**
+   * Closing while somebody is still being waited on takes the question down,
+   * so it is not sitting on the other phone an hour later.
+   */
+  const close = () => {
+    if (props.mine && !props.mine.reply) props.onEndAsk(props.mine.id);
+    onClose();
+  };
 
   const answer = (id: QuestionId, value: string) => {
     const next = { ...answers, [id]: value };
@@ -178,7 +264,7 @@ export default function DecideSheet(props: DecideSheetProps) {
       void ask(next, true);
       return;
     }
-    if (!nextUnanswered(next, skips)) void ask(next, rerolling.current);
+    if (!nextUnanswered(next, skips)) finish(next);
   };
 
   /**
@@ -200,6 +286,14 @@ export default function DecideSheet(props: DecideSheetProps) {
   };
 
   const back = () => {
+    if (phase === 'waiting') {
+      goAlone();
+      return;
+    }
+    if (phase === 'sent') {
+      close();
+      return;
+    }
     if (phase === 'reroll' || onlyAsk) {
       setOnlyAsk(null);
       setPhase('results');
@@ -236,7 +330,7 @@ export default function DecideSheet(props: DecideSheetProps) {
   };
 
   return (
-    <div style={scrim} onClick={onClose}>
+    <div style={scrim} onClick={close}>
       <div style={sheet} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Help me decide">
         <div style={grabber} />
 
@@ -253,7 +347,7 @@ export default function DecideSheet(props: DecideSheetProps) {
           ) : (
             <div style={{ flex: 1 }} />
           )}
-          <button className="tap" onClick={onClose} aria-label="Close" style={iconBtn}>
+          <button className="tap" onClick={close} aria-label="Close" style={iconBtn}>
             <i className="ph ph-x" style={{ fontSize: 16 }} />
           </button>
         </div>
@@ -266,7 +360,9 @@ export default function DecideSheet(props: DecideSheetProps) {
           <>
             <div style={askLine}>{question(current)?.ask}</div>
             <div className="mono" style={fromLine}>
-              From {endsAt(city, items)}
+              {props.joining && props.other
+                ? `${props.other.name} is deciding too · from ${endsAt(city, items)}`
+                : `From ${endsAt(city, items)}`}
             </div>
             <div style={chips}>
               {question(current)?.options.map((o) => (
@@ -275,7 +371,7 @@ export default function DecideSheet(props: DecideSheetProps) {
                 </button>
               ))}
             </div>
-            {step === 0 && !onlyAsk ? (
+            {step === 0 && !onlyAsk && !props.joining ? (
               <button
                 className="tap"
                 onClick={() => void ask({})}
@@ -296,6 +392,11 @@ export default function DecideSheet(props: DecideSheetProps) {
 
         {phase === 'results' ? (
           <>
+            {together && props.other ? (
+              <div className="mono" style={{ ...fromLine, marginTop: 10 }}>
+                Both of you · {summaryChips(answers).map((c) => c.label).join(' · ')}
+              </div>
+            ) : null}
             {picks.map((p) => (
               <PickCard
                 key={p.id}
@@ -320,6 +421,51 @@ export default function DecideSheet(props: DecideSheetProps) {
                 Not these
               </button>
             ) : null}
+            {picks.length && props.other && !together ? (
+              <button
+                className="tap"
+                onClick={askTogether}
+                style={{ ...chip, width: '100%', marginTop: 8, borderStyle: 'dashed' }}
+              >
+                <i className="ph ph-users-two" style={{ fontSize: 13, marginRight: 6 }} />
+                Ask {props.other.name} too
+              </button>
+            ) : null}
+          </>
+        ) : null}
+
+        {phase === 'waiting' ? (
+          <>
+            <div style={askLine}>Asked {props.other?.name ?? 'them'}.</div>
+            <div className="mono" style={fromLine}>
+              Their answers come through when they open the app. Yours so far:{' '}
+              {summaryChips(answers).map((c) => c.label).join(' · ') || 'nothing in particular'}
+            </div>
+            <button
+              className="tap"
+              onClick={goAlone}
+              style={{ ...chip, width: '100%', marginTop: 16, borderStyle: 'dashed' }}
+            >
+              <i className="ph ph-arrow-left" style={{ fontSize: 13, marginRight: 6 }} />
+              Back to the three you had
+            </button>
+          </>
+        ) : null}
+
+        {phase === 'sent' ? (
+          <>
+            <div style={askLine}>Sent to {props.other?.name ?? 'them'}.</div>
+            <div className="mono" style={fromLine}>
+              They are the one with the three cards. You said:{' '}
+              {summaryChips(sent).map((c) => c.label).join(' · ') || 'nothing in particular'}
+            </div>
+            <button
+              className="tap"
+              onClick={close}
+              style={{ ...chip, width: '100%', marginTop: 16, background: 'var(--tint-accent)' }}
+            >
+              Done
+            </button>
           </>
         ) : null}
 

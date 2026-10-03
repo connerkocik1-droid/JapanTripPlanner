@@ -5,6 +5,7 @@ import {
   CheckItem, City, DayItem, Hotel, LatLng, Meal, Place, TravelMode, Trip,
   blankCity, blankHotel, blankPlace, newTrip, uid,
 } from './data';
+import { Ask, fresh, isAsk } from './asks';
 import { Expense, ExpenseCategory, blankExpense, fillExpense } from './expenses';
 import { blankHood } from './hoods';
 import { fmtClock } from './dayPlan';
@@ -56,6 +57,11 @@ export interface TripDoc {
    * the first time somebody uses "Help me decide", and never again.
    */
   diets: Record<string, string>;
+  /**
+   * Open invitations to decide together, newest first. Short-lived: one is
+   * answered within a few minutes or it is no longer the question.
+   */
+  asks: Ask[];
 }
 
 const USER_KEY = 'trip-planner:user';
@@ -75,7 +81,7 @@ const PULL_EVERY_MS = 20_000;
 export function emptyDoc(): TripDoc {
   return {
     trip: newTrip(), cities: [], days: {}, checklist: [], comments: [], expenses: [],
-    touches: {}, diets: {},
+    touches: {}, diets: {}, asks: [],
   };
 }
 
@@ -162,6 +168,7 @@ export function normalize(input: unknown): TripDoc {
     touches: p.touches ?? {},
     // Saved before anybody was asked what they do not eat.
     diets: plainStrings(p.diets),
+    asks: Array.isArray(p.asks) ? p.asks.filter(isAsk) : [],
   };
 }
 
@@ -260,6 +267,12 @@ export interface TripStore {
   addDayItems: (dayKey: string, items: DayItem[]) => void;
   /** Remember what a traveler does not eat, asked once and kept on the trip. */
   setDiet: (who: PersonId, text: string) => void;
+  /** Ask the other traveler to answer "Help me decide" too. Returns the ask's id. */
+  startAsk: (dayKey: string, answers: Record<string, string>) => string;
+  /** Answer somebody else's invitation. */
+  answerAsk: (id: string, answers: Record<string, string>) => void;
+  /** Take an invitation down — merged and used, or given up on. */
+  endAsk: (id: string) => void;
   /** Log what was actually spent. The rate is the one that applies right now. */
   addExpense: (e: {
     on: string; cityId: string; category: ExpenseCategory; amount: number;
@@ -892,6 +905,48 @@ export function useTripStore(): TripStore {
     [edit],
   );
 
+  /**
+   * Invite the other traveler to answer with you.
+   *
+   * One invitation a day each: asking again replaces the one before it, which
+   * is what tapping the button twice means. Anything older than the cutoff is
+   * swept out here rather than on a timer, so the list cannot grow.
+   */
+  const startAsk = useCallback(
+    (dayKey: string, answers: Record<string, string>) => {
+      const id = uid();
+      const by = userRef.current;
+      if (!by) return id;
+      edit(`ask/${dayKey}`, (d) => ({
+        ...d,
+        asks: [
+          { id, dayKey, by, at: Date.now(), answers, reply: null, repliedAt: null },
+          ...d.asks.filter((a) => !(a.dayKey === dayKey && a.by === by) && fresh(a)),
+        ],
+      }));
+      return id;
+    },
+    [edit],
+  );
+
+  /** Answer somebody else's invitation. Their phone picks it up on the next pull. */
+  const answerAsk = useCallback(
+    (id: string, answers: Record<string, string>) => {
+      edit(`ask/${id}`, (d) => ({
+        ...d,
+        asks: d.asks.map((a) => (a.id === id ? { ...a, reply: answers, repliedAt: Date.now() } : a)),
+      }));
+    },
+    [edit],
+  );
+
+  const endAsk = useCallback(
+    (id: string) => {
+      edit(null, (d) => ({ ...d, asks: d.asks.filter((a) => a.id !== id) }));
+    },
+    [edit],
+  );
+
   const addExpense = useCallback(
     (e: {
       on: string; cityId: string; category: ExpenseCategory; amount: number;
@@ -1027,7 +1082,8 @@ export function useTripStore(): TripStore {
       addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck,
       addExpense, removeExpense,
-      applyPreset, applyPlan, addDayItems, setDiet, addComment, toggleComment, removeComment,
+      applyPreset, applyPlan, addDayItems, setDiet, startAsk, answerAsk, endAsk,
+      addComment, toggleComment, removeComment,
       reset,
     }),
     [
@@ -1039,7 +1095,7 @@ export function useTripStore(): TripStore {
       addCity, removeCity, moveCity, setCity, setHotel, addHotelSlot,
       addPlace, addPlaces, setPlace, fillPlace, removePlace, addDayItem, setDayItem, removeDayItem, moveDayItem, toggleDayItem,
       addCheck, setCheck, toggleCheck, removeCheck, addExpense, removeExpense, applyPreset, applyPlan,
-      addDayItems, setDiet,
+      addDayItems, setDiet, startAsk, answerAsk, endAsk,
       addComment, toggleComment, removeComment, reset,
     ],
   );
