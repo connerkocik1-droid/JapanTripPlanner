@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LatLng, TravelMode } from './data';
-import { LegOptions, betterMode, routeLeg } from './routing';
+import type { LatLng, TravelMode } from './data.ts';
+import { betterMode, routeLeg, type LegOptions } from './routing.ts';
 
 export interface Stop {
   /** Day item id. */

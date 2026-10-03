@@ -33,6 +33,8 @@ export interface DayAssistProps {
   me: PersonId | null;
   /** Invitations to decide together, from either traveler. */
   asks: Ask[];
+  /** A round of questions here also sets the mood above the day's place list. */
+  onLens: (answers: Record<string, string>) => void;
   onStartAsk: (dayKey: string, answers: Record<string, string>) => void;
   onAnswerAsk: (id: string, answers: Record<string, string>) => void;
   onEndAsk: (id: string) => void;
@@ -119,6 +121,7 @@ export default function DayAssist(props: DayAssistProps) {
         other={other}
         mine={mine}
         joining={deciding === 'join' ? incoming : null}
+        onLens={(answers) => props.onLens(plainAnswers(answers))}
         onStartAsk={(answers) => props.onStartAsk(dayKey, plainAnswers(answers))}
         onAnswerAsk={(id, answers) => props.onAnswerAsk(id, plainAnswers(answers))}
         onEndAsk={props.onEndAsk}

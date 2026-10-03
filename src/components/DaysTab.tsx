@@ -13,6 +13,7 @@ import { dateOf, fmtD, fmtDow, fmtUsd } from '@/lib/format';
 import { HopResult } from '@/lib/useDayRoute';
 import { fmtDistance, fmtDuration } from '@/lib/routing';
 import { DayPlan, fmtClock, fmtSpan, parseClock } from '@/lib/dayPlan';
+import type { Answers } from '../../supabase/functions/draft-day/questions';
 
 export interface DaysTabProps {
   schedule: DayEntry[];
@@ -40,6 +41,11 @@ export interface DaysTabProps {
   anchor: { ll: LatLng; label: string } | null;
   /** The day's exchange rates, for what the day costs where it is spent. */
   rates: Rates | null;
+  /** What each traveler does not eat, which the mood above the list uses. */
+  diets: Record<string, string>;
+  /** The mood this day's place list is read through, and how to change it. */
+  lens: Answers;
+  onLens: (next: Answers) => void;
   onSelectDay: (n: number) => void;
   onAddItem: (key: string) => void;
   onSetItem: <K extends keyof DayItem>(key: string, id: string, field: K, val: DayItem[K]) => void;
@@ -55,8 +61,8 @@ export interface DaysTabProps {
 }
 
 export default function DaysTab({
-  schedule, start, selected, hops, plan, fare, travelers, city, anchor, rates, embedded = false,
-  assist,
+  schedule, start, selected, hops, plan, fare, travelers, city, anchor, rates, diets, lens, onLens,
+  embedded = false, assist,
   onSelectDay, onAddItem,
   onSetItem, onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop, onAddStop,
   onApplyPreset, onSetFare, onStartPlan,
@@ -309,6 +315,10 @@ export default function DaysTab({
         onApplyPreset={onApplyPreset}
         onAddStop={onAddStop}
         weekday={weekday}
+        endMins={plan ? plan.startMins + plan.totalMins : null}
+        diets={diets}
+        lens={lens}
+        onLens={onLens}
         inDay={pinned(day.items)}
         inDayKinds={pinned(day.items)
           .map((id) => day.city.places.find((p) => p.id === id)?.kind)

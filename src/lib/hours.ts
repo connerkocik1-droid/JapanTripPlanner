@@ -12,8 +12,8 @@
  * nothing filled in raises nothing.
  */
 
-import { Place } from './data';
-import { parseClock } from './dayPlan';
+import type { Place } from './data.ts';
+import { parseClock } from './dayPlan.ts';
 
 /** Sunday first, matching `Date.getDay()`. */
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

@@ -1,5 +1,5 @@
-import { DayItem, TravelMode } from './data';
-import { HopResult, legOf } from './useDayRoute';
+import type { DayItem, TravelMode } from './data.ts';
+import { legOf, type HopResult } from './useDayRoute.ts';
 
 export interface PlannedStop {
   item: DayItem;

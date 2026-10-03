@@ -11,6 +11,9 @@ import type { Rates } from '@/lib/money';
 import { WEEKDAYS_LONG, shutOn } from '@/lib/hours';
 import { bandRest, legToShow, photoOf, priceTier, ratingOf } from '@/lib/placeCard';
 import { orderPlaces } from '@/lib/placeOrder';
+import { clashFor as clashAt } from '@/lib/hours';
+import MoodLens from './MoodLens';
+import type { Answers } from '../../supabase/functions/draft-day/questions';
 
 export interface DayFillProps {
   city: City | null;
@@ -26,6 +29,13 @@ export interface DayFillProps {
   inDay: string[];
   /** What kinds those are, so the day's gaps can be seen. */
   inDayKinds: string[];
+  /** Minutes past midnight the day currently ends at, for what is open then. */
+  endMins: number | null;
+  /** What each traveler does not eat, for the mood's own filtering. */
+  diets: Record<string, string>;
+  /** The mood this list is being read through, and how to change it. */
+  lens: Answers;
+  onLens: (next: Answers) => void;
   /** Places in some other day of the trip — still ideas, just not new ones. */
   elsewhere: string[];
   onApplyPreset: (preset: Preset, replace: boolean) => void;
@@ -48,6 +58,7 @@ export interface DayFillProps {
  */
 export default function DayFill({
   city, anchor, metroFare, travelers, rates, weekday, inDay, inDayKinds, elsewhere,
+  endMins, diets, lens, onLens,
   onApplyPreset, onAddStop, onAddBlank, onSetFare, onZoom, onStartPlan,
 }: DayFillProps) {
   const [index, setIndex] = useState<{ id: string; name: string; city: string; summary?: string; file: string }[]>([]);
@@ -142,6 +153,10 @@ export default function DayFill({
         inDay={inDay}
         inDayKinds={inDayKinds}
         elsewhere={elsewhere}
+        endMins={endMins}
+        diets={diets}
+        lens={lens}
+        onLens={onLens}
         metroFare={metroFare}
         travelers={travelers}
         onAddStop={onAddStop}
@@ -239,7 +254,8 @@ export default function DayFill({
 
 /** Pick from the city's pinned places, each priced and timed from where the day currently ends. */
 function CustomPicker({
-  city, anchor, weekday, inDay, inDayKinds, elsewhere, metroFare, travelers, onAddStop, onZoom,
+  city, anchor, weekday, inDay, inDayKinds, elsewhere, endMins, diets, lens, onLens,
+  metroFare, travelers, onAddStop, onZoom,
 }: {
   city: City;
   anchor: { ll: LatLng; label: string } | null;
@@ -247,6 +263,10 @@ function CustomPicker({
   inDay: string[];
   inDayKinds: string[];
   elsewhere: string[];
+  endMins: number | null;
+  diets: Record<string, string>;
+  lens: Answers;
+  onLens: (next: Answers) => void;
   metroFare: number;
   travelers: number;
   onAddStop: (place: Place) => void;
@@ -257,7 +277,7 @@ function CustomPicker({
 
   // A place ruled out is not offered as a stop; a maybe still is, because
   // deciding it by putting it in a day is exactly how a maybe gets settled.
-  const shown = orderPlaces(
+  const { list: shown, hidden } = orderPlaces(
     city.places.filter((p) => p.vote !== 'no' && (filter === 'all' ? true : p.kind === filter)),
     {
       seconds: Object.fromEntries(Object.entries(legs).map(([id, o]) => [id, o?.walk?.seconds])),
@@ -265,6 +285,10 @@ function CustomPicker({
       inDay,
       inDayKinds,
       elsewhere,
+      endMins,
+      diets,
+      lens,
+      shutAt: (place, at) => clashAt(place, weekday, at, at + 60)?.weight === 'hard',
     },
   );
 
@@ -299,6 +323,8 @@ function CustomPicker({
 
   return (
     <div>
+      <MoodLens lens={lens} hidden={hidden} onChange={onLens} />
+
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 9 }}>
         {(['all', ...PLACE_KINDS.map((k) => k.id)] as const).map((k) => {
           const on = filter === k;

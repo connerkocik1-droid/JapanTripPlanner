@@ -53,6 +53,11 @@ export interface DecideSheetProps {
    * ask. The questions are the same; what happens at the end is not.
    */
   joining: Ask | null;
+  /**
+   * What was just asked for, so the mood above the day's place list says the
+   * same thing. Asking here is the easiest way to set it.
+   */
+  onLens: (answers: Answers) => void;
   onStartAsk: (answers: Answers) => void;
   onAnswerAsk: (id: string, answers: Answers) => void;
   onEndAsk: (id: string) => void;
@@ -181,6 +186,7 @@ export default function DecideSheet(props: DecideSheetProps) {
       setPicks([]);
       setProblem('');
       setPhase('thinking');
+      props.onLens(final);
       round.current = { id: null, took: null };
       /** This round's three, kept here rather than in state so `onDone` has them. */
       const got: Pick[] = [];
@@ -217,6 +223,7 @@ export default function DecideSheet(props: DecideSheetProps) {
       );
     },
     // `write` is a ref-only helper and does not change between renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [code, dayKey, city.places, nowMins, weather, props.me],
   );
