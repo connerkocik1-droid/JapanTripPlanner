@@ -1,6 +1,12 @@
 /**
- * "Draft this day" — Claude lays out an empty day from the places the
- * travellers have already saved, and the cards appear one at a time.
+ * The one place this app talks to Claude.
+ *
+ * It answers two questions. "Draft this day" lays out an empty day from the
+ * places the travellers have already saved. "Help me decide" takes a handful
+ * of tapped chips and comes back with three things to do next. They share
+ * everything that matters — the key, the trip check, the rate limit, the
+ * line-by-line stream — and differ only in the brief, the tool and the
+ * checking, so a safeguard cannot be added to one and forgotten on the other.
  *
  * The Anthropic key lives here and only here. It is read from the function's
  * own secrets, so it is never in the bundle the browser downloads and never in
@@ -12,21 +18,26 @@
  *
  *   1. A caller must hold a trip code that actually names a saved trip. The
  *      check is a real read of that trip, not a shape test.
- *   2. The caller sends no text. It names a day — a city id and a night — and
- *      every word the model sees is built here from the saved trip. There is
- *      no field a prompt of someone else's choosing could arrive in.
+ *   2. The caller sends no prose. It names a day, and for a suggestion a few
+ *      answer ids out of `questions.ts` and some numbers; every word the model
+ *      reads is built here from the saved trip. There is no field a prompt of
+ *      someone else's choosing could arrive in.
  *   3. Calls are counted, per trip and per caller, and refused past a
  *      sensible rate.
  *
- * What comes back is one JSON object per line: a `stop` as each one is
- * finished, then a single `done`. Streaming line by line rather than returning
- * a day is the point — on a phone the first card lands in a second or two
- * instead of the whole thing landing in fifteen.
+ * What comes back is one JSON object per line: a `stop` or a `pick` as each
+ * one is finished, then a single `done`. Streaming line by line rather than
+ * returning the lot is the point — on a phone the first card lands in a second
+ * or two instead of everything landing in fifteen.
  */
 
 import Anthropic from 'npm:@anthropic-ai/sdk@^0.131.0';
 import { PROPOSE_DAY, SYSTEM, briefFor, type Doc } from './brief.ts';
-import { byClock, itemScanner, validateSuggestion, type Suggestion } from './suggestions.ts';
+import { PICKS_SYSTEM, SUGGEST_PICKS, pickBriefFor, type WeatherHint } from './picks.ts';
+import { cleanAnswers } from './questions.ts';
+import {
+  byClock, itemScanner, validatePick, validateSuggestion, type Suggestion,
+} from './suggestions.ts';
 
 /** The trip code is 128 bits of randomness, written as 32 hex characters. */
 const MIN_CODE = 32;
@@ -106,28 +117,59 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return refuse(405, 'Use POST.');
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!apiKey) return refuse(503, 'Drafting a day is not set up on this trip yet.');
+  if (!apiKey) return refuse(503, 'Asking Claude is not set up on this trip yet.');
 
-  const body = (await req.json().catch(() => null)) as
-    | { code?: unknown; dayKey?: unknown }
-    | null;
+  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const code = typeof body?.code === 'string' ? body.code.trim() : '';
   const dayKey = typeof body?.dayKey === 'string' ? body.dayKey.trim() : '';
+  // 'draft' lays out a whole empty day; 'picks' answers "Help me decide".
+  const action = body?.action === 'picks' ? 'picks' : 'draft';
   if (code.length < MIN_CODE || !dayKey) return refuse(400, 'Which day?');
 
   const caller = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
   if (!withinRate(`trip:${code}`, PER_TRIP) || !withinRate(`ip:${caller}`, PER_CALLER)) {
-    return refuse(429, 'That is a lot of drafting. Give it a few minutes.');
+    return refuse(429, 'That is a lot of asking. Give it a few minutes.');
   }
 
   // The code has to name a real trip before a single token is spent.
   const doc = await pullTrip(code);
   if (!doc) return refuse(403, 'That trip could not be opened.');
 
-  const brief = briefFor(doc, dayKey);
-  if (!brief) return refuse(404, 'That is not a day of this trip.');
-  if (!brief.allowed.size) {
-    return refuse(409, `Pin a few places in ${brief.cityName} first and this can draft from them.`);
+  // What to ask Claude, and what to do with each thing it says back. The two
+  // actions differ only in the brief, the tool and the checking; everything
+  // around them — the code, the rate limit, the line-by-line stream — is one
+  // path, so a safeguard cannot be added to one and forgotten on the other.
+  let system: string;
+  let tool: unknown;
+  let prompt: string;
+  let allowed: Set<string>;
+
+  if (action === 'picks') {
+    const brief = pickBriefFor(doc, dayKey, {
+      // Only ids this build knows survive; anything else is not an answer.
+      answers: cleanAnswers(body?.answers),
+      nowMins: minutesOf(body?.nowMins),
+      weather: weatherOf(body?.weather),
+      exclude: idsOf(body?.exclude),
+    });
+    if (!brief) return refuse(404, 'That is not a day of this trip.');
+    if (!brief.allowed.size) {
+      return refuse(409, `Pin a few places in ${brief.cityName} first and this can choose from them.`);
+    }
+    system = PICKS_SYSTEM;
+    tool = SUGGEST_PICKS;
+    prompt = brief.prompt;
+    allowed = brief.allowed;
+  } else {
+    const brief = briefFor(doc, dayKey);
+    if (!brief) return refuse(404, 'That is not a day of this trip.');
+    if (!brief.allowed.size) {
+      return refuse(409, `Pin a few places in ${brief.cityName} first and this can draft from them.`);
+    }
+    system = SYSTEM;
+    tool = PROPOSE_DAY;
+    prompt = brief.prompt;
+    allowed = brief.allowed;
   }
 
   const client = new Anthropic({ apiKey });
@@ -139,24 +181,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const taken = new Set<string>();
       let dropped = 0;
       let kept: Suggestion[] = [];
+      let picks = 0;
 
       try {
         const claude = await client.messages.create({
           model: MODEL,
           max_tokens: 4096,
-          // A day of four stops from a short list is not hard reasoning, and
-          // the first card should land while the phone is still in your hand.
+          // Neither of these is hard reasoning, and the first card should land
+          // while the phone is still in your hand.
           output_config: { effort: 'low' },
-          system: SYSTEM,
-          tools: [PROPOSE_DAY],
+          system,
+          tools: [tool],
           // Forced tool choice is refused on this model, so the tool is named
           // in the system prompt instead and the schema is strict.
           tool_choice: { type: 'auto' },
-          messages: [{ role: 'user', content: brief.prompt }],
+          messages: [{ role: 'user', content: prompt }],
           stream: true,
         });
 
-        const scan = itemScanner();
+        const scan = itemScanner(action === 'picks' ? 'picks' : 'items');
         for await (const event of claude) {
           if (
             event.type === 'content_block_delta' &&
@@ -164,9 +207,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
           ) {
             // The input streams as it is written, so it is routinely invalid
             // JSON mid-flight and may be truncated for good if the model runs
-            // out of room. The scanner only ever hands back whole stops.
+            // out of room. The scanner only ever hands back whole entries.
             for (const raw of scan(event.delta.partial_json)) {
-              const stop = validateSuggestion(raw, brief.allowed, taken);
+              if (action === 'picks') {
+                if (picks >= 3) continue; // exactly three, whatever arrives
+                const pick = validatePick(raw, allowed, taken);
+                if (!pick) {
+                  dropped += 1;
+                  continue;
+                }
+                taken.add(pick.placeId);
+                picks += 1;
+                send({ type: 'pick', pick });
+                continue;
+              }
+              const stop = validateSuggestion(raw, allowed, taken);
               if (!stop) {
                 dropped += 1;
                 continue;
@@ -176,18 +231,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
               send({ type: 'stop', stop });
             }
           } else if (event.type === 'message_delta' && event.delta.stop_reason === 'refusal') {
-            send({ type: 'error', message: 'Claude would not draft that day.' });
+            send({ type: 'error', message: 'Claude would not answer that one.' });
             controller.close();
             return;
           }
         }
 
         kept = kept.sort(byClock);
-        send({ type: 'done', count: kept.length, dropped, date: brief.date });
+        send({ type: 'done', count: action === 'picks' ? picks : kept.length, dropped });
       } catch (err) {
         const message = err instanceof Anthropic.APIError && err.status === 429
           ? 'Claude is busy right now. Try that again in a minute.'
-          : 'Could not draft that day just now.';
+          : 'Could not work that out just now.';
         send({ type: 'error', message });
       } finally {
         try {
@@ -208,3 +263,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
     },
   });
 });
+
+/** A clock reading from the phone, or null. Anything else is not a time. */
+function minutesOf(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n < 1440 ? Math.round(n) : null;
+}
+
+/** Weather as three numbers, or nothing. No string from the phone gets in. */
+function weatherOf(value: unknown): WeatherHint | null {
+  if (!value || typeof value !== 'object') return null;
+  const w = value as Record<string, unknown>;
+  const tempF = Number(w.tempF);
+  const rainPct = Number(w.rainPct);
+  const code = Number(w.code);
+  if (!Number.isFinite(tempF) || !Number.isFinite(code)) return null;
+  return {
+    tempF: Math.min(150, Math.max(-80, tempF)),
+    rainPct: Number.isFinite(rainPct) ? Math.min(100, Math.max(0, rainPct)) : 0,
+    code: Math.min(99, Math.max(0, code)),
+  };
+}
+
+/** Place ids turned down already. They are only ever compared, never printed. */
+function idsOf(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === 'string' && v.length < 64).slice(0, 30);
+}
