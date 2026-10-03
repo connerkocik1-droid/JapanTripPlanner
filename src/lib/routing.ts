@@ -1,6 +1,6 @@
 'use client';
 
-import { LatLng, TravelMode } from './data';
+import type { LatLng, TravelMode } from './data.ts';
 
 /** One piece of a transit journey — a ride, or the walk either side of it. */
 export interface RoutePart {

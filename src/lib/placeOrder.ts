@@ -24,6 +24,8 @@
  */
 
 import type { Place } from './data.ts';
+import { priceTier } from './placeCard.ts';
+import { DISTANCE_MINS, type Answers } from '../../supabase/functions/draft-day/questions.ts';
 
 export interface PlaceOrderCtx {
   /** Seconds from where the day currently ends, per place id, where known. */
@@ -40,12 +42,35 @@ export interface PlaceOrderCtx {
   inDayKinds?: string[];
   /** Place ids that are in some other day of the trip. */
   elsewhere?: string[];
+  /**
+   * The mood the list is being read through — the same answers "Help me
+   * decide" asks for. This is the only thing here that takes places out of the
+   * list, and it is allowed to because the traveler asked for it in so many
+   * words and can take it off again in one tap.
+   */
+  lens?: Answers;
+  /** Minutes past midnight the day currently ends at, for what is open then. */
+  endMins?: number | null;
+  /**
+   * Whether a place is shut when the day would arrive. Handed in rather than
+   * worked out here, so opening hours stay the one function in `hours.ts`
+   * that reads them and this file stays arithmetic.
+   */
+  shutAt?: (place: Place, arriveMins: number) => boolean;
+  /** What each traveler does not eat, in their own words. */
+  diets?: Record<string, string>;
+}
+
+export interface Ordered {
+  list: Place[];
+  /** How many the mood took out, so the list can say so rather than just shrink. */
+  hidden: number;
 }
 
 /** Past this, more minutes stop telling you anything: it is simply a trek. */
 const FAR_MINS = 60;
 
-export function orderPlaces(places: Place[], ctx: PlaceOrderCtx): Place[] {
+export function orderPlaces(places: Place[], ctx: PlaceOrderCtx): Ordered {
   const inDay = new Set(ctx.inDay ?? []);
   const elsewhere = new Set(ctx.elsewhere ?? []);
 
@@ -53,10 +78,76 @@ export function orderPlaces(places: Place[], ctx: PlaceOrderCtx): Place[] {
   const have: Record<string, number> = {};
   for (const kind of ctx.inDayKinds ?? []) have[kind] = (have[kind] ?? 0) + 1;
 
-  return places
-    .map((place, was) => ({ place, was, score: scoreOf(place, ctx, inDay, elsewhere, have) }))
-    .sort((a, b) => b.score - a.score || a.was - b.was)
-    .map((x) => x.place);
+  const kept = places.filter((p) => fits(p, ctx));
+
+  return {
+    list: kept
+      .map((place, was) => ({ place, was, score: scoreOf(place, ctx, inDay, elsewhere, have) }))
+      .sort((a, b) => b.score - a.score || a.was - b.was)
+      .map((x) => x.place),
+    hidden: places.length - kept.length,
+  };
+}
+
+/** The shortest a word has to be before matching it means anything. */
+const DIET_WORD = 4;
+
+/**
+ * Whether the mood lets this place through.
+ *
+ * Three things rule a place out, and all three are things the traveler said
+ * out loud: how far they will go, that they want somewhere open when they
+ * would get there, and what they do not eat. Everything else about the lens
+ * only moves a place up or down. With no lens, nothing is ruled out.
+ */
+export function fits(place: Place, ctx: PlaceOrderCtx): boolean {
+  const lens = ctx.lens ?? {};
+
+  const mins = travelMins(place, ctx);
+  const reach = lens.distance ? DISTANCE_MINS[lens.distance] : undefined;
+  // An unrouted place is not ruled out for a distance nobody has measured.
+  if (reach !== undefined && mins !== null && mins > reach) return false;
+
+  // Only once there is a mood at all: without one this is the plain list, and
+  // the card already says what is shut.
+  if (Object.keys(lens).length && ctx.shutAt) {
+    const arrive = arriveAt(ctx, mins);
+    if (arrive !== null && ctx.shutAt(place, arrive)) return false;
+  }
+
+  if (Object.keys(lens).length && place.kind === 'eat' && avoids(place, ctx.diets)) return false;
+
+  return true;
+}
+
+function travelMins(place: Place, ctx: PlaceOrderCtx): number | null {
+  const secs = ctx.seconds[place.id];
+  return typeof secs === 'number' && secs >= 0 ? Math.round(secs / 60) : null;
+}
+
+/** When the day would get there: where it ends now, plus the journey. */
+function arriveAt(ctx: PlaceOrderCtx, mins: number | null): number | null {
+  if (ctx.endMins === null || ctx.endMins === undefined) return null;
+  return ctx.endMins + (mins ?? 0);
+}
+
+/**
+ * Whether anybody has said they do not eat this.
+ *
+ * It is a word match against what the place serves and what it is called,
+ * which is all there is to go on — a diet is written in the traveler's own
+ * words, not picked off a list. Short words are ignored, because "nut" inside
+ * "doughnut" would take out half of Tokyo.
+ */
+function avoids(place: Place, diets: Record<string, string> | undefined): boolean {
+  if (!diets) return false;
+  const says = `${place.cuisine} ${place.name}`.toLowerCase();
+  for (const text of Object.values(diets)) {
+    for (const raw of (text ?? '').toLowerCase().split(/[^a-z]+/)) {
+      if (raw.length >= DIET_WORD && says.includes(raw)) return true;
+    }
+  }
+  return false;
 }
 
 function scoreOf(
@@ -89,6 +180,16 @@ function scoreOf(
   // no sense in it being near the top of a day it cannot be part of.
   if (ctx.weekday !== undefined && (place.shutDays ?? []).includes(ctx.weekday)) score -= 6;
 
+  // What they are after. Not a filter — the chips above the list already do
+  // that, and somewhere to eat is still worth seeing on a night out.
+  const after = ctx.lens?.after;
+  if (after === 'eat' || after === 'drink') score += place.kind === 'eat' ? 1.5 : -0.5;
+  else if (after === 'do' || after === 'wander') score += place.kind === 'do' ? 1.5 : -0.5;
+
+  // What it costs against what they said they felt like spending. Only the
+  // places carrying a price band have anything to say here.
+  score += budgetFit(ctx.lens?.budget, priceTier(place.band));
+
   // A maybe is a weaker idea than a yes, by the traveler's own say-so.
   if (place.vote === 'maybe') score -= 1;
 
@@ -97,4 +198,14 @@ function scoreOf(
   score += Math.max(0, Math.min(5, place.rating || 0)) / 5;
 
   return score;
+}
+
+/** How well a price band answers what they felt like spending. */
+function budgetFit(budget: string | undefined, tier: string): number {
+  if (!budget || !tier) return 0;
+  const dollars = tier.length;
+  if (budget === 'cheap') return dollars <= 1 ? 1.5 : dollars === 2 ? 0.5 : -1.5;
+  if (budget === 'splurge') return dollars >= 3 ? 1.5 : dollars === 2 ? 0.5 : -0.5;
+  // Normal: the middle two, and nothing much against either end.
+  return dollars === 2 || dollars === 3 ? 1 : 0;
 }

@@ -18,6 +18,8 @@ import { geocode, hitToLatLng } from '@/lib/geocode';
 import { PEOPLE, PERSON_LIST, isPersonId } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
 import { useRates } from '@/lib/money';
+import { readLens, writeLens } from '@/lib/moodLens';
+import type { Answers } from '../../supabase/functions/draft-day/questions';
 import { useWeather } from '@/lib/weather';
 import type { MapFocus, MapPin } from './TripMap';
 import { useDayRoute, type Stop } from '@/lib/useDayRoute';
@@ -379,6 +381,29 @@ export default function TripPlanner() {
   const { weather: dayWeather } = useWeather(dayCity?.ll ?? null);
   const dayIsToday = todayN !== null && dayEntry?.n === todayN;
 
+  /**
+   * The mood the open day's place list is read through. It lives on the
+   * device, per day, and is read back when the day changes rather than being
+   * carried from one day to the next — Tuesday night in Seoul has nothing to
+   * say about Friday lunchtime in Kyoto.
+   */
+  const [lens, setLens] = useState<Answers>({});
+  const lensKey = useRef<string>('');
+  useEffect(() => {
+    const key = dayEntry?.key ?? '';
+    if (key === lensKey.current) return;
+    lensKey.current = key;
+    setLens(key ? readLens(key) : {});
+  }, [dayEntry?.key]);
+
+  const changeLens = useCallback(
+    (next: Answers) => {
+      setLens(next);
+      if (lensKey.current) writeLens(lensKey.current, next);
+    },
+    [],
+  );
+
   const assist =
     dayEntry && dayCity ? (
       <DayAssist
@@ -400,6 +425,7 @@ export default function TripPlanner() {
         onAddPlace={(cid, place) => store.addPlaces(cid, [place])}
         me={store.user}
         asks={doc.asks}
+        onLens={changeLens}
         onStartAsk={store.startAsk}
         onAnswerAsk={store.answerAsk}
         onEndAsk={store.endAsk}
@@ -1404,6 +1430,9 @@ export default function TripPlanner() {
               city={dayCity}
               anchor={buildAnchor}
               rates={rates}
+              diets={doc.diets}
+              lens={lens}
+              onLens={changeLens}
               onSelectDay={(n) => {
                 setDay(n);
                 const c = d.schedule[n - 1]?.city;
