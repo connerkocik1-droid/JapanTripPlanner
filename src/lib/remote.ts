@@ -140,6 +140,38 @@ export async function pushTrip(
 }
 
 /**
+ * Write down a round of "Help me decide": what was asked and what came back.
+ *
+ * Returns the row's id, which is what marks one of the three as taken a minute
+ * later. Null when it did not land — this is a note to ourselves about what
+ * these two travelers really choose, so a round that goes unrecorded is worth
+ * nothing to argue about and never worth a word on screen.
+ */
+export async function logSuggestion(
+  code: string,
+  dayKey: string,
+  by: string,
+  answers: Record<string, string>,
+  offered: unknown[],
+): Promise<string | null> {
+  const answer = await call('suggestion_log', {
+    p_code: code, p_day_key: dayKey, p_by: by, p_answers: answers, p_offered: offered,
+  });
+  // A function returning one value answers with the value itself, not a row.
+  return answer.ok && typeof answer.rows === 'string' ? answer.rows : null;
+}
+
+/** Mark which of the three was added to a day. The code has to match the row's. */
+export async function markSuggestionTaken(
+  code: string,
+  id: string,
+  placeId: string,
+  title: string,
+): Promise<void> {
+  await call('suggestion_taken', { p_code: code, p_id: id, p_place: placeId, p_title: title });
+}
+
+/**
  * Exchange a short code for the trip's real key — how a device that has never
  * seen a trip gets onto it without a link. Null when no trip has that code, or
  * when too many wrong guesses have come from here lately.

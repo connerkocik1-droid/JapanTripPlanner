@@ -17,6 +17,7 @@ import { CLOCK_RE, postLines } from './aiStream.ts';
 import { blankPlace, DEFAULT_DWELL, uid, type City, type DayItem, type Place } from './data.ts';
 import { geocode, hitToLatLng } from './geocode.ts';
 import { detailsPatch, type PlaceFacts } from './placeDetails.ts';
+import { logSuggestion, markSuggestionTaken } from './remote.ts';
 import type { Answers } from '../../supabase/functions/draft-day/questions.ts';
 
 export { aiConfigured as decideConfigured } from './aiStream.ts';
@@ -82,6 +83,21 @@ export async function askPicks(
   const seen = new Set<string>();
   let count = 0;
   let failed = false;
+  let finished = false;
+
+  /**
+   * The end of the round, once.
+   *
+   * A stream that says it is done ends the read, and then the read itself
+   * finishes — two ways of arriving at the same place. Only one of them is
+   * the end of the round, and anything that writes something down on the way
+   * out must not do it twice.
+   */
+  const done = () => {
+    if (finished) return;
+    finished = true;
+    handlers.onDone(count);
+  };
 
   const result = await postLines(
     {
@@ -100,7 +116,7 @@ export async function askPicks(
         return false;
       }
       if (raw.type === 'done') {
-        handlers.onDone(count);
+        done();
         return false;
       }
       if (raw.type !== 'pick') return true;
@@ -123,11 +139,11 @@ export async function askPicks(
   if (failed) return;
   if (!result.ok) {
     // Whatever arrived before it broke is still worth keeping.
-    if (count) handlers.onDone(count);
+    if (count) done();
     else handlers.onError(result.message);
     return;
   }
-  handlers.onDone(count);
+  done();
 }
 
 /** One pick off the wire, or null when it is missing something a card needs. */
@@ -265,6 +281,48 @@ function isKorea(city: City, place: Place): boolean {
   if (currency) return currency === 'KRW';
   const ll = place.ll ?? city.ll;
   return Boolean(ll && ll[0] > 33 && ll[0] < 39 && ll[1] > 124 && ll[1] < 132);
+}
+
+/**
+ * Write down what was asked and what came back.
+ *
+ * This is the only thing "Help me decide" keeps. The point of it is the one
+ * thing the questions cannot tell the app: what these two actually choose.
+ * Somebody who says "keep it cheap" every time and then taps the expensive one
+ * every time has said something, and without this it is said into the air.
+ *
+ * The model's own sentences are left out — only the id or the phrase it named,
+ * the title, and its numbers. Nothing written here is ever read back into a
+ * prompt, which would be feeding the model its own output.
+ */
+export async function logRound(
+  code: string,
+  dayKey: string,
+  by: string,
+  answers: Answers,
+  picks: Pick[],
+): Promise<string | null> {
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries(answers)) if (v) clean[k] = v;
+  return logSuggestion(
+    code,
+    dayKey,
+    by,
+    clean,
+    picks.map((p) => ({
+      placeId: p.placeId,
+      query: p.query,
+      title: p.title,
+      costPerPerson: p.costPerPerson,
+      travelMin: p.travelMin,
+      startTime: p.startTime,
+    })),
+  );
+}
+
+/** Which of the three went into the day. */
+export function markTaken(code: string, roundId: string, pick: Pick, name: string): void {
+  void markSuggestionTaken(code, roundId, pick.placeId || pick.query, name || pick.title);
 }
 
 /**
