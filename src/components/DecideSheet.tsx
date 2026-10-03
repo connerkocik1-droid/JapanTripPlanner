@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { City, DayItem, placeKind } from '@/lib/data';
+import { City, DayItem, Place, placeKind } from '@/lib/data';
 import { fmtUsd } from '@/lib/format';
 import { fmtSpan, parseClock } from '@/lib/dayPlan';
 import { clashFor } from '@/lib/hours';
 import { PERSON_LIST } from '@/lib/people';
-import { Pick, WeatherHint, askPicks, endsAt, itemFromPick } from '@/lib/decide';
+import {
+  Found, Pick, WeatherHint, askPicks, endsAt, goNowUrl, itemFromPick, lookUpPick,
+} from '@/lib/decide';
 import {
   QUESTIONS, type Answers, type QuestionId,
   flowFor, nextUnanswered, question,
@@ -32,6 +34,11 @@ export interface DecideSheetProps {
   diets: Record<string, string>;
   onSetDiet: (who: string, text: string) => void;
   onAdd: (item: DayItem) => void;
+  /**
+   * Save a place the trip did not have. Called before `onAdd` and only when
+   * somebody accepts the card, so a suggestion nobody took leaves no trace.
+   */
+  onAddPlace: (place: Place) => void;
 }
 
 type Phase = 'diet' | 'ask' | 'thinking' | 'results';
@@ -160,9 +167,16 @@ export default function DecideSheet(props: DecideSheetProps) {
     setAnswers((cur) => ({ ...cur, [prev]: undefined }));
   };
 
-  const add = (pick: Pick) => {
-    const item = itemFromPick(pick, city.places);
+  /**
+   * Accepting a card. A pick at a saved place just becomes a stop; a pick at
+   * somewhere new saves the place into the city first, so the stop has a pin
+   * under it and the place is there to plan with afterwards.
+   */
+  const add = (pick: Pick, found: Place | null) => {
+    const known = found ? [...city.places, found] : city.places;
+    const item = itemFromPick({ ...pick, placeId: pick.placeId || found?.id || '' }, known);
     if (!item) return;
+    if (found) props.onAddPlace(found);
     props.onAdd(item);
     setAdded((cur) => new Set(cur).add(pick.id));
   };
@@ -234,8 +248,9 @@ export default function DecideSheet(props: DecideSheetProps) {
                 pick={p}
                 city={city}
                 weekday={weekday}
+                onTrip={nowMins !== null}
                 added={added.has(p.id)}
-                onAdd={() => add(p)}
+                onAdd={(found) => add(p, found)}
               />
             ))}
             {problem ? (
@@ -293,21 +308,75 @@ function DietStep({
   );
 }
 
+/**
+ * One of the three answers.
+ *
+ * A pick at a saved place is drawn straight from it. A pick at somewhere the
+ * trip has not got is looked up first — the map, then the details — and until
+ * that comes back the card says so rather than showing a name with nothing
+ * under it. If the lookup finds nothing, the card stays and says it could not
+ * be placed, because a suggestion that quietly vanished is worse than one you
+ * can see and ignore.
+ */
 function PickCard({
   pick,
   city,
   weekday,
+  onTrip,
   added,
   onAdd,
 }: {
   pick: Pick;
   city: City;
   weekday: number;
+  /** True on the day being lived, which is the only time Go now is any use. */
+  onTrip: boolean;
   added: boolean;
-  onAdd: () => void;
+  onAdd: (found: Place | null) => void;
 }) {
-  const place = city.places.find((p) => p.id === pick.placeId);
-  if (!place) return null;
+  const saved = city.places.find((p) => p.id === pick.placeId) ?? null;
+  const [found, setFound] = useState<Found | null>(null);
+
+  useEffect(() => {
+    if (saved || !pick.query) return;
+    const ctrl = new AbortController();
+    void lookUpPick(pick, city, ctrl.signal).then((f) => {
+      if (!ctrl.signal.aborted) setFound(f);
+    });
+    return () => ctrl.abort();
+    // The pick never changes identity once it is on screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pick.id]);
+
+  if (!saved && !pick.query) return null;
+
+  if (!saved && !found) {
+    return (
+      <div style={card}>
+        <div style={{ fontSize: 14, fontWeight: 500 }}>{pick.title}</div>
+        <div className="mono" style={{ ...facts, marginTop: 7 }}>Looking it up…</div>
+      </div>
+    );
+  }
+
+  const place = saved ?? found?.place ?? null;
+  if (!place) {
+    return (
+      <div style={card}>
+        <div style={{ fontSize: 14, fontWeight: 500 }}>{pick.title}</div>
+        {pick.reason ? (
+          <div style={{ fontSize: 12, color: 'var(--color-neutral-400)', marginTop: 5, lineHeight: 1.45 }}>
+            {pick.reason}
+          </div>
+        ) : null}
+        <div className="mono" style={{ ...facts, color: 'var(--color-warn)' }}>
+          {found?.problem || 'Could not find this one on the map.'}
+        </div>
+      </div>
+    );
+  }
+
+  const isNew = !saved;
   const kind = placeKind(place.kind);
   const arrive = parseClock(pick.startTime);
   const clash = clashFor(place, weekday, arrive, arrive === null ? null : arrive + 60);
@@ -338,6 +407,7 @@ function PickCard({
         {pick.travelMin ? <span>· {fmtSpan(pick.travelMin)} away</span> : null}
         {pick.costPerPerson ? <span>· {fmtUsd(pick.costPerPerson)} each</span> : null}
         {place.rating ? <span>· {place.rating.toFixed(1)}★</span> : null}
+        {isNew ? <span style={{ color: 'var(--color-accent-300)' }}>· NOT ON YOUR LIST</span> : null}
       </div>
 
       {clash ? (
@@ -346,22 +416,38 @@ function PickCard({
         </div>
       ) : null}
 
-      <button
-        className="tap"
-        onClick={onAdd}
-        disabled={added}
-        style={{
-          ...chip,
-          width: '100%',
-          marginTop: 10,
-          minHeight: 40,
-          background: added ? 'transparent' : 'var(--tint-accent)',
-          opacity: added ? 0.55 : 1,
-        }}
-      >
-        <i className={`ph ${added ? 'ph-check' : 'ph-plus'}`} style={{ fontSize: 13, marginRight: 6 }} />
-        {added ? 'In the day' : 'Add to day'}
-      </button>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button
+          className="tap"
+          onClick={() => onAdd(isNew ? place : null)}
+          disabled={added}
+          style={{
+            ...chip,
+            flex: 1,
+            minHeight: 40,
+            background: added ? 'transparent' : 'var(--tint-accent)',
+            opacity: added ? 0.55 : 1,
+          }}
+        >
+          <i className={`ph ${added ? 'ph-check' : 'ph-plus'}`} style={{ fontSize: 13, marginRight: 6 }} />
+          {added ? 'In the day' : 'Add to day'}
+        </button>
+        {onTrip ? (
+          // Only on the day you are living: a route from where you are is not
+          // something to tap a week in advance, and the link opens the map app
+          // that can actually route there.
+          <a
+            className="tap"
+            href={goNowUrl(city, place)}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...chip, flex: 'none', padding: '0 14px', minHeight: 40, textDecoration: 'none' }}
+          >
+            <i className="ph ph-navigation-arrow" style={{ fontSize: 13, marginRight: 6 }} />
+            Go now
+          </a>
+        ) : null}
+      </div>
     </div>
   );
 }

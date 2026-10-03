@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { City, DayItem } from '@/lib/data';
+import { City, DayItem, Place } from '@/lib/data';
 import { decideConfigured } from '@/lib/decide';
 import type { WeatherHint } from '@/lib/decide';
 import DecideSheet from './DecideSheet';
@@ -24,6 +24,8 @@ export interface DayAssistProps {
   diets: Record<string, string>;
   onSetDiet: (who: string, text: string) => void;
   onAdd: (items: DayItem[]) => void;
+  /** Save a place the trip did not have, when a suggestion names a new one. */
+  onAddPlace: (cityId: string, place: Place) => void;
 }
 
 /**
@@ -78,6 +80,7 @@ export default function DayAssist(props: DayAssistProps) {
         diets={props.diets}
         onSetDiet={props.onSetDiet}
         onAdd={(item) => props.onAdd([item])}
+        onAddPlace={(place) => props.onAddPlace(city.id, place)}
       />
     </>
   );

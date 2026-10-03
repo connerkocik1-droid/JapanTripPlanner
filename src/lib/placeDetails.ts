@@ -11,7 +11,7 @@
  * a photograph or a cuisine for a place that has none: a blank stays blank.
  */
 
-import type { Meal, Place } from './data';
+import type { Meal, Place } from './data.ts';
 
 /** Minutes past midnight each meal is usually eaten between. */
 const WINDOWS: Record<Meal, [number, number]> = {

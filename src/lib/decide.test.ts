@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { blankCity, blankPlace, type City, type Place } from './data.ts';
-import { endsAt, itemFromPick, readPick, type Pick } from './decide.ts';
+import { endsAt, goNowUrl, itemFromPick, readPick, type Pick } from './decide.ts';
 import {
   QUESTIONS, cleanAnswers, flowFor, nextUnanswered, summaryChips, answerLines,
 } from '../../supabase/functions/draft-day/questions.ts';
@@ -22,7 +22,7 @@ function place(over: Partial<Place> = {}): Place {
 
 function pick(over: Partial<Pick> = {}): Pick {
   return {
-    id: 'c', placeId: 'p1', title: 'Market', reason: 'Cheap and close.',
+    id: 'c', placeId: 'p1', query: '', title: 'Market', reason: 'Cheap and close.',
     costPerPerson: 12, travelMin: 8, startTime: '19:00', ...over,
   };
 }
@@ -118,6 +118,53 @@ describe('checking a pick on the server', () => {
       ),
       null,
     );
+  });
+
+  it('keeps a pick that names somewhere new, as a phrase to search for', () => {
+    const got = validatePick(
+      {
+        place_id: null,
+        new_place_query: 'Nishiki Market, Kyoto',
+        title: 'Nishiki Market',
+        reason: 'Cheap and close.',
+        start_time: '19:00',
+        est_cost_per_person: 10,
+        travel_min: 5,
+      },
+      allowed,
+      new Set(),
+    );
+    assert.equal(got?.placeId, '');
+    assert.equal(got?.query, 'Nishiki Market, Kyoto');
+  });
+
+  it('will not turn an id it does not recognise into a search', () => {
+    // An id was offered, so a phrase beside it belonged to a different pick;
+    // searching for it would quietly put somewhere unasked-for on the card.
+    assert.equal(
+      validatePick(
+        {
+          place_id: 'nope',
+          new_place_query: 'Somewhere else entirely',
+          title: 'X',
+          start_time: '19:00',
+        },
+        allowed,
+        new Set(),
+      ),
+      null,
+    );
+  });
+
+  it('offers the same new place only once', () => {
+    const taken = new Set<string>();
+    const raw = {
+      place_id: null, new_place_query: 'Nishiki Market, Kyoto',
+      title: 'Nishiki', start_time: '19:00',
+    };
+    const first = validatePick(raw, allowed, taken);
+    taken.add(first!.query.toLowerCase());
+    assert.equal(validatePick(raw, allowed, taken), null);
   });
 
   it('drops a pick with no title to put on the card', () => {
@@ -273,5 +320,31 @@ describe('where the day currently ends', () => {
 
   it('falls back to the hotel when the day is empty', () => {
     assert.equal(endsAt(city, []), 'The Place');
+  });
+});
+
+describe('going there now', () => {
+  const seoul: City = {
+    ...blankCity('Seoul'), id: 'seoul', name: 'Seoul', currency: 'KRW', ll: [37.5665, 126.978],
+  };
+  const tokyo: City = {
+    ...blankCity('Tokyo'), id: 'tokyo', name: 'Tokyo', currency: 'JPY', ll: [35.68, 139.76],
+  };
+
+  it('sends you to Naver in Korea, because Google cannot route there', () => {
+    const url = goNowUrl(seoul, place({ name: 'Gwangjang Market', ll: [37.57, 126.99] }));
+    assert.ok(url.startsWith('https://map.naver.com/'));
+    assert.ok(url.includes(encodeURIComponent('Gwangjang Market')));
+  });
+
+  it('sends you to Google Maps in Japan, by coordinates', () => {
+    const url = goNowUrl(tokyo, place({ name: 'Senso-ji', ll: [35.7148, 139.7967] }));
+    assert.ok(url.startsWith('https://www.google.com/maps/'));
+    assert.ok(url.includes(encodeURIComponent('35.7148,139.7967')));
+  });
+
+  it('falls back on where the city is when nobody has set a currency', () => {
+    const unnamed = { ...seoul, currency: '' };
+    assert.ok(goNowUrl(unnamed, place({ ll: [37.57, 126.99] })).startsWith('https://map.naver.com/'));
   });
 });
