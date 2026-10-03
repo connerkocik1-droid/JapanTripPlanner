@@ -216,7 +216,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
                   dropped += 1;
                   continue;
                 }
-                taken.add(pick.placeId);
+                taken.add(pick.placeId || pick.query.toLowerCase());
                 picks += 1;
                 send({ type: 'pick', pick });
                 continue;

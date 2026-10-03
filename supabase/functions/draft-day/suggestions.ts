@@ -159,7 +159,10 @@ export function byClock(a: Suggestion, b: Suggestion): number {
 
 /** One of the three "Help me decide" picks, once it has survived checking. */
 export interface Pick {
+  /** A saved place of the trip's, or '' when this is somewhere new. */
   placeId: string;
+  /** What to look the place up by, when `placeId` is ''. Otherwise ''. */
+  query: string;
   title: string;
   reason: string;
   /** US dollars per person; 0 when nothing is charged. */
@@ -174,14 +177,19 @@ const MAX_TRAVEL = 240;
 /** A card is not the place to quote five figures a head. */
 const MAX_COST = 2000;
 
+/** A search phrase is a name and a city, not an essay. */
+const MAX_QUERY = 120;
+
 /**
- * Check one pick against the trip's own places.
+ * Check one pick, either against the trip's own places or as somewhere new.
  *
- * The rule is the same as for a drafted stop and matters more here, because a
- * pick carries a price and a travel time a traveler will act on: a pick whose
- * place the trip has not got is dropped rather than shown. Picks naming a
- * place to go and look up are not handled yet, so for now a pick without a
- * saved place is simply not offered.
+ * A pick naming a saved place is held to the same rule as a drafted stop, and
+ * it matters more here, because a pick carries a price and a travel time a
+ * traveler will act on: an id the trip has not got is dropped rather than
+ * shown. A pick naming nowhere saved is allowed through only as a phrase to
+ * search for — never as a place with coordinates, a rating or an address,
+ * because the model does not know those and a card that states them would be
+ * stating guesses. The phone looks the phrase up before anything is shown.
  */
 export function validatePick(
   raw: unknown,
@@ -191,8 +199,18 @@ export function validatePick(
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
 
-  const placeId = typeof o.place_id === 'string' ? o.place_id : '';
-  if (!placeId || !allowed.has(placeId) || taken.has(placeId)) return null;
+  const asked = typeof o.place_id === 'string' ? o.place_id : '';
+  const placeId = allowed.has(asked) ? asked : '';
+
+  // An id the trip does not have is not corrected into a search: an id was
+  // offered, so a search phrase beside it was meant for a different pick.
+  const query = placeId || asked
+    ? ''
+    : typeof o.new_place_query === 'string'
+      ? o.new_place_query.replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY)
+      : '';
+  if (!placeId && !query) return null;
+  if (taken.has(placeId || query.toLowerCase())) return null;
 
   const startTime = clockOf(o.start_time);
   if (!startTime) return null;
@@ -206,6 +224,7 @@ export function validatePick(
 
   return {
     placeId,
+    query,
     title,
     reason,
     costPerPerson: whole(o.est_cost_per_person, 0, MAX_COST),

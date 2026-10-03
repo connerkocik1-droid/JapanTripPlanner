@@ -1,6 +1,6 @@
 'use client';
 
-import { LatLng } from './data';
+import type { LatLng } from './data.ts';
 
 /** How exact a match is: the address as given, its block, its road, or its district. */
 export type GeocodePrecision = 'exact' | 'road' | 'block' | 'area';

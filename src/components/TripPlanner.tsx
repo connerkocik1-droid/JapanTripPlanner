@@ -397,6 +397,7 @@ export default function TripPlanner() {
         diets={doc.diets}
         onSetDiet={(who, text) => isPersonId(who) && store.setDiet(who, text)}
         onAdd={(items) => store.addDayItems(dayEntry.key, items)}
+        onAddPlace={(cid, place) => store.addPlaces(cid, [place])}
       />
     ) : null;
 

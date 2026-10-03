@@ -87,13 +87,20 @@ function plannedTitles(doc: Doc): string[] {
 }
 
 export const PICKS_SYSTEM = [
-  'You suggest exactly three things to do next, from places the travellers have already saved.',
-  'Call the suggest_picks tool exactly once with three picks and nothing else: no prose',
-  'before or after it.',
+  'You suggest exactly three things to do next, preferring places the travellers have',
+  'already saved. Call the suggest_picks tool exactly once with three picks and nothing',
+  'else: no prose before or after it.',
   '',
   'Rules you are held to:',
   '- Every place_id must be copied exactly from the list of saved places you are given.',
-  '  Never invent a place, a name or an id.',
+  '  Never invent an id.',
+  '- Saved places come first. Only when nothing saved answers what they asked for may a',
+  '  pick leave place_id null and give new_place_query instead: the name of a real place',
+  '  and its city, as somebody would type it into a map. At most one of the three.',
+  '  Never both an id and a query on the same pick.',
+  '- A pick with new_place_query is a suggestion to go and look something up, so say',
+  '  nothing in it you are not sure of. The phone looks the place up itself and shows',
+  '  what it finds; what you write is only the name, the reason and your estimates.',
   '- Answer the mood they gave you. The three picks should differ from each other;',
   '  three versions of the same idea is a wasted screen.',
   '- Respect the distance they said they would travel, the time they have, the opening',
@@ -171,7 +178,7 @@ export function pickBriefFor(doc: Doc, key: string, inputs: PickInputs): PickBri
 /** The strict schema the model must answer in. */
 export const SUGGEST_PICKS = {
   name: 'suggest_picks',
-  description: 'Offer exactly three things to do next, each at one of the trip’s saved places.',
+  description: 'Offer exactly three things to do next, preferring the trip’s saved places.',
   strict: true,
   eager_input_streaming: true,
   input_schema: {
