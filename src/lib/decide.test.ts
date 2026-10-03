@@ -11,7 +11,7 @@ import { describe, it } from 'node:test';
 import { blankCity, blankPlace, type City, type Place } from './data.ts';
 import { endsAt, goNowUrl, itemFromPick, readPick, type Pick } from './decide.ts';
 import {
-  QUESTIONS, cleanAnswers, flowFor, nextUnanswered, summaryChips, answerLines,
+  QUESTIONS, cleanAnswers, flowFor, nextUnanswered, reroll, summaryChips, answerLines,
 } from '../../supabase/functions/draft-day/questions.ts';
 import { validatePick } from '../../supabase/functions/draft-day/suggestions.ts';
 import { pickBriefFor } from '../../supabase/functions/draft-day/picks.ts';
@@ -346,5 +346,45 @@ describe('going there now', () => {
   it('falls back on where the city is when nobody has set a currency', () => {
     const unnamed = { ...seoul, currency: '' };
     assert.ok(goNowUrl(unnamed, place({ ll: [37.57, 126.99] })).startsWith('https://map.naver.com/'));
+  });
+});
+
+describe('turning all three down', () => {
+  it('tightens the distance by one step, and goes no further than walking', () => {
+    assert.equal(reroll({ distance: 'far' }, 'far').distance, 'short');
+    assert.equal(reroll({ distance: 'short' }, 'far').distance, 'walk');
+    assert.equal(reroll({ distance: 'walk' }, 'far').distance, 'walk');
+  });
+
+  it('drops the budget by one step, and goes no further than cheap', () => {
+    assert.equal(reroll({ budget: 'splurge' }, 'pricey').budget, 'normal');
+    assert.equal(reroll({ budget: 'normal' }, 'pricey').budget, 'cheap');
+    assert.equal(reroll({ budget: 'cheap' }, 'pricey').budget, 'cheap');
+  });
+
+  it('tightens from the most generous end when the question was never asked', () => {
+    // Surprise me answers nothing, so there is no step to take one down from.
+    assert.equal(reroll({}, 'far').distance, 'short');
+    assert.equal(reroll({}, 'pricey').budget, 'normal');
+  });
+
+  it('asks the vibe again, because that is the one it cannot guess', () => {
+    const next = reroll({ after: 'eat', hunger: 'meal', vibe: 'chill', distance: 'far' }, 'vibe');
+    assert.equal(next.vibe, undefined);
+    assert.equal(nextUnanswered(next, { budgetToday: 'cheap', timeCapMin: 60 }), 'vibe');
+    // Nothing else moves.
+    assert.equal(next.distance, 'far');
+    assert.equal(next.hunger, 'meal');
+  });
+
+  it('changes nothing for "just different", which relies on the exclusions', () => {
+    const was = { after: 'eat', vibe: 'chill', distance: 'far', budget: 'normal' };
+    assert.deepEqual(reroll(was, 'different'), was);
+  });
+
+  it('leaves the answers it was given alone', () => {
+    const was = { distance: 'far' };
+    reroll(was, 'far');
+    assert.equal(was.distance, 'far');
   });
 });
