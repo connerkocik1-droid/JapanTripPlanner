@@ -8,16 +8,17 @@ import { groupByHood, hoodLine } from '@/lib/hoods';
 import { tripDayOn } from '@/lib/today';
 import type { Preset } from '@/lib/presets';
 import { derive, selectedHotel } from '@/lib/derive';
-import { dateOf, fmtD, fmtUsd } from '@/lib/format';
+import { dateOf, fmtD, fmtUsd, isoOf } from '@/lib/format';
 import { useAirportRoutes } from '@/lib/airportRoute';
 import { useAutoPacks } from '@/lib/autoPacks';
 import { hotelName, splitTier } from '@/lib/hotelTier';
 import { usePlaceDetails } from '@/lib/usePlaceDetails';
 import { PLACE_TAGS, type PlaceTag, matchesTags, ratingLine } from '@/lib/placeDetails';
 import { geocode, hitToLatLng } from '@/lib/geocode';
-import { PEOPLE, PERSON_LIST } from '@/lib/people';
+import { PEOPLE, PERSON_LIST, isPersonId } from '@/lib/people';
 import { useTripStore } from '@/lib/tripState';
 import { useRates } from '@/lib/money';
+import { useWeather } from '@/lib/weather';
 import type { MapFocus, MapPin } from './TripMap';
 import { useDayRoute, type Stop } from '@/lib/useDayRoute';
 import {
@@ -29,6 +30,7 @@ import DaysTab from './DaysTab';
 import PlanTab from './PlanTab';
 import IdeasSheet from './IdeasSheet';
 import TodayTab from './TodayTab';
+import DayAssist from './DayAssist';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
 import TripPicker from './TripPicker';
@@ -364,6 +366,39 @@ export default function TripPlanner() {
   const { arrivals, routes: airportRoutes } = useAirportRoutes(arrivalCities, doc.trip.travelers);
 
   const dayCity = dayEntry?.city ?? null;
+
+  /**
+   * What Claude is offered for the day on screen, built once and shown in the
+   * two places a day is worked on: under the open day in Plan, and under
+   * today's stops on Today.
+   *
+   * The clock and the weather are only passed on the day being lived. A
+   * forecast for next Tuesday is not something this app has, and a suggestion
+   * timed from "now" makes no sense for a day you are planning in advance.
+   */
+  const { weather: dayWeather } = useWeather(dayCity?.ll ?? null);
+  const dayIsToday = todayN !== null && dayEntry?.n === todayN;
+
+  const assist =
+    dayEntry && dayCity ? (
+      <DayAssist
+        code={store.code}
+        dayKey={dayEntry.key}
+        city={dayCity}
+        items={dayEntry.items}
+        weekday={dateOf(doc.trip.start, dayEntry.n - 1).getDay()}
+        date={isoOf(dateOf(doc.trip.start, dayEntry.n - 1))}
+        nowMins={dayIsToday ? new Date().getHours() * 60 + new Date().getMinutes() : null}
+        weather={
+          dayIsToday && dayWeather
+            ? { tempF: dayWeather.tempF, rainPct: dayWeather.rainPct, code: dayWeather.code }
+            : null
+        }
+        diets={doc.diets}
+        onSetDiet={(who, text) => isPersonId(who) && store.setDiet(who, text)}
+        onAdd={(items) => store.addDayItems(dayEntry.key, items)}
+      />
+    ) : null;
 
   const plan = useMemo(
     () =>
@@ -1190,6 +1225,7 @@ export default function TripPlanner() {
               checklist={doc.checklist}
               onToggleCheck={store.toggleCheck}
               onOpenIdeas={() => setIdeas(true)}
+              assist={assist}
               onEditDay={() => setTab('plan')}
               onStartToday={() => {
                 const t = new Date();
@@ -1378,6 +1414,7 @@ export default function TripPlanner() {
               onApplyPreset={applyPreset}
               onSetFare={(f) => dayCity && store.setCity(dayCity.id, 'metroFare', f)}
               onStartPlan={() => dayCity && startPlan(dayCity.id)}
+              assist={assist}
             />
               }
             />

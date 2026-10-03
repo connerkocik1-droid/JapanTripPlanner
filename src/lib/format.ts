@@ -56,3 +56,16 @@ export function walkLabel(from: LatLng | null | undefined, to: LatLng | null | u
   const dist = street < 1 ? Math.round(street * 1000) + ' m' : street.toFixed(1) + ' km';
   return mins <= 35 ? dist + ' · ' + mins + ' min walk' : dist + ' · transit';
 }
+
+/**
+ * A local date as YYYY-MM-DD.
+ *
+ * `toISOString` would answer in UTC, which is the wrong day for most of the
+ * evening in Seoul and Tokyo — and a day key that is off by one points at the
+ * wrong day of the trip.
+ */
+export function isoOf(dt: Date): string {
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${dt.getFullYear()}-${m}-${d}`;
+}

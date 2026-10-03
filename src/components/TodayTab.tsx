@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckItem, City, DayItem, Hotel, LatLng } from '@/lib/data';
 import { hotelName } from '@/lib/hotelTier';
 import {
@@ -49,6 +49,11 @@ export interface TodayTabProps {
     currency: string; rate: number; note: string;
   }) => void;
   onRemoveExpense: (id: string) => void;
+  /**
+   * What Claude can do for today, shown under the day's stops. Passed in
+   * rather than built here, so this tab stays about following the day.
+   */
+  assist?: ReactNode;
   /** Open this day in the planner, for changing it rather than following it. */
   onEditDay: () => void;
   /** You have arrived: day one becomes today, and every day moves with it. */
@@ -70,7 +75,7 @@ const TICK_MS = 30_000;
 export default function TodayTab({
   schedule, start, todayN, dayEntry, plan, hotel, city, rates, ratesStale, onRefreshRates, currencies,
   travelers, expenses, checklist, onToggleCheck, onOpenIdeas,
-  onZoomStop, onToggleItem, onAddExpense, onRemoveExpense, onEditDay, onStartToday,
+  onZoomStop, onToggleItem, onAddExpense, onRemoveExpense, assist, onEditDay, onStartToday,
 }: TodayTabProps) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -338,6 +343,8 @@ export default function TodayTab({
           </span>
         </div>
       ) : null}
+
+      {assist}
 
       <button className="tap" onClick={onEditDay} style={editBtn}>
         <i className="ph ph-pencil-simple" style={{ fontSize: 12 }} /> Change this day
