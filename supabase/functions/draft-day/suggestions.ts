@@ -31,15 +31,15 @@ const MAX_DWELL = 480;
 const MAX_REASON = 160;
 
 /**
- * Read complete `{...}` entries out of the `items` array of a tool input that
- * is still arriving.
+ * Read complete `{...}` entries out of the named array of a tool input that is
+ * still arriving — `items` for a drafted day, `picks` for a suggestion.
  *
  * The scanner is deliberately tolerant: a half-written object is not an error,
  * it is just not ready, so it stays in the buffer and is looked at again when
  * the next delta lands. It never parses the outer object, because the outer
  * object has no closing brace yet.
  */
-export function itemScanner(): (chunk: string) => unknown[] {
+export function itemScanner(key: string = 'items'): (chunk: string) => unknown[] {
   let buf = '';
   /** Where to look next: inside the array once it has opened. */
   let at = 0;
@@ -52,9 +52,9 @@ export function itemScanner(): (chunk: string) => unknown[] {
     if (closed) return out;
 
     if (!open) {
-      const key = buf.indexOf('"items"');
-      if (key < 0) return out;
-      const bracket = buf.indexOf('[', key);
+      const at0 = buf.indexOf(`"${key}"`);
+      if (at0 < 0) return out;
+      const bracket = buf.indexOf('[', at0);
       if (bracket < 0) return out;
       at = bracket + 1;
       open = true;
@@ -155,4 +155,68 @@ function clockOf(value: unknown): string {
 /** The order a day reads in, whatever order the model wrote the stops in. */
 export function byClock(a: Suggestion, b: Suggestion): number {
   return a.startTime.localeCompare(b.startTime);
+}
+
+/** One of the three "Help me decide" picks, once it has survived checking. */
+export interface Pick {
+  placeId: string;
+  title: string;
+  reason: string;
+  /** US dollars per person; 0 when nothing is charged. */
+  costPerPerson: number;
+  travelMin: number;
+  /** HH:MM, 24-hour. */
+  startTime: string;
+}
+
+/** Nobody is walking four hours to dinner, whatever the model says. */
+const MAX_TRAVEL = 240;
+/** A card is not the place to quote five figures a head. */
+const MAX_COST = 2000;
+
+/**
+ * Check one pick against the trip's own places.
+ *
+ * The rule is the same as for a drafted stop and matters more here, because a
+ * pick carries a price and a travel time a traveler will act on: a pick whose
+ * place the trip has not got is dropped rather than shown. Picks naming a
+ * place to go and look up are not handled yet, so for now a pick without a
+ * saved place is simply not offered.
+ */
+export function validatePick(
+  raw: unknown,
+  allowed: Set<string>,
+  taken: Set<string>,
+): Pick | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+
+  const placeId = typeof o.place_id === 'string' ? o.place_id : '';
+  if (!placeId || !allowed.has(placeId) || taken.has(placeId)) return null;
+
+  const startTime = clockOf(o.start_time);
+  if (!startTime) return null;
+
+  const title = typeof o.title === 'string' ? o.title.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+  if (!title) return null;
+
+  const reason = typeof o.reason === 'string'
+    ? o.reason.replace(/\s+/g, ' ').trim().slice(0, MAX_REASON)
+    : '';
+
+  return {
+    placeId,
+    title,
+    reason,
+    costPerPerson: whole(o.est_cost_per_person, 0, MAX_COST),
+    travelMin: whole(o.travel_min, 0, MAX_TRAVEL),
+    startTime,
+  };
+}
+
+/** A number the card can print, or the nearest one it can. */
+function whole(value: unknown, low: number, high: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return low;
+  return Math.min(high, Math.max(low, Math.round(n)));
 }

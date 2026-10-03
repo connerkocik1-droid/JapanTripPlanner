@@ -44,6 +44,8 @@ export interface Doc {
   trip?: { start?: string; travelers?: number };
   cities?: DocCity[];
   days?: Record<string, { title?: string; placeId?: string | null; time?: string }[]>;
+  /** What each traveler does not eat, in their own words. */
+  diets?: Record<string, string>;
 }
 
 /** How many places are worth describing to the model for one day. */
