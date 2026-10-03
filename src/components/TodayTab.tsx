@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { City, DayItem, Hotel, LatLng } from '@/lib/data';
+import { CheckItem, City, DayItem, Hotel, LatLng } from '@/lib/data';
 import { hotelName } from '@/lib/hotelTier';
 import {
   EXPENSE_CATEGORIES, Expense, ExpenseCategory, Insight, byCategory, dayStamp,
@@ -37,6 +37,11 @@ export interface TodayTabProps {
   travelers: number;
   /** Everything logged on the trip so far, newest first. */
   expenses: Expense[];
+  /** The to-do list, which is what there is to do before the trip starts. */
+  checklist: CheckItem[];
+  onToggleCheck: (id: string) => void;
+  /** Open the ideas and to-dos sheet, for the ones this card does not show. */
+  onOpenIdeas: () => void;
   onZoomStop: (ll: LatLng) => void;
   onToggleItem: (key: string, id: string) => void;
   onAddExpense: (e: {
@@ -64,7 +69,8 @@ const TICK_MS = 30_000;
  */
 export default function TodayTab({
   schedule, start, todayN, dayEntry, plan, hotel, city, rates, ratesStale, onRefreshRates, currencies,
-  travelers, expenses, onZoomStop, onToggleItem, onAddExpense, onRemoveExpense, onEditDay, onStartToday,
+  travelers, expenses, checklist, onToggleCheck, onOpenIdeas,
+  onZoomStop, onToggleItem, onAddExpense, onRemoveExpense, onEditDay, onStartToday,
 }: TodayTabProps) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -158,8 +164,7 @@ export default function TodayTab({
             <Headline plan={plan} prog={prog} hotel={hotel} />
           ) : toStart > 0 ? (
             <>
-              {toStart === 1 ? 'You leave tomorrow.' : `You leave in ${toStart} days.`} Here is what
-              day one looks like, so you know what this tab will show you on the trip.
+              <Countdown days={toStart} />
               <StartTrip planned={dt} onStart={onStartToday} />
             </>
           ) : (
@@ -167,6 +172,11 @@ export default function TodayTab({
           )}
         </div>
       </div>
+
+      {/* Before the trip the only thing that is actually due is the list. */}
+      {!running && toStart > 0 ? (
+        <BeforeYouGo items={checklist} onToggle={onToggleCheck} onOpenAll={onOpenIdeas} />
+      ) : null}
 
       {weather ? <WeatherCard weather={weather} place={dayEntry.city.name} /> : null}
 
@@ -867,6 +877,106 @@ function StartTrip({ planned, onStart }: { planned: Date; onStart: () => void })
           moves with it. Nothing you planned is lost.
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * How long until you go.
+ *
+ * Before the trip this tab has nothing to follow, so the one thing worth
+ * saying large is the number of days — that is what anyone opening it in the
+ * weeks beforehand is actually checking.
+ */
+function Countdown({ days }: { days: number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 9 }}>
+      <span
+        key={days}
+        className="num"
+        style={{
+          fontSize: 34, fontWeight: 600, lineHeight: 1,
+          color: 'var(--color-accent-300)', animation: 'countUp .28s ease both',
+        }}
+      >
+        {days}
+      </span>
+      {/* The date and the city are already on the line above. */}
+      <span style={{ flex: 1, minWidth: 0, fontSize: 13.5 }}>
+        {days === 1 ? 'day until you leave' : 'days until you leave'}
+      </span>
+    </div>
+  );
+}
+
+/** How many to-dos a card shows before it stops and points at the whole list. */
+const TODOS_SHOWN = 5;
+
+/**
+ * What is still to do before you go, tickable where you are reading it.
+ *
+ * The full list, with adding and editing, is a tap away in the ideas sheet.
+ * This is only the open ones, because before the trip they are the only thing
+ * this tab can usefully be about.
+ */
+function BeforeYouGo({
+  items, onToggle, onOpenAll,
+}: {
+  items: CheckItem[];
+  onToggle: (id: string) => void;
+  onOpenAll: () => void;
+}) {
+  const open = items.filter((i) => !i.done);
+  const shown = open.slice(0, TODOS_SHOWN);
+
+  return (
+    <div style={{ ...card, marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div className="mono" style={{ ...cap, flex: 1 }}>BEFORE YOU GO</div>
+        <button
+          className="tap"
+          onClick={onOpenAll}
+          style={{
+            flex: 'none', minHeight: 28, padding: '0 9px', borderRadius: 9999, cursor: 'pointer',
+            border: '1px solid var(--color-neutral-800)', background: 'transparent',
+            color: 'var(--color-accent-300)', fontSize: 10.5,
+          }}
+        >
+          {open.length > shown.length ? open.length - shown.length + ' more' : 'All of it'}
+        </button>
+      </div>
+
+      {open.length === 0 ? (
+        <div style={{ ...note, marginTop: 6 }}>
+          {items.length
+            ? 'Everything on the list is done. Nothing left but to go.'
+            : 'Nothing on the list yet — visas, bookings, packing, whatever matters.'}
+        </div>
+      ) : (
+        <div style={{ marginTop: 4 }}>
+          {shown.map((it) => (
+            <div
+              key={it.id}
+              style={{
+                minHeight: 38, display: 'flex', alignItems: 'center', gap: 10,
+                borderTop: '1px solid var(--color-divider)',
+              }}
+            >
+              <button
+                className="tap"
+                onClick={() => onToggle(it.id)}
+                aria-label={'Mark done: ' + (it.text || 'to-do')}
+                aria-pressed={false}
+                style={{
+                  width: 17, height: 17, borderRadius: 5, flex: 'none', padding: 0, cursor: 'pointer',
+                  border: '1px solid var(--color-neutral-700)', background: 'transparent',
+                }}
+              />
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>{it.text || 'Untitled'}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
