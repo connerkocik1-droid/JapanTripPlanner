@@ -9,7 +9,7 @@
  *
  * So the tier is read back out of the name for display and drawn as its own
  * badge, and the name is shown without it. Nothing is stored differently: the
- * name keeps whatever was typed, and the Stay tab writes the tier back onto the
+ * name keeps whatever was typed, and the stay editor writes the tier back onto the
  * end of it when it is changed, so a trip opened in an older build is unchanged.
  */
 

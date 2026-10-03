@@ -29,7 +29,7 @@ export interface CityPanelProps {
   spend: CitySpend;
   travelers: number;
   onCity: <K extends keyof City>(key: K, val: City[K]) => void;
-  /** Switches to the Stay tab, where the lodging options live. */
+  /** Opens the stay sheet, where the lodging options are compared. */
   onOpenStay: () => void;
   /** Pin a ready-made list; returns the ones that were not already there. */
   onAddPlaces: (places: Place[]) => Place[];
@@ -112,7 +112,7 @@ export default function CityPanel({
         onLocate={(placeId, ll) => onPlace(placeId, 'll', ll)}
       />
 
-      {/* Lodging is compared and chosen on the Stay tab — this is just the tally. */}
+      {/* Lodging is compared and chosen in the stay sheet — this is just the tally. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', margin: '12px 0 7px' }}>
         <div className="mono" style={label}>Stay</div>
         <div className="mono num" style={{ ...label, fontSize: 9 }}>
@@ -138,8 +138,8 @@ export default function CityPanel({
           </span>
           <span className="mono" style={{ ...label, fontSize: 8.5 }}>
             {options
-              ? `${options} ${options === 1 ? 'option' : 'options'} on the Stay tab`
-              : 'add options on the Stay tab'}
+              ? `${options} ${options === 1 ? 'option' : 'options'} to compare`
+              : 'no options yet'}
           </span>
           <TouchMark touch={touch('hotelSel')} />
         </span>

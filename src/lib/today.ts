@@ -4,7 +4,7 @@
  * Everything else in the app is planning: you sit down, lay a day out, and
  * read it top to bottom. On the trip you are standing on a platform with one
  * hand free and you want one thing — what now, and when do I have to move.
- * That is what this works out, from the same plan the Days tab draws.
+ * That is what this works out, from the same plan the Plan tab draws.
  */
 
 import { DayPlan, PlannedStop } from './dayPlan';

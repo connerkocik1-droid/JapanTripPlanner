@@ -24,6 +24,16 @@ export interface PlanTabProps {
   onSetActive: (cityId: string, hotelId: string | null) => void;
   /** Opens the ideas and to-dos sheet over the plan. */
   onOpenIdeas: () => void;
+  /**
+   * The city's own editor — its places, money, food and transit — opened from
+   * its header. `openStay` hands the shortlist back to the sheet, so there is
+   * one way into it.
+   */
+  cityEditor: (city: City, helpers: { openStay: () => void }) => ReactNode;
+  /** The shortlist editor, shown inside the stay sheet when it is asked for. */
+  stayEditor: (city: City) => ReactNode;
+  /** Adding a city, and the trip's settings: the end of the timeline. */
+  footer?: ReactNode;
   /** To-dos not ticked off, and notes nobody has settled. */
   openCounts: { todos: number; ideas: number };
   /** The open day's planner, rendered under its row in the timeline. */
@@ -42,23 +52,28 @@ export interface PlanTabProps {
  */
 export default function PlanTab({
   cities, schedule, span, spend, start, selected, rates,
-  onSelectDay, onSetActive, onOpenIdeas, openCounts, dayDetail,
+  onSelectDay, onSetActive, onOpenIdeas, openCounts, cityEditor, stayEditor, footer, dayDetail,
 }: PlanTabProps) {
   /** The city whose shortlist is open over the plan, if any. */
   const [staying, setStaying] = useState<string | null>(null);
+  /** The city whose own editor is open under its header, if any. */
+  const [editing, setEditing] = useState<string | null>(null);
 
   if (!schedule.length) {
     return (
-      <div
-        style={{
-          padding: '22px 16px', borderRadius: 'var(--radius-md)',
-          border: '1px dashed var(--color-neutral-800)', textAlign: 'center',
-        }}
-      >
-        <div style={{ fontSize: 14, fontWeight: 500 }}>Nothing planned yet</div>
-        <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', margin: '6px 0 2px', lineHeight: 1.5 }}>
-          Add a city on the Map tab and its nights show up here as days to plan.
+      <div>
+        <div
+          style={{
+            padding: '22px 16px', borderRadius: 'var(--radius-md)',
+            border: '1px dashed var(--color-neutral-800)', textAlign: 'center',
+          }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 500 }}>Nothing planned yet</div>
+          <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', margin: '6px 0 2px', lineHeight: 1.5 }}>
+            Add a city and its nights show up here as days to plan.
+          </div>
         </div>
+        {footer}
       </div>
     );
   }
@@ -122,6 +137,19 @@ export default function PlanTab({
                   </div>
                   <Local usd={cost} city={city} rates={rates} />
                 </div>
+                <button
+                  className="tap"
+                  aria-expanded={editing === city.id}
+                  aria-label={'Edit ' + city.name}
+                  onClick={() => setEditing((cur) => (cur === city.id ? null : city.id))}
+                  style={{
+                    flex: 'none', width: 32, height: 32, borderRadius: 9999, cursor: 'pointer',
+                    border: '1px solid var(--color-neutral-800)', background: 'transparent',
+                    color: 'var(--color-neutral-500)', fontSize: 12,
+                  }}
+                >
+                  <i className={editing === city.id ? 'ph ph-caret-up' : 'ph ph-sliders-horizontal'} />
+                </button>
               </div>
 
               {/* The stay, which is the one thing about a city you check most. */}
@@ -160,6 +188,12 @@ export default function PlanTab({
                   style={{ flex: 'none', fontSize: 12, color: 'var(--color-neutral-600)' }}
                 />
               </button>
+
+              {editing === city.id ? (
+                <div style={{ marginTop: 6 }}>
+                  {cityEditor(city, { openStay: () => setStaying(city.id) })}
+                </div>
+              ) : null}
             </div>
 
             <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
@@ -215,10 +249,13 @@ export default function PlanTab({
         );
       })}
 
+      {footer}
+
       {openSheet ? (
         <StaySheet
           city={openSheet}
           rates={rates}
+          editor={stayEditor(openSheet)}
           // Switching the stay re-costs the city under the sheet; it does not
           // take you to the map, because you are reading the plan.
           onSetActive={(id) => onSetActive(openSheet.id, id)}
