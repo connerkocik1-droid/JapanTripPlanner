@@ -22,6 +22,10 @@ export interface PlanTabProps {
   rates: Rates | null;
   onSelectDay: (n: number) => void;
   onSetActive: (cityId: string, hotelId: string | null) => void;
+  /** Opens the ideas and to-dos sheet over the plan. */
+  onOpenIdeas: () => void;
+  /** To-dos not ticked off, and notes nobody has settled. */
+  openCounts: { todos: number; ideas: number };
   /** The open day's planner, rendered under its row in the timeline. */
   dayDetail: ReactNode;
 }
@@ -38,7 +42,7 @@ export interface PlanTabProps {
  */
 export default function PlanTab({
   cities, schedule, span, spend, start, selected, rates,
-  onSelectDay, onSetActive, dayDetail,
+  onSelectDay, onSetActive, onOpenIdeas, openCounts, dayDetail,
 }: PlanTabProps) {
   /** The city whose shortlist is open over the plan, if any. */
   const [staying, setStaying] = useState<string | null>(null);
@@ -60,9 +64,32 @@ export default function PlanTab({
   }
 
   const openSheet = cities.find((c) => c.id === staying) ?? null;
+  const pending = openCounts.todos + openCounts.ideas;
 
   return (
     <div>
+      {/* Everything that is not a day, one tap from the plan. */}
+      <button
+        className="tap"
+        onClick={onOpenIdeas}
+        style={{
+          width: '100%', minHeight: 40, marginBottom: 12, padding: '0 11px',
+          borderRadius: 'var(--radius-sm)', cursor: 'pointer', textAlign: 'left',
+          border: '1px solid var(--color-neutral-800)', background: 'transparent',
+          color: 'var(--color-neutral-400)', fontSize: 12,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}
+      >
+        <i className="ph ph-check-square" style={{ flex: 'none', fontSize: 14 }} />
+        <span style={{ flex: 1, minWidth: 0 }}>Ideas &amp; to-dos</span>
+        {pending ? (
+          <span className="mono num" style={{ flex: 'none', fontSize: 9, color: 'var(--color-accent-300)' }}>
+            {pending} OPEN
+          </span>
+        ) : null}
+        <i className="ph ph-caret-right" style={{ flex: 'none', fontSize: 12, color: 'var(--color-neutral-600)' }} />
+      </button>
+
       {cities.map((city) => {
         const here = span[city.id];
         if (!here || here.nights < 1) return null;
