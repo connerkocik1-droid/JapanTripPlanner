@@ -1352,6 +1352,9 @@ export default function TripPlanner() {
               onToggleItem={store.toggleDayItem}
               onAddExpense={store.addExpense}
               onRemoveExpense={store.removeExpense}
+              checklist={doc.checklist}
+              onToggleCheck={store.toggleCheck}
+              onOpenIdeas={() => setIdeas(true)}
               onEditDay={() => setTab('plan')}
               onStartToday={() => {
                 const t = new Date();
