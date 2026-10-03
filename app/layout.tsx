@@ -35,10 +35,22 @@ export const viewport: Viewport = {
   themeColor: '#fbf5ec',
 };
 
+/**
+ * Read before the browser paints: a visitor who has already seen the title card
+ * gets the planner and nothing else. The curtain is sent from the server, so
+ * only a blocking script in the head can keep it from flashing up; hiding it
+ * here also stops its still frame from ever being fetched. The key matches
+ * INTRO_SEEN_KEY in src/components/IntroVideo.tsx.
+ */
+const INTRO_SEEN_SCRIPT =
+  "try{if(localStorage.getItem('introSeen')==='1')" +
+  "{document.documentElement.setAttribute('data-intro-seen','1')}}catch(e){}";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: INTRO_SEEN_SCRIPT }} />
         <link
           rel="stylesheet"
           href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css"

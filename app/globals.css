@@ -975,3 +975,14 @@ input::placeholder { color: var(--color-neutral-600); }
 @media (min-aspect-ratio: 9 / 16) {
   .intro-film { object-fit: contain; }
 }
+
+/*
+ * A visitor who has seen the title card never sees it again. The attribute is
+ * set by a blocking script in the page's head, before anything is painted, so
+ * the curtain in the server's markup is gone rather than flashed — and a
+ * display:none element's background image is never requested.
+ *
+ * The curtain lays itself out with an inline `display: flex`, which a plain
+ * rule here would lose to, so this one has to insist.
+ */
+html[data-intro-seen] .intro-curtain { display: none !important; }
