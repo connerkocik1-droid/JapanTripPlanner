@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { City, DayItem, LatLng, Place, TravelMode } from '@/lib/data';
+import { hotelName } from '@/lib/hotelTier';
 import type { Preset } from '@/lib/presets';
 import DayFill from './DayFill';
 import { Local } from './CityMoney';
@@ -176,7 +177,7 @@ export default function DaysTab({
         <div style={{ ...anchorRow }}>
           <i className="ph ph-bed" style={{ fontSize: 13, color: 'var(--color-accent-300)' }} />
           <span style={{ flex: 1, minWidth: 0, fontSize: 12 }}>
-            Starting from {hotel.name || 'your hotel'}
+            Starting from {hotelName(hotel.name) || 'your hotel'}
           </span>
           <button
             className="tap"
@@ -245,7 +246,7 @@ export default function DaysTab({
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}
             >
-              Back to {hotel.name || 'your hotel'}
+              Back to {hotelName(hotel.name) || 'your hotel'}
             </span>
             <span
               className="mono"

@@ -1,6 +1,7 @@
 'use client';
 
 import { Derived, selectedHotel } from '@/lib/derive';
+import { hotelName } from '@/lib/hotelTier';
 import { dateOf, fmtD, fmtDow, fmtUsd } from '@/lib/format';
 import { TripDoc } from '@/lib/tripState';
 
@@ -42,7 +43,7 @@ export default function PrintSheet({ d, doc }: { d: Derived; doc: TripDoc }) {
             <div style={{ fontSize: '10pt', color: '#6f5f53', margin: '4px 0 8px' }}>
               {hotel?.name ? (
                 <div>
-                  Hotel: {hotel.name}
+                  Hotel: {hotelName(hotel.name)}
                   {hotel.cost ? ` · ${fmtUsd(hotel.cost)}/night` : ''}
                   {hotel.addr ? ` · ${hotel.addr}` : ''}
                 </div>

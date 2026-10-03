@@ -18,6 +18,7 @@ import CityMoney, { Local } from './CityMoney';
 import type { Rates } from '@/lib/money';
 import { WEEKDAYS, hoursLine } from '@/lib/hours';
 import { blankHood, groupByHood } from '@/lib/hoods';
+import { splitTier } from '@/lib/hotelTier';
 
 export interface CityPanelProps {
   city: City;
@@ -43,6 +44,9 @@ export default function CityPanel({
   onAddPlaces, onPlace, onRemovePlace, onZoom, touch,
 }: CityPanelProps) {
   const active = city.hotels.find((h) => h.id === city.hotelSel) ?? null;
+  // The tier rides in the name; it reads as its own badge rather than as part
+  // of what the place is called.
+  const activeName = splitTier(active?.name ?? '');
   const options = city.hotels.filter((h) => h.name.trim()).length;
   // A flown leg carries a flight number and an arrival time instead of a route.
   const flight = isFlightLeg(city.transitName);
@@ -129,7 +133,8 @@ export default function CityPanel({
         />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500 }}>
-            {active ? active.name || 'Untitled option' : 'No option active yet'}
+            {active ? activeName.name || 'Untitled option' : 'No option active yet'}
+            {activeName.tier ? <span className="mono hc-tier">{activeName.tier}</span> : null}
           </span>
           <span className="mono" style={{ ...label, fontSize: 8.5 }}>
             {options

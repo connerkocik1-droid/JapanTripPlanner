@@ -11,6 +11,7 @@ import { derive, selectedHotel } from '@/lib/derive';
 import { dateOf, fmtD, fmtUsd } from '@/lib/format';
 import { useAirportRoutes } from '@/lib/airportRoute';
 import { useAutoPacks } from '@/lib/autoPacks';
+import { hotelName, splitTier } from '@/lib/hotelTier';
 import { usePlaceDetails } from '@/lib/usePlaceDetails';
 import { PLACE_TAGS, type PlaceTag, matchesTags, ratingLine } from '@/lib/placeDetails';
 import { geocode, hitToLatLng } from '@/lib/geocode';
@@ -57,12 +58,6 @@ const TABS: [Tab, string, string][] = [
   ['list', 'List', 'ph-check-square'],
   ['notes', 'Notes', 'ph-chat-teardrop-text'],
 ];
-
-const SEG_FILL: Record<string, string> = {
-  Lodging: 'var(--color-accent-400)',
-  Transit: 'var(--color-accent-600)',
-  Food: 'var(--color-accent-800)',
-};
 
 export default function TripPlanner() {
   const store = useTripStore();
@@ -339,7 +334,7 @@ export default function TripPlanner() {
     const out: Stop[] = [];
     const hotel = selectedHotel(city);
     if (hotel?.ll) {
-      out.push({ id: 'hotel:' + hotel.id, label: hotel.name || 'Hotel', ll: hotel.ll, mode: 'walk' });
+      out.push({ id: 'hotel:' + hotel.id, label: hotelName(hotel.name) || 'Hotel', ll: hotel.ll, mode: 'walk' });
     }
     dayEntry.items.forEach((it) => {
       const place = city.places.find((p) => p.id === it.placeId);
@@ -356,7 +351,7 @@ export default function TripPlanner() {
     if (stops.length < 2 || !home?.ll) return stops;
     return [
       ...stops,
-      { id: 'return:' + home.id, label: home.name || 'Hotel', ll: home.ll, mode: 'walk' as const },
+      { id: 'return:' + home.id, label: hotelName(home.name) || 'Hotel', ll: home.ll, mode: 'walk' as const },
     ];
   }, [stops, dayEntry]);
 
@@ -442,7 +437,7 @@ export default function TripPlanner() {
         });
         return;
       }
-      const fromName = last ? last.name : hotel?.name || 'your hotel';
+      const fromName = last ? last.name : hotelName(hotel?.name ?? '') || 'your hotel';
       setPreview({ placeId: place.id, name, fromName, loading: true, leg: null, arrive: null, problem: '' });
       const leg = await routeHop(from, place.ll, city.metroFare, doc.trip.travelers);
       const arrive =
@@ -669,9 +664,10 @@ export default function TripPlanner() {
           if (!h.ll || !h.name || h.id !== c.hotelSel) return;
           const nightly = Number(h.cost) || 0;
           const pick = h.id === c.hotelSel;
+          const named = splitTier(h.name);
           out.push({
             id: h.id,
-            name: h.name,
+            name: named.name,
             sub: nightly ? fmtUsd(nightly) + '/night' : 'stay',
             ll: h.ll,
             selected: false,
@@ -689,6 +685,7 @@ export default function TripPlanner() {
               images: h.images ?? [],
               url: h.url,
               addr: h.addr ?? '',
+              tier: named.tier,
               pick,
             },
           });
@@ -851,10 +848,6 @@ export default function TripPlanner() {
 
   const totalWithItems = d.totals.grand + d.totals.activities;
   const planned = doc.trip.planned;
-  const segments = (['Lodging', 'Transit', 'Food'] as const).map((k) => {
-    const v = k === 'Lodging' ? d.totals.lodging : k === 'Transit' ? d.totals.transit : d.totals.food;
-    return { label: k, amount: fmtUsd(v), pct: Math.round((v / (d.totals.grand || 1)) * 100) + '%' };
-  });
 
   return (
     <div
@@ -962,15 +955,8 @@ export default function TripPlanner() {
           </div>
         </div>
 
-        {/* The running total; the breakdown it opens lives on the Cities tab. */}
-        <button
-          className="tap"
-          onClick={() => setTab('cities')}
-          style={{
-            width: '100%', marginTop: 9, padding: 0, border: 'none', background: 'none',
-            color: 'inherit', cursor: 'pointer', textAlign: 'left',
-          }}
-        >
+        {/* The running total. The only place the budget is shown. */}
+        <div style={{ width: '100%', marginTop: 9 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span key={d.totals.grand} className="num" style={{ fontSize: 19, fontWeight: 600, animation: 'countUp .28s ease both' }}>
               {fmtUsd(d.totals.grand)}
@@ -987,7 +973,7 @@ export default function TripPlanner() {
                 : 'no budget set'}
             </span>
           </div>
-        </button>
+        </div>
 
         <div className="tab-strip" role="tablist" aria-label="Sections">
           {TABS.map(([id, labelText, icon]) => {
@@ -1124,7 +1110,7 @@ export default function TripPlanner() {
           ref={planBox}
           draft={draft}
           cityName={planCity?.name ?? ''}
-          homeName={planHome?.name || 'your hotel'}
+          homeName={hotelName(planHome?.name ?? '') || 'your hotel'}
           dayLabel={planDayEntry ? 'Day ' + planDayEntry.n : 'a day'}
           travelers={doc.trip.travelers}
           back={backLeg}
@@ -1214,58 +1200,6 @@ export default function TripPlanner() {
                   deviceLink={store.deviceLink}
                 />
               ) : null}
-
-              {/* Total budget */}
-              <div
-                style={{
-                  marginTop: 12, padding: '11px 13px', pointerEvents: 'auto',
-                  background: 'var(--color-surface)', border: '1px solid var(--color-neutral-800)',
-                  boxShadow: 'var(--shadow-card)',
-                  borderRadius: 'var(--radius-md)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--color-neutral-500)' }}>Total budget</div>
-                  <div className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-500)' }}>
-                    {planned
-                      ? totalWithItems > planned
-                        ? fmtUsd(totalWithItems - planned) + ' over plan'
-                        : fmtUsd(planned - totalWithItems) + ' left of ' + fmtUsd(planned)
-                      : 'no budget set'}
-                  </div>
-                </div>
-                <div
-                  key={d.totals.grand}
-                  className="num"
-                  style={{ fontSize: 25, fontWeight: 600, animation: 'countUp .28s ease both' }}
-                >
-                  {fmtUsd(d.totals.grand)}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>
-                  {fmtUsd(d.totals.grand / Math.max(1, doc.trip.travelers))} each
-                  {d.totals.activities ? ` · plus ${fmtUsd(d.totals.activities)} of planned items` : ''}
-                </div>
-                <div
-                  style={{
-                    display: 'flex', height: 5, borderRadius: 9999, overflow: 'hidden',
-                    background: 'var(--color-neutral-900)', margin: '9px 0 7px',
-                  }}
-                >
-                  {segments.map((s) => (
-                    <div key={s.label} style={{ width: s.pct, background: SEG_FILL[s.label] }} />
-                  ))}
-                </div>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  {segments.map((s) => (
-                    <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: 2, background: SEG_FILL[s.label] }} />
-                      <span className="mono" style={{ fontSize: 10, color: 'var(--color-neutral-500)' }}>
-                        {s.label} {s.amount}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
               {d.cities.length === 0 && !adding ? (
                 <div

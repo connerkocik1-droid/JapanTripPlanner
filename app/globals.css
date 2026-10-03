@@ -727,6 +727,19 @@ input::placeholder { color: var(--color-neutral-600); }
   background: var(--color-accent-400);
   white-space: nowrap;
 }
+/* The price tier, read out of the hotel's name. Quieter than the Budgeted tag
+   beside it: it says what a place costs roughly, not what the budget counts. */
+.hc-tier {
+  margin-left: 5px;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-neutral-800);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--color-accent-300);
+  white-space: nowrap;
+}
+
 .hc-x {
   flex: none;
   width: 22px;

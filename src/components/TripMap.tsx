@@ -27,6 +27,8 @@ export interface HotelDetail {
   url: string;
   /** As typed, for handing over to Apple Maps. */
   addr: string;
+  /** "$$" and the like, read out of the name and drawn as its own badge. */
+  tier: string;
   /** True for the option currently feeding the budget. */
   pick: boolean;
 }
@@ -670,6 +672,7 @@ const HotelMiniCard = forwardRef<
       <div className="hc-head">
         <span className="hc-title">
           {pin.name}
+          {hotel.tier ? <span className="mono hc-tier">{hotel.tier}</span> : null}
           {hotel.pick ? <span className="mono hc-tag">Budgeted</span> : null}
         </span>
         <button className="tap hc-x" onClick={onClose} aria-label="Close">

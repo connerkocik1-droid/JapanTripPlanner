@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { City, Hotel, LatLng } from '@/lib/data';
 import { fmtUsd, money } from '@/lib/format';
+import { TIERS, joinTier, splitTier, type Tier } from '@/lib/hotelTier';
 import { Touch } from '@/lib/tripState';
 import TouchMark, { touchStyle } from './TouchMark';
 import { GeoStatus, NumField, ghostBtn, label, useGeocodedAddress } from './fields';
@@ -157,6 +158,9 @@ function StayCard({
   const status = useGeocodedAddress(hotel.addr, (ll) => onField('ll', ll));
   const nightly = Number(hotel.cost) || 0;
   const shots = (hotel.images ?? []).filter((s) => s.trim());
+  // The tier rides along on the end of the stored name, so the field shows the
+  // name without it and writes it back on every keystroke.
+  const named = splitTier(hotel.name);
 
   return (
     <div
@@ -184,9 +188,9 @@ function StayCard({
         <span style={{ flex: 1, minWidth: 0 }}>
           <input
             type="text"
-            value={hotel.name}
+            value={named.name}
             placeholder={'Option ' + (index + 1)}
-            onChange={(e) => onField('name', e.target.value)}
+            onChange={(e) => onField('name', joinTier(e.target.value, named.tier))}
             style={{ width: '100%', height: 30, fontSize: 13.5, fontWeight: 500 }}
           />
           <TouchMark touch={touch} />
@@ -310,6 +314,31 @@ function StayCard({
                 {fmtUsd(nightly * nights)} for {nights} {nights === 1 ? 'night' : 'nights'}
               </div>
               <Local usd={nightly * nights} city={city} rates={rates} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 36 }}>
+            <div className="mono" style={{ ...label, flex: 'none' }}>Price tier</div>
+            <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+              {TIERS.map((t: Tier) => (
+                <button
+                  key={t || 'none'}
+                  className="tap mono"
+                  aria-pressed={named.tier === t}
+                  aria-label={t ? 'Price tier ' + t : 'No price tier'}
+                  onClick={() => onField('name', joinTier(named.name, t))}
+                  style={{
+                    minHeight: 28, padding: '0 7px', borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                    border: '1px solid ' +
+                      (named.tier === t ? 'var(--color-accent-400)' : 'var(--color-neutral-800)'),
+                    background: named.tier === t ? 'var(--color-accent-400)' : 'transparent',
+                    color: named.tier === t ? 'var(--color-on-accent)' : 'var(--color-neutral-400)',
+                  }}
+                >
+                  {t || '—'}
+                </button>
+              ))}
             </div>
           </div>
 
