@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { City, DayItem, Hotel, LatLng } from '@/lib/data';
+import { hotelName } from '@/lib/hotelTier';
 import {
   EXPENSE_CATEGORIES, Expense, ExpenseCategory, Insight, byCategory, dayStamp,
   expenseCategory, insightFor, insightSeen, markInsightSeen, onDay, sumUsd, usdOf,
@@ -90,7 +91,7 @@ export default function TodayTab({
       const place = dayEntry.city.places.find((p) => p.id === nextItem.placeId);
       if (place?.ll) return { label: nextItem.title || place.name, ll: place.ll, home: false };
     }
-    if (hotel?.ll) return { label: hotel.name || 'your hotel', ll: hotel.ll, home: true };
+    if (hotel?.ll) return { label: hotelName(hotel.name) || 'your hotel', ll: hotel.ll, home: true };
     return null;
   }, [dayEntry, prog?.next?.item, hotel]);
 
@@ -313,7 +314,7 @@ export default function TodayTab({
             style={{ fontSize: 15, color: 'var(--color-accent-300)', flex: 'none' }}
           />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5 }}>Back to {hotel.name || 'your hotel'}</div>
+            <div style={{ fontSize: 12.5 }}>Back to {hotelName(hotel.name) || 'your hotel'}</div>
             <div className="mono num" style={{ fontSize: 9, color: 'var(--color-neutral-600)' }}>
               {fmtSpan(plan.back.mins)}{' '}
               {plan.back.mode !== 'transit' ? 'on foot' : plan.back.rail ? 'by train' : 'by metro'}
@@ -676,7 +677,7 @@ function Headline({
   if (prog.done) {
     return (
       <>
-        That is the day done. {hotel ? `Head back to ${hotel.name || 'the hotel'}.` : 'Nothing left on the list.'}
+        That is the day done. {hotel ? `Head back to ${hotelName(hotel.name) || 'the hotel'}.` : 'Nothing left on the list.'}
       </>
     );
   }

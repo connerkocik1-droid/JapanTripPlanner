@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { City, Hotel, LatLng } from '@/lib/data';
+import { hotelName } from '@/lib/hotelTier';
 import { airportsNear, nearestAirport } from '@/lib/airports';
 import { RouteState, airportFareFor, airportFor, useAirportRoutes } from '@/lib/airportRoute';
 import { fmtUsd } from '@/lib/format';
@@ -121,7 +122,7 @@ function RouteRow({
   onZoom?: () => void;
 }) {
   const route = state?.route ?? null;
-  const name = hotel.name || 'Option ' + (index + 1);
+  const name = hotelName(hotel.name) || 'Option ' + (index + 1);
 
   return (
     <button
