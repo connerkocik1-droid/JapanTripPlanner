@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { City, DEFAULT_DWELL, PLACE_KINDS, Place, placeKind } from '@/lib/data';
+import { City, PLACE_KINDS, Place, placeKind } from '@/lib/data';
 import { fmtUsd } from '@/lib/format';
-import { fmtSpan } from '@/lib/dayPlan';
 import { Preset, loadPreset, loadPresetIndex, normalizePreset } from '@/lib/presets';
 import { LegOptions, fmtDistance, fmtDuration, routeLeg } from '@/lib/routing';
 import { LatLng } from '@/lib/data';
 import { Local } from './CityMoney';
 import type { Rates } from '@/lib/money';
 import { WEEKDAYS_LONG, shutOn } from '@/lib/hours';
+import { bandRest, legToShow, photoOf, priceTier, ratingOf } from '@/lib/placeCard';
+import { orderPlaces } from '@/lib/placeOrder';
 
 export interface DayFillProps {
   city: City | null;
@@ -244,8 +245,9 @@ function CustomPicker({
 
   // A place ruled out is not offered as a stop; a maybe still is, because
   // deciding it by putting it in a day is exactly how a maybe gets settled.
-  const shown = city.places.filter(
-    (p) => p.vote !== 'no' && (filter === 'all' ? true : p.kind === filter),
+  const shown = orderPlaces(
+    city.places.filter((p) => p.vote !== 'no' && (filter === 'all' ? true : p.kind === filter)),
+    { seconds: Object.fromEntries(Object.entries(legs).map(([id, o]) => [id, o?.walk?.seconds])) },
   );
 
   // Cost and time for adding each candidate, from the day's current end.
@@ -310,19 +312,60 @@ function CustomPicker({
       <div style={{ display: 'grid', gap: 6 }}>
         {shown.map((p) => {
           const opt = legs[p.id];
-          const walk = opt?.walk;
-          const transit = opt?.transit;
-          const dwell = DEFAULT_DWELL[p.kind];
+          const shot = photoOf(p);
+          const rated = ratingOf(p);
+          const tier = priceTier(p.band);
+          const rest = bandRest(p.band);
+          // One way of getting there, not two.
+          const leg = legToShow(opt);
           return (
             <div key={p.id} style={card}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {/* Same colour the pin is drawn in, so the list and the map agree. */}
-                <i
-                  className={'ph ' + placeKind(p.kind).icon}
-                  style={{ fontSize: 14, color: placeKind(p.kind).color }}
-                />
-                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500 }}>
-                  {p.name || 'Unnamed place'}
+                {shot ? (
+                  // A dead URL shouldn't leave a broken-image box in the list.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={shot}
+                    alt=""
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    style={{
+                      flex: 'none', width: 34, height: 34, objectFit: 'cover',
+                      borderRadius: 'var(--radius-sm)',
+                    }}
+                  />
+                ) : (
+                  /* Same colour the pin is drawn in, so the list and the map agree. */
+                  <i
+                    className={'ph ' + placeKind(p.kind).icon}
+                    style={{ fontSize: 14, color: placeKind(p.kind).color }}
+                  />
+                )}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>
+                    {p.name || 'Unnamed place'}
+                  </span>
+                  {/* Only what is actually known about it. */}
+                  {rated || tier || p.cuisine.trim() || rest ? (
+                    <span
+                      className="mono"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+                        fontSize: 8.5, color: 'var(--color-neutral-500)', marginTop: 2,
+                      }}
+                    >
+                      {rated ? (
+                        <span className="num" style={{ color: 'var(--color-accent-300)' }}>
+                          {rated.score}★{rated.count ? ' · ' + rated.count : ''}
+                        </span>
+                      ) : null}
+                      {tier ? <span>{tier}</span> : null}
+                      {p.cuisine.trim() ? <span>{p.cuisine.trim()}</span> : null}
+                      {rest ? <span>{rest}</span> : null}
+                    </span>
+                  ) : null}
                 </span>
                 {/* Said here rather than after it is added: the point is not to
                     add it to a day it is shut on in the first place. */}
@@ -336,9 +379,6 @@ function CustomPicker({
                   >
                     Shut {WEEKDAYS_LONG[weekday]}
                   </span>
-                ) : null}
-                {p.band ? (
-                  <span className="mono" style={{ fontSize: 9, color: 'var(--color-accent-300)' }}>{p.band}</span>
                 ) : null}
                 <button
                   className="tap"
@@ -363,36 +403,27 @@ function CustomPicker({
                   <span className="mono" style={{ fontSize: 9, color: 'var(--color-neutral-700)' }}>
                     {anchor ? 'Checking…' : 'First stop of the day'}
                   </span>
-                ) : (
-                  <>
-                    {walk ? (
-                      <span style={chip}>
-                        <i className="ph ph-person-simple-walk" style={{ fontSize: 11 }} />
-                        <span className="num">{fmtDuration(walk.seconds)}</span>
-                        <span className="mono num" style={{ fontSize: 8, opacity: 0.7 }}>
-                          {fmtDistance(walk.meters)}
-                        </span>
-                        <span className="mono" style={{ fontSize: 8, opacity: 0.7 }}>free</span>
+                ) : leg ? (
+                  <span style={chip}>
+                    <i
+                      className={'ph ' + (leg.kind === 'walk' ? 'ph-person-simple-walk' : 'ph-train-simple')}
+                      style={{ fontSize: 11 }}
+                    />
+                    <span className="num">{fmtDuration(leg.seconds)}</span>
+                    {leg.kind === 'walk' ? (
+                      <span className="mono num" style={{ fontSize: 8, opacity: 0.7 }}>
+                        {fmtDistance(leg.meters)}
+                      </span>
+                    ) : metroFare ? (
+                      // Only a fare that is actually known; a guess at the gate
+                      // price is worse than no number at all.
+                      <span className="mono num" style={{ fontSize: 8, opacity: 0.7 }}>
+                        {fmtUsd(metroFare * Math.max(1, travelers))}
                       </span>
                     ) : null}
-                    {transit ? (
-                      <span style={chip}>
-                        <i className="ph ph-train-simple" style={{ fontSize: 11 }} />
-                        <span className="num">{fmtDuration(transit.seconds)}</span>
-                        <span className="mono num" style={{ fontSize: 8, opacity: 0.7 }}>
-                          {metroFare ? fmtUsd(metroFare * Math.max(1, travelers)) : 'fare?'}
-                        </span>
-                        {transit.estimated ? (
-                          <span className="mono" style={{ fontSize: 7.5, opacity: 0.7 }}>EST</span>
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </>
-                )}
+                  </span>
+                ) : null}
                 <span style={{ flex: 1 }} />
-                <span className="mono" style={{ fontSize: 8.5, color: 'var(--color-neutral-600)' }}>
-                  {fmtSpan(dwell)} there
-                </span>
                 <button className="tap" onClick={() => onAddStop(p)} style={{ ...pill, minWidth: 74 }}>
                   <i className="ph ph-plus" style={{ fontSize: 12 }} /> Add
                 </button>

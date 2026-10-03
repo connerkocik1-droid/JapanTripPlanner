@@ -26,6 +26,8 @@ import {
 import CityPanel from './CityPanel';
 import PlanBuilder, { type Preview } from './PlanBuilder';
 import DaysTab from './DaysTab';
+import PlanTab from './PlanTab';
+import IdeasSheet from './IdeasSheet';
 import TodayTab from './TodayTab';
 import ChecklistTab from './ChecklistTab';
 import Login from './Login';
@@ -46,7 +48,7 @@ const TripMap = dynamic(() => import('./TripMap'), { ssr: false });
  */
 const HOVER_SETTLE_MS = 220;
 
-type Tab = 'map' | 'today' | 'cities' | 'stay' | 'days' | 'list' | 'notes';
+type Tab = 'map' | 'today' | 'cities' | 'stay' | 'plan';
 
 /** The tab strip, in order. The map is first and is the default view. */
 const TABS: [Tab, string, string][] = [
@@ -54,9 +56,7 @@ const TABS: [Tab, string, string][] = [
   ['today', 'Today', 'ph-sun-horizon'],
   ['cities', 'Cities', 'ph-buildings'],
   ['stay', 'Stay', 'ph-bed'],
-  ['days', 'Days', 'ph-calendar-blank'],
-  ['list', 'List', 'ph-check-square'],
-  ['notes', 'Notes', 'ph-chat-teardrop-text'],
+  ['plan', 'Plan', 'ph-calendar-blank'],
 ];
 
 export default function TripPlanner() {
@@ -90,6 +90,8 @@ export default function TripPlanner() {
   const [tab, setTab] = useState<Tab>('map');
   const [cityId, setCityId] = useState<string | null>(null);
   const [day, setDay] = useState(1);
+  /** The ideas and to-dos sheet, which opens over the plan. */
+  const [ideas, setIdeas] = useState(false);
   /**
    * What the map is showing: the whole trip, or one day of it. Day view is
    * the only thing that zooms in on its own — in trip view the camera stays
@@ -584,7 +586,7 @@ export default function TripPlanner() {
     setPreview(null);
     setDay(entry.n);
     setCityId(cur.cityId);
-    setTab('days');
+    setTab('plan');
   }, [draft, planDayEntry, store]);
 
   /** The way home is routed as the plan grows, so it is never a surprise. */
@@ -626,7 +628,7 @@ export default function TripPlanner() {
     (preset: Preset, replace: boolean) => {
       if (!dayEntry || !dayCity) return;
       store.applyPreset(dayCity.id, dayEntry.key, preset, replace);
-      setTab('days');
+      setTab('plan');
     },
     [dayEntry, dayCity, store],
   );
@@ -638,7 +640,7 @@ export default function TripPlanner() {
     const stopIndex = new Map<string, number>();
     if (draft) {
       draft.stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
-    } else if (tab === 'days' || (tab === 'map' && view === 'day')) {
+    } else if (tab === 'plan' || (tab === 'map' && view === 'day')) {
       // Day view is the day: its stops are numbered on the map and say their
       // names, which is the whole reason for zooming into one.
       stops.forEach((s, i) => stopIndex.set(s.ll.join(','), i + 1));
@@ -1350,7 +1352,7 @@ export default function TripPlanner() {
               onToggleItem={store.toggleDayItem}
               onAddExpense={store.addExpense}
               onRemoveExpense={store.removeExpense}
-              onEditDay={() => setTab('days')}
+              onEditDay={() => setTab('plan')}
               onStartToday={() => {
                 const t = new Date();
                 store.setTrip(
@@ -1365,8 +1367,29 @@ export default function TripPlanner() {
             />
           ) : null}
 
-          {tab === 'days' ? (
+          {tab === 'plan' ? (
+            <PlanTab
+              cities={d.cities}
+              schedule={d.schedule}
+              span={d.span}
+              spend={d.spend}
+              start={doc.trip.start}
+              selected={day}
+              rates={rates}
+              onSelectDay={(n) => {
+                setDay(n);
+                const c = d.schedule[n - 1]?.city;
+                if (c) setCityId(c.id);
+              }}
+              onSetActive={(cityId_, hotelId) => store.setCity(cityId_, 'hotelSel', hotelId)}
+              onOpenIdeas={() => setIdeas(true)}
+              openCounts={{
+                todos: doc.checklist.filter((c) => !c.done).length,
+                ideas: d.openNotes,
+              }}
+              dayDetail={
             <DaysTab
+              embedded
               schedule={d.schedule}
               start={doc.trip.start}
               selected={day}
@@ -1394,27 +1417,35 @@ export default function TripPlanner() {
               onSetFare={(f) => dayCity && store.setCity(dayCity.id, 'metroFare', f)}
               onStartPlan={() => dayCity && startPlan(dayCity.id)}
             />
-          ) : null}
-
-          {tab === 'list' ? (
-            <ChecklistTab
-              items={doc.checklist}
-              onAdd={store.addCheck}
-              onSet={store.setCheck}
-              onToggle={store.toggleCheck}
-              onRemove={store.removeCheck}
-              onPrint={() => window.print()}
+              }
             />
           ) : null}
 
-          {tab === 'notes' ? (
-            <NotesTab
-              comments={doc.comments}
-              cities={doc.cities.map((c) => ({ id: c.id, name: c.name }))}
-              current={cityId}
-              onAdd={store.addComment}
-              onToggle={store.toggleComment}
-              onRemove={store.removeComment}
+          {ideas ? (
+            <IdeasSheet
+              openTodos={doc.checklist.filter((c) => !c.done).length}
+              openIdeas={d.openNotes}
+              onClose={() => setIdeas(false)}
+              todos={
+                <ChecklistTab
+                  items={doc.checklist}
+                  onAdd={store.addCheck}
+                  onSet={store.setCheck}
+                  onToggle={store.toggleCheck}
+                  onRemove={store.removeCheck}
+                  onPrint={() => window.print()}
+                />
+              }
+              ideas={
+                <NotesTab
+                  comments={doc.comments}
+                  cities={doc.cities.map((c) => ({ id: c.id, name: c.name }))}
+                  current={cityId}
+                  onAdd={store.addComment}
+                  onToggle={store.toggleComment}
+                  onRemove={store.removeComment}
+                />
+              }
             />
           ) : null}
           </div>
