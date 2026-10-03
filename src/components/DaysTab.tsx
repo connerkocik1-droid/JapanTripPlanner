@@ -43,6 +43,8 @@ export interface DaysTabProps {
   rates: Rates | null;
   /** What each traveler does not eat, which the mood above the list uses. */
   diets: Record<string, string>;
+  /** The trip's own code, for the one line Claude writes in the place list. */
+  code: string | null;
   /** The mood this day's place list is read through, and how to change it. */
   lens: Answers;
   onLens: (next: Answers) => void;
@@ -61,7 +63,8 @@ export interface DaysTabProps {
 }
 
 export default function DaysTab({
-  schedule, start, selected, hops, plan, fare, travelers, city, anchor, rates, diets, lens, onLens,
+  schedule, start, selected, hops, plan, fare, travelers, city, anchor, rates, diets, code,
+  lens, onLens,
   embedded = false, assist,
   onSelectDay, onAddItem,
   onSetItem, onToggleItem, onRemoveItem, onMoveItem, onZoomDay, onZoomStop, onAddStop,
@@ -315,6 +318,8 @@ export default function DaysTab({
         onApplyPreset={onApplyPreset}
         onAddStop={onAddStop}
         weekday={weekday}
+        code={code}
+        dayKey={day.key}
         endMins={plan ? plan.startMins + plan.totalMins : null}
         diets={diets}
         lens={lens}

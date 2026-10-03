@@ -239,3 +239,27 @@ function whole(value: unknown, low: number, high: number): number {
   if (!Number.isFinite(n)) return low;
   return Math.min(high, Math.max(low, Math.round(n)));
 }
+
+/** One line about one place, as the list shows it under the name. */
+export interface Why {
+  placeId: string;
+  why: string;
+}
+
+/** A line is as long as a line: past this it is a paragraph in a small font. */
+const MAX_WHY_CHARS = 140;
+
+/**
+ * One line off the wire, or null when it names a place that was not asked
+ * about. The id is checked the same way everything else here is: against the
+ * list this request itself built from the saved trip.
+ */
+export function validateWhy(raw: unknown, allowed: Set<string>, taken: Set<string>): Why | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const placeId = typeof o.place_id === 'string' ? o.place_id : '';
+  if (!allowed.has(placeId) || taken.has(placeId)) return null;
+  const why = typeof o.why === 'string' ? o.why.replace(/\s+/g, ' ').trim().slice(0, MAX_WHY_CHARS) : '';
+  if (!why) return null;
+  return { placeId, why };
+}

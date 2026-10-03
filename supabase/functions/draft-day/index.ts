@@ -1,9 +1,10 @@
 /**
  * The one place this app talks to Claude.
  *
- * It answers two questions. "Draft this day" lays out an empty day from the
+ * It answers three questions. "Draft this day" lays out an empty day from the
  * places the travellers have already saved. "Help me decide" takes a handful
- * of tapped chips and comes back with three things to do next. They share
+ * of tapped chips and comes back with three things to do next. "Why" writes
+ * the one line under the top few places in a day's own list. They share
  * everything that matters — the key, the trip check, the rate limit, the
  * line-by-line stream — and differ only in the brief, the tool and the
  * checking, so a safeguard cannot be added to one and forgotten on the other.
@@ -25,8 +26,8 @@
  *   3. Calls are counted, per trip and per caller, and refused past a
  *      sensible rate.
  *
- * What comes back is one JSON object per line: a `stop` or a `pick` as each
- * one is finished, then a single `done`. Streaming line by line rather than
+ * What comes back is one JSON object per line: a `stop`, a `pick` or a `why`
+ * as each one is finished, then a single `done`. Streaming line by line rather than
  * returning the lot is the point — on a phone the first card lands in a second
  * or two instead of everything landing in fifteen.
  */
@@ -34,9 +35,10 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@^0.131.0';
 import { PROPOSE_DAY, SYSTEM, briefFor, type Doc } from './brief.ts';
 import { PICKS_SYSTEM, SUGGEST_PICKS, pickBriefFor, type WeatherHint } from './picks.ts';
+import { MAX_WHY, SAY_WHY, WHY_SYSTEM, whyBriefFor } from './why.ts';
 import { cleanAnswers } from './questions.ts';
 import {
-  byClock, itemScanner, validatePick, validateSuggestion, type Suggestion,
+  byClock, itemScanner, validatePick, validateSuggestion, validateWhy, type Suggestion,
 } from './suggestions.ts';
 
 /** The trip code is 128 bits of randomness, written as 32 hex characters. */
@@ -122,8 +124,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const code = typeof body?.code === 'string' ? body.code.trim() : '';
   const dayKey = typeof body?.dayKey === 'string' ? body.dayKey.trim() : '';
-  // 'draft' lays out a whole empty day; 'picks' answers "Help me decide".
-  const action = body?.action === 'picks' ? 'picks' : 'draft';
+  // 'draft' lays out a whole empty day, 'picks' answers "Help me decide", and
+  // 'why' writes the one line under the top few places in the day's list.
+  const action = body?.action === 'picks' ? 'picks' : body?.action === 'why' ? 'why' : 'draft';
   if (code.length < MIN_CODE || !dayKey) return refuse(400, 'Which day?');
 
   const caller = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
@@ -135,7 +138,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const doc = await pullTrip(code);
   if (!doc) return refuse(403, 'That trip could not be opened.');
 
-  // What to ask Claude, and what to do with each thing it says back. The two
+  // What to ask Claude, and what to do with each thing it says back. The three
   // actions differ only in the brief, the tool and the checking; everything
   // around them — the code, the rate limit, the line-by-line stream — is one
   // path, so a safeguard cannot be added to one and forgotten on the other.
@@ -144,7 +147,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let prompt: string;
   let allowed: Set<string>;
 
-  if (action === 'picks') {
+  if (action === 'why') {
+    const brief = whyBriefFor(doc, dayKey, {
+      answers: cleanAnswers(body?.answers),
+      ids: idsOf(body?.ids).slice(0, MAX_WHY),
+    });
+    if (!brief) return refuse(404, 'Those are not places of this day.');
+    system = WHY_SYSTEM;
+    tool = SAY_WHY;
+    prompt = brief.prompt;
+    allowed = brief.allowed;
+  } else if (action === 'picks') {
     const brief = pickBriefFor(doc, dayKey, {
       // Only ids this build knows survive; anything else is not an answer.
       answers: cleanAnswers(body?.answers),
@@ -182,11 +195,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       let dropped = 0;
       let kept: Suggestion[] = [];
       let picks = 0;
+      let lines = 0;
 
       try {
         const claude = await client.messages.create({
           model: MODEL,
-          max_tokens: 4096,
+          max_tokens: action === 'why' ? 512 : 4096,
           // Neither of these is hard reasoning, and the first card should land
           // while the phone is still in your hand.
           output_config: { effort: 'low' },
@@ -199,7 +213,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
           stream: true,
         });
 
-        const scan = itemScanner(action === 'picks' ? 'picks' : 'items');
+        const scan = itemScanner(
+          action === 'picks' ? 'picks' : action === 'why' ? 'lines' : 'items',
+        );
         for await (const event of claude) {
           if (
             event.type === 'content_block_delta' &&
@@ -209,6 +225,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
             // JSON mid-flight and may be truncated for good if the model runs
             // out of room. The scanner only ever hands back whole entries.
             for (const raw of scan(event.delta.partial_json)) {
+              if (action === 'why') {
+                const line = validateWhy(raw, allowed, taken);
+                if (!line) {
+                  dropped += 1;
+                  continue;
+                }
+                taken.add(line.placeId);
+                lines += 1;
+                send({ type: 'why', line });
+                continue;
+              }
               if (action === 'picks') {
                 if (picks >= 3) continue; // exactly three, whatever arrives
                 const pick = validatePick(raw, allowed, taken);
@@ -238,7 +265,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
 
         kept = kept.sort(byClock);
-        send({ type: 'done', count: action === 'picks' ? picks : kept.length, dropped });
+        const count = action === 'picks' ? picks : action === 'why' ? lines : kept.length;
+        send({ type: 'done', count, dropped });
       } catch (err) {
         const message = err instanceof Anthropic.APIError && err.status === 429
           ? 'Claude is busy right now. Try that again in a minute.'

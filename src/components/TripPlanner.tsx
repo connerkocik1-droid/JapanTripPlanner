@@ -1431,6 +1431,7 @@ export default function TripPlanner() {
               anchor={buildAnchor}
               rates={rates}
               diets={doc.diets}
+              code={store.code}
               lens={lens}
               onLens={changeLens}
               onSelectDay={(n) => {
